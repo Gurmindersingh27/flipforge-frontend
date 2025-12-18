@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import AnalysisResult from "./AnalysisResult";
 import { analyzeDeal } from "./lib/api";
 import type { AnalyzeRequest, AnalyzeResponse } from "./lib/types";
+import "./App.css";
+
 
 export default function App() {
   const [purchasePrice, setPurchasePrice] = useState<number>(120000);
