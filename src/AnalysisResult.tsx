@@ -1,281 +1,251 @@
-import { useMemo, useState } from "react";
-import type { AnalyzeResponse, RiskFlag, StressTestScenario } from "./lib/types";
+import type { AnalyzeResponse } from "./lib/types";
 
-function formatMoney(n: number): string {
-  if (!Number.isFinite(n)) return "-";
-  return n.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
+interface Props {
+  result: AnalyzeResponse;
+  // Optional meta from App/page.tsx so the PDF can show URL/address/hold/LTC/rate/carry.
+  meta?: Record<string, any>;
 }
 
-function formatPctDecimalToPct(n: number, digits = 1): string {
-  // API returns decimals (0.20 = 20%)
-  if (!Number.isFinite(n)) return "-";
-  return `${(n * 100).toFixed(digits)}%`;
-}
+const API_BASE = "http://127.0.0.1:8000";
 
-function badgeClassForVerdict(v: string) {
+function rehabBadgeClass(sev?: string) {
   const base =
     "inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border";
-  if (v === "BUY") return `${base} border-emerald-500/40 text-emerald-300 bg-emerald-500/10`;
-  if (v === "CONDITIONAL")
-    return `${base} border-amber-500/40 text-amber-300 bg-amber-500/10`;
-  return `${base} border-red-500/40 text-red-300 bg-red-500/10`;
+  if (sev === "LIGHT")
+    return `${base} border-slate-500/40 text-slate-200 bg-slate-500/10`;
+  if (sev === "MEDIUM")
+    return `${base} border-amber-500/40 text-amber-200 bg-amber-500/10`;
+  if (sev === "HEAVY")
+    return `${base} border-orange-500/40 text-orange-200 bg-orange-500/10`;
+  if (sev === "EXTREME")
+    return `${base} border-red-500/40 text-red-200 bg-red-500/10`;
+  return `${base} border-white/10 text-white/60 bg-white/5`;
 }
 
-function severityClass(sev: RiskFlag["severity"]) {
-  const base = "inline-flex items-center rounded-full px-2 py-1 text-xs border";
-  if (sev === "critical") return `${base} border-red-500/40 text-red-200 bg-red-500/10`;
-  if (sev === "moderate") return `${base} border-amber-500/40 text-amber-200 bg-amber-500/10`;
-  return `${base} border-slate-500/40 text-slate-200 bg-slate-500/10`;
+function breakpointBadgeClass(isFragile?: boolean) {
+  const base =
+    "inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border";
+  if (isFragile)
+    return `${base} border-red-500/40 text-red-200 bg-red-500/10`;
+  return `${base} border-emerald-500/40 text-emerald-200 bg-emerald-500/10`;
 }
 
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n));
+function verdictBadgeClass(verdict?: string) {
+  const base =
+    "inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border";
+  if (verdict === "BUY")
+    return `${base} border-emerald-500/40 text-emerald-200 bg-emerald-500/10`;
+  if (verdict === "CONDITIONAL")
+    return `${base} border-amber-500/40 text-amber-200 bg-amber-500/10`;
+  if (verdict === "PASS")
+    return `${base} border-red-500/40 text-red-200 bg-red-500/10`;
+  return `${base} border-white/10 text-white/60 bg-white/5`;
 }
 
-function ProgressBar({ value }: { value: number }) {
-  const pct = clamp(value, 0, 100);
-  return (
-    <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-      <div className="h-full bg-white/60" style={{ width: `${pct}%` }} />
-    </div>
-  );
+function downloadBlob(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
 }
 
-function metricCard(label: string, value: string, sub?: string) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className="text-xs text-white/60">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
-      {sub ? <div className="mt-1 text-xs text-white/50">{sub}</div> : null}
-    </div>
-  );
-}
+export default function AnalysisResult({ result, meta }: Props) {
+  const rehab = result.rehab_reality;
+  const bp = result.breakpoints;
 
-function StrategyCard({
-  title,
-  score,
-  verdict,
-  isBest,
-}: {
-  title: string;
-  score: number;
-  verdict: string;
-  isBest?: boolean;
-}) {
-  return (
-    <div
-      className={[
-        "rounded-2xl border p-4",
-        isBest ? "border-white/30 bg-white/10" : "border-white/10 bg-white/5",
-      ].join(" ")}
-    >
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold">{title}</div>
-        <span className={badgeClassForVerdict(verdict)}>{verdict}</span>
-      </div>
-      <div className="mt-3 text-3xl font-bold">{Math.round(score)}</div>
-      <div className="mt-1 text-xs text-white/50">Score (0–100)</div>
-    </div>
-  );
-}
+  // ✅ CHANGE: If allowed_outputs is missing (legacy/manual analyze), default to enabled.
+  const allowed = (result as any)?.allowed_outputs as
+    | { lender_report?: boolean; negotiation_script?: boolean }
+    | undefined;
 
-function StressTable({ items }: { items: StressTestScenario[] }) {
-  if (!items?.length) return null;
+  const canReport = allowed ? !!allowed.lender_report : true;
+  const canScript = allowed ? !!allowed.negotiation_script : true;
 
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10">
-        <div className="text-sm font-semibold">Stress Tests</div>
-        <div className="text-xs text-white/50">
-          Same deal, different bad days. If these fail, you should be nervous.
-        </div>
-      </div>
+  const verdictReason =
+    (result as any)?.verdict_reason ||
+    (result as any)?.verdictReason ||
+    "";
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="text-xs text-white/60">
-            <tr className="border-b border-white/10">
-              <th className="text-left px-4 py-3">Scenario</th>
-              <th className="text-right px-4 py-3">Net Profit</th>
-              <th className="text-right px-4 py-3">Profit %</th>
-              <th className="text-right px-4 py-3">Ann. ROI</th>
-              <th className="text-right px-4 py-3">Hold</th>
-              <th className="text-right px-4 py-3">Verdict</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((s) => (
-              <tr key={s.name} className="border-b border-white/10 last:border-b-0">
-                <td className="px-4 py-3">{s.name}</td>
-                <td className="px-4 py-3 text-right">{formatMoney(s.net_profit)}</td>
-                <td className="px-4 py-3 text-right">{formatPctDecimalToPct(s.profit_pct)}</td>
-                <td className="px-4 py-3 text-right">{formatPctDecimalToPct(s.annualized_roi)}</td>
-                <td className="px-4 py-3 text-right">{s.holding_months} mo</td>
-                <td className="px-4 py-3 text-right">
-                  <span className={badgeClassForVerdict(s.verdict)}>{s.verdict}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+  const whyBullets: string[] = [];
 
-export default function AnalysisResult({ result }: { result: AnalyzeResponse }) {
-  const [showDebug, setShowDebug] = useState(false);
+  if (result.net_profit <= 0) {
+    whyBullets.push("Deal loses money in the base case.");
+  } else {
+    whyBullets.push("Deal is profitable assuming inputs are accurate.");
+  }
 
-  const bestStrategyLabel = useMemo(() => {
-    const s = result.best_strategy;
-    if (s === "flip") return "FLIP";
-    if (s === "brrrr") return "BRRRR";
-    return "WHOLESALE";
-  }, [result.best_strategy]);
-
-  const whyBullets = useMemo(() => {
-    const bullets: string[] = [];
-
-    bullets.push(
-      `Profit margin is ${formatPctDecimalToPct(result.profit_pct)} and annualized ROI is ${formatPctDecimalToPct(
-        result.annualized_roi
-      )}.`
+  if (rehab) {
+    whyBullets.push(
+      `Rehab Reality: ${rehab.severity} (${(rehab.rehab_ratio * 100).toFixed(
+        0
+      )}% of purchase price).`
     );
+  }
 
-    bullets.push(
-      `Max safe offer is ${formatMoney(result.max_safe_offer)} (treat this as your ceiling, not your target).`
+  if (bp?.first_break_scenario) {
+    whyBullets.push(
+      `Breakpoint: ${bp.first_break_scenario} is the first scenario that kills this deal.`
     );
+  } else {
+    whyBullets.push("Breakpoint: Deal holds up under mild stress.");
+  }
 
-    bullets.push(`Best strategy is ${bestStrategyLabel} based on the highest strategy score.`);
+  // Add verdict reason (authoritative line)
+  if (verdictReason) {
+    whyBullets.unshift(verdictReason);
+  }
 
-    if (result.typed_flags?.length) {
-      const crit = result.typed_flags.filter((f) => f.severity === "critical").length;
-      const mod = result.typed_flags.filter((f) => f.severity === "moderate").length;
-      bullets.push(`Risk flags detected: ${crit} critical, ${mod} moderate.`);
-    } else {
-      bullets.push("No material risk flags were detected from the current inputs.");
+  async function onDownloadLenderReport() {
+    try {
+      const payload = { result, meta: meta || {} };
+
+      const res = await fetch(`${API_BASE}/api/export/lender-report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        let msg = "Failed to generate lender report.";
+        try {
+          const j = await res.json();
+          msg = j?.detail || j?.message || msg;
+        } catch {}
+        throw new Error(msg);
+      }
+
+      const blob = await res.blob();
+      downloadBlob(blob, "flipforge_lender_report_v0.pdf");
+    } catch (e: any) {
+      alert(e?.message || "Failed to generate lender report.");
     }
-
-    // Append backend notes if present (short + useful)
-    if (result.notes?.length) {
-      for (const n of result.notes.slice(0, 3)) bullets.push(n);
-    }
-
-    return bullets;
-  }, [
-    result.profit_pct,
-    result.annualized_roi,
-    result.max_safe_offer,
-    result.typed_flags,
-    result.notes,
-    bestStrategyLabel,
-  ]);
+  }
 
   return (
-    <div className="mt-6 space-y-5">
-      {/* Top verdict bar */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-sm text-white/60">Verdict:</span>
-            <span className={badgeClassForVerdict(result.overall_verdict)}>
-              {result.overall_verdict}
+    <div className="space-y-6">
+      {/* Top summary bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm text-white/60">Verdict:</span>
+        <span className={verdictBadgeClass((result as any)?.overall_verdict)}>
+          {(result as any)?.overall_verdict}
+        </span>
+
+        {rehab && (
+          <>
+            <span className="text-sm text-white/60">Rehab Reality:</span>
+            <span className={rehabBadgeClass(rehab.severity)}>
+              {rehab.severity}
             </span>
-            <span className="text-sm text-white/60">Best Strategy:</span>
-            <span className="text-sm font-semibold">{bestStrategyLabel}</span>
+          </>
+        )}
+
+        {bp && (
+          <>
+            <span className="text-sm text-white/60">Breakpoint:</span>
+            <span className={breakpointBadgeClass(bp.is_fragile)}>
+              {bp.first_break_scenario
+                ? bp.first_break_scenario
+                : "Holds under mild stress"}
+            </span>
+          </>
+        )}
+      </div>
+
+      {/* Integrity Gate Actions */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold text-white">
+              Integrity Gate
+            </div>
+            <div className="mt-1 text-xs text-white/60">
+              Institutional outputs are suppressed when the deal is non-viable.
+            </div>
           </div>
 
-          <div className="w-full md:w-72">
-            <div className="flex items-center justify-between text-xs text-white/60 mb-2">
-              <span>Confidence</span>
-              <span className="font-semibold text-white/80">{result.confidence_score}</span>
-            </div>
-            <ProgressBar value={result.confidence_score} />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!canReport}
+              title={
+                canReport
+                  ? "Generate lender report"
+                  : "Suppressed by Integrity Gate"
+              }
+              className={`rounded-xl px-4 py-2 text-sm font-semibold border ${
+                canReport
+                  ? "bg-white text-slate-900 border-white/10"
+                  : "bg-white/5 text-white/40 border-white/10 cursor-not-allowed"
+              }`}
+              onClick={onDownloadLenderReport}
+            >
+              Lender Report
+            </button>
+
+            <button
+              type="button"
+              disabled={!canScript}
+              title={
+                canScript
+                  ? "Generate negotiation script"
+                  : "Suppressed by Integrity Gate"
+              }
+              className={`rounded-xl px-4 py-2 text-sm font-semibold border ${
+                canScript
+                  ? "bg-white/10 text-white border-white/10"
+                  : "bg-white/5 text-white/40 border-white/10 cursor-not-allowed"
+              }`}
+              onClick={() => {
+                // Placeholder: wire your script generator later
+                alert("Negotiation Script generation not wired yet.");
+              }}
+            >
+              Negotiation Script
+            </button>
           </div>
         </div>
+
+        {!canReport || !canScript ? (
+          <div className="mt-3 text-xs text-white/60">
+            <span className="text-white/80">Suppressed:</span>{" "}
+            {!canReport ? "Lender Report" : ""}
+            {!canReport && !canScript ? " • " : ""}
+            {!canScript ? "Negotiation Script" : ""}
+          </div>
+        ) : (
+          <div className="mt-3 text-xs text-white/60">
+            Outputs enabled. Proceed with caution if flagged as CONDITIONAL.
+          </div>
+        )}
       </div>
 
-      {/* Core metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {metricCard("Net Profit", formatMoney(result.net_profit))}
-        {metricCard("Max Safe Offer", formatMoney(result.max_safe_offer))}
-        {metricCard("Profit %", formatPctDecimalToPct(result.profit_pct))}
-        {metricCard("Annualized ROI %", formatPctDecimalToPct(result.annualized_roi))}
-      </div>
-
-      {/* Why */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div className="text-sm font-semibold">Why this verdict</div>
-        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-white/80">
+      {/* Why this verdict */}
+      <div>
+        <h3 className="text-sm font-semibold text-white mb-2">
+          Why this verdict
+        </h3>
+        <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
           {whyBullets.map((b, i) => (
             <li key={i}>{b}</li>
           ))}
         </ul>
       </div>
 
-      {/* Strategy scores */}
-      <div className="space-y-3">
-        <div className="text-sm font-semibold">Strategy Scores</div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StrategyCard
-            title="Flip"
-            score={result.flip_score}
-            verdict={result.flip_verdict}
-            isBest={result.best_strategy === "flip"}
-          />
-          <StrategyCard
-            title="BRRRR"
-            score={result.brrrr_score}
-            verdict={result.brrrr_verdict}
-            isBest={result.best_strategy === "brrrr"}
-          />
-          <StrategyCard
-            title="Wholesale"
-            score={result.wholesale_score}
-            verdict={result.wholesale_verdict}
-            isBest={result.best_strategy === "wholesale"}
-          />
-        </div>
-      </div>
-
-      {/* Risk flags */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div className="text-sm font-semibold">Risk Flags</div>
-        {result.typed_flags?.length ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {result.typed_flags.map((f) => (
-              <span key={f.code} className={severityClass(f.severity)} title={f.code}>
-                {f.label}
-              </span>
+      {/* Notes (unchanged, still shown) */}
+      {result.notes?.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-2">Notes</h3>
+          <ul className="list-disc pl-5 space-y-1 text-sm text-white/70">
+            {result.notes.map((n, i) => (
+              <li key={i}>{n}</li>
             ))}
-          </div>
-        ) : (
-          <div className="mt-3 text-sm text-white/70">No material risk flags detected.</div>
-        )}
-      </div>
-
-      {/* Stress tests */}
-      <StressTable items={result.stress_tests || []} />
-
-      {/* Debug */}
-      <div className="rounded-2xl border border-white/10 bg-white/5">
-        <button
-          type="button"
-          onClick={() => setShowDebug((v) => !v)}
-          className="w-full text-left px-4 py-3 text-sm font-semibold"
-        >
-          {showDebug ? "▼" : "▶"} Developer Details (debug)
-        </button>
-        {showDebug ? (
-          <pre className="px-4 pb-4 text-xs text-white/70 overflow-x-auto">
-            {JSON.stringify(result, null, 2)}
-          </pre>
-        ) : null}
-      </div>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
