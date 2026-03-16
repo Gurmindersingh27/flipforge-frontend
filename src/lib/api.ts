@@ -120,7 +120,7 @@ export async function finalizeAndAnalyze(
 export async function exportLenderReportPdf(
   payload: AnalyzeRequest
 ): Promise<Blob> {
-  const res = await fetchWithTimeout(`${API_BASE_URL}/api/lender-report/pdf`, {
+  const res = await fetchWithTimeout(`${API_BASE_URL}/api/export/lender-report`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
