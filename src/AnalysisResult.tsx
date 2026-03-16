@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { AnalyzeResponse } from "./lib/types";
+import { generateNegotiationScript } from "./lib/api";
 
 interface Props {
   result: AnalyzeResponse;
@@ -59,13 +61,14 @@ export default function AnalysisResult({ result, meta }: Props) {
   const rehab = result.rehab_reality;
   const bp = result.breakpoints;
 
-  // ✅ CHANGE: If allowed_outputs is missing (legacy/manual analyze), default to enabled.
-  const allowed = (result as any)?.allowed_outputs as
-    | { lender_report?: boolean; negotiation_script?: boolean }
-    | undefined;
-
+  // If allowed_outputs is missing (legacy/manual analyze), default to enabled.
+  const allowed = result.allowed_outputs;
   const canReport = allowed ? !!allowed.lender_report : true;
   const canScript = allowed ? !!allowed.negotiation_script : true;
+
+  const [script, setScript] = useState<string | null>(null);
+  const [scriptLoading, setScriptLoading] = useState(false);
+  const [scriptError, setScriptError] = useState<string | null>(null);
 
   const verdictReason =
     (result as any)?.verdict_reason ||
@@ -99,6 +102,23 @@ export default function AnalysisResult({ result, meta }: Props) {
   // Add verdict reason (authoritative line)
   if (verdictReason) {
     whyBullets.unshift(verdictReason);
+  }
+
+  async function onGenerateScript() {
+    setScriptLoading(true);
+    setScriptError(null);
+    try {
+      const data = await generateNegotiationScript({
+        result,
+        seller_ask_price: null,
+        property_address: (meta?.property_address as string | undefined) ?? null,
+      });
+      setScript(data.negotiation_script);
+    } catch (e: any) {
+      setScriptError(e?.message || "Failed to generate negotiation script.");
+    } finally {
+      setScriptLoading(false);
+    }
   }
 
   async function onDownloadLenderReport() {
@@ -190,23 +210,20 @@ export default function AnalysisResult({ result, meta }: Props) {
 
             <button
               type="button"
-              disabled={!canScript}
+              disabled={!canScript || scriptLoading}
               title={
                 canScript
                   ? "Generate negotiation script"
                   : "Suppressed by Integrity Gate"
               }
               className={`rounded-xl px-4 py-2 text-sm font-semibold border ${
-                canScript
+                canScript && !scriptLoading
                   ? "bg-white/10 text-white border-white/10"
                   : "bg-white/5 text-white/40 border-white/10 cursor-not-allowed"
               }`}
-              onClick={() => {
-                // Placeholder: wire your script generator later
-                alert("Negotiation Script generation not wired yet.");
-              }}
+              onClick={onGenerateScript}
             >
-              Negotiation Script
+              {scriptLoading ? "Generating…" : "Negotiation Script"}
             </button>
           </div>
         </div>
@@ -224,6 +241,30 @@ export default function AnalysisResult({ result, meta }: Props) {
           </div>
         )}
       </div>
+
+      {/* Negotiation Script output */}
+      {scriptError && (
+        <div className="text-xs text-red-400 px-1">{scriptError}</div>
+      )}
+      {script && (
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm font-semibold text-white">Negotiation Script</div>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(script)}
+              className="rounded-xl px-3 py-1 text-xs font-semibold border bg-white/10 text-white border-white/10 hover:bg-white/20"
+            >
+              Copy Script
+            </button>
+          </div>
+          <div className="space-y-3 text-sm text-white/80 leading-relaxed">
+            {script.split("\n\n").map((para, i) => (
+              <p key={i}>{para}</p>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Why this verdict */}
       <div>
