@@ -172,9 +172,13 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
 ## Deployment State
 
 - **Backend:** Render.com (render.yaml present in repo)
+  - Live: https://flipforge-backend.onrender.com
 - **Frontend:** Vercel (linked to GitHub)
+  - Live: https://flipforge-frontend.vercel.app
 - **CORS:** Currently `allow_origins=["*"]` — tighten to Vercel domain once deployed
 - **Env var:** Frontend reads `VITE_API_BASE_URL` — must be set to live Render URL on Vercel
+- **Pipeline status:** `/api/analyze` and `/api/export/lender-report` confirmed working in prod
+- **Not wired:** Negotiation Script button
 
 ---
 
@@ -182,6 +186,7 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
 
 **Frontend:**
 ```
+3760c23  Fix lender report endpoint: resolve hardcoded localhost and wrong URL
 22d97b0  Fix hardcoded API_BASE in AnalysisResult.tsx
 ad39f86  Fix meta bridge + lender report + address override
 e307963  Restore UI styles

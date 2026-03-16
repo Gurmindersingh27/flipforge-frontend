@@ -4,13 +4,13 @@
 ---
 
 ## Last Updated
-2026-03-13
+2026-03-16
 
 ---
 
 ## 1. Current Phase & Progress
 
-**Current phase:** Backend deployment — must be confirmed before any UI work begins.
+**Current phase:** Full frontend → backend → PDF pipeline validated in production. Next: Draft Deal editor UI.
 
 ### Done
 - [x] Backend Day 1 complete — DraftDeal, DataPoint/Confidence models built
@@ -20,24 +20,25 @@
 - [x] Frontend MVP exists — App.tsx, AnalysisResult.tsx, api.ts, types.ts all in place
 - [x] CLAUDE.md added to both repos
 - [x] PROJECT_STATE.md added to both repos
+- [x] Backend audited — requirements.txt clean, all 5 routes present, start command correct
+- [x] Render backend deployed successfully
+- [x] Live backend URL confirmed: https://flipforge-backend.onrender.com
+- [x] GET /api/health confirmed live and returning {"status":"ok"}
+- [x] Frontend deployed on Vercel: https://flipforge-frontend.vercel.app
+- [x] VITE_API_BASE_URL set to live Render URL on Vercel
+- [x] POST /api/analyze confirmed working in prod
+- [x] POST /api/export/lender-report confirmed returning application/pdf in prod
+- [x] Full frontend → backend → PDF pipeline validated end-to-end
 
 ### Not Done
-- [ ] Backend confirmed live on Render with working URL
-- [ ] `/api/health` confirmed returning 200 from Render URL
-- [ ] `/api/analyze` confirmed working in prod
-- [ ] `/api/export/lender-report` confirmed returning `application/pdf` in prod
+- [ ] Negotiation Script button not yet wired to backend
 - [ ] CORS tightened to Vercel domain
-- [ ] `VITE_API_BASE_URL` set to live Render URL on Vercel
-- [ ] Frontend Draft Deal editor UI (do not start until backend confirmed)
-- [ ] PDF asset path audit for production (known risk)
+- [ ] Draft Deal editor UI (next phase)
 
 ### Next Session Goal
-1. Confirm Render backend URL is live
-2. Hit `/api/health` — confirm 200
-3. Hit `/api/analyze` with a test payload — confirm response
-4. Hit `/api/export/lender-report` — confirm PDF bytes returned
-5. Set `VITE_API_BASE_URL` on Vercel
-6. Tighten CORS to Vercel domain
+1. Wire Negotiation Script button to backend
+2. Build Draft Deal editor UI
+3. Tighten CORS from * to https://flipforge-frontend.vercel.app
 
 ---
 
@@ -45,8 +46,8 @@
 
 | Repo | GitHub | Deployed |
 |------|--------|----------|
-| Frontend | Gurmindersingh27/flipforge-frontend | Vercel |
-| Backend | Gurmindersingh27/flipforge-backend | Render.com |
+| Frontend | Gurmindersingh27/flipforge-frontend | https://flipforge-frontend.vercel.app |
+| Backend | Gurmindersingh27/flipforge-backend | https://flipforge-backend.onrender.com |
 
 Active dev branch (both repos): `claude/understand-system-uz7Uw`
 Never push to `main` or `master` directly.
@@ -216,6 +217,7 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+3760c23  Fix lender report endpoint: resolve hardcoded localhost and wrong URL
 22d97b0  Fix hardcoded API_BASE in AnalysisResult.tsx
 ad39f86  Fix meta bridge + lender report + address override
 e307963  Restore UI styles
