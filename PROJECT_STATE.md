@@ -75,6 +75,7 @@ FlipForge is a risk-first real estate deal underwriting tool for serious investo
 **Entry point:** `app/main.py` (NOT root `main.py` — that is an older v1 setup)
 **Start command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 **Deploy:** Render.com (`render.yaml` present in repo)
+**Live URL:** https://flipforge-backend.onrender.com
 
 ### Dependencies (requirements.txt)
 ```
@@ -94,7 +95,7 @@ app/
   analysis_engine.py           ← Core deal math (ACTIVE engine — do not rewrite)
   core/
     analysis_engine.py         ← Duplicate/older — verify which is imported before editing
-    config.py                  ← Settings (DATABASE_URL, reads .env)
+    config.py                  ← Dead code — not imported by app/main.py, do not activate
     scoring.py
   services/
     url_service.py             ← Scrapes listing URLs → DraftDeal
@@ -114,7 +115,7 @@ requirements.txt
 
 ### Active API Endpoints
 ```
-GET  /api/health
+GET  /api/health                   ← ✅ confirmed live in prod
 POST /api/analyze                  ← AnalyzeRequest → AnalyzeResponse (SCHEMA FROZEN)
 POST /api/draft-from-url           ← { url } → DraftFromUrlResponse
 POST /api/finalize-and-analyze     ← DraftDeal → AnalyzeResponse (422 if fields missing)
@@ -235,11 +236,13 @@ e307963  Restore UI styles
 
 - Root `main.py` (backend) is an older v1 router setup — active app is `app/main.py`
 - `app/core/analysis_engine.py` exists alongside `app/analysis_engine.py` — confirm which is imported before editing either
-- CORS is wide open (`*`) — needs tightening before production
+- `app/core/config.py` imports pydantic-settings but is dead code — not in active import chain, do not add pydantic-settings to requirements.txt
+- CORS is wide open (`*`) — needs tightening to Vercel domain before production hardening
 - No auth system yet
 - Database models exist (SQLite/SQLAlchemy) but may not be wired into active routes
 - Zillow/Redfin block URL scraping (SOURCE_BLOCKED) — known limitation, not a bug
 - PDF generation must use in-memory bytes in production — disk writes will fail on Render
+- Render free tier cold starts — first request after inactivity may take 50+ seconds
 
 ---
 
@@ -251,7 +254,7 @@ e307963  Restore UI styles
 4. Say exactly:
 
 ```
-Read CLAUDE.md before doing anything.
+Read CLAUDE.md and PROJECT_STATE.md completely before doing anything.
 
 Then clone both repos:
 https://github.com/Gurmindersingh27/flipforge-frontend
