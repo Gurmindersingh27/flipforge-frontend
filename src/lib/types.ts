@@ -150,3 +150,19 @@ export interface DraftFinalizeError {
   error: "MISSING_REQUIRED_FIELDS";
   missing_fields: string[];
 }
+
+// =========================================================
+// Phase 3 — Negotiation Script
+// =========================================================
+
+export interface NegotiationScriptRequest {
+  result: AnalyzeResponse;
+  seller_ask_price?: number | null;
+  property_address?: string | null;
+  buyer_name?: string | null;
+  seller_name?: string | null;
+}
+
+export interface NegotiationScriptResponse {
+  negotiation_script: string;
+}

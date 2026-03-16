@@ -3,6 +3,8 @@ import type {
   AnalyzeResponse,
   DraftDeal,
   DraftFromUrlResponse,
+  NegotiationScriptRequest,
+  NegotiationScriptResponse,
 } from "./types";
 
 /**
@@ -144,4 +146,25 @@ export async function exportLenderReportPdf(
   }
 
   return res.blob();
+}
+
+// NEW — Generate Negotiation Script
+export async function generateNegotiationScript(
+  payload: NegotiationScriptRequest
+): Promise<NegotiationScriptResponse> {
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/generate/negotiation-script`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Script API error ${res.status}: ${text || "(no body)"}`);
+  }
+
+  return res.json();
 }
