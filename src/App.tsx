@@ -107,6 +107,16 @@ export default function App() {
     setDraft(next);
   }
 
+  function setDraftAssumption(
+    field: "holding_months" | "annual_interest_rate" | "loan_to_cost_pct",
+    v: string
+  ) {
+    if (!draft) return;
+    const num = v === "" ? 0 : Number(v);
+    if (!Number.isFinite(num)) return;
+    setDraft({ ...draft, [field]: num });
+  }
+
   async function onFinalizeAnalyze() {
     setAnalyzeError("");
     setDraftError("");
@@ -505,6 +515,84 @@ export default function App() {
                   />
                 </div>
               </div>
+
+              {/* Assumptions — editable in draft flow */}
+              <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/40 p-4">
+                <div className="text-xs uppercase tracking-wide text-white/60">
+                  Assumptions
+                </div>
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Holding Months
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={draft.holding_months}
+                      onChange={(e) =>
+                        setDraftAssumption("holding_months", e.target.value)
+                      }
+                      className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Interest Rate (0.10 = 10%)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={draft.annual_interest_rate}
+                      onChange={(e) =>
+                        setDraftAssumption("annual_interest_rate", e.target.value)
+                      }
+                      className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Loan-to-Cost (0.90 = 90%)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={draft.loan_to_cost_pct}
+                      onChange={(e) =>
+                        setDraftAssumption("loan_to_cost_pct", e.target.value)
+                      }
+                      className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 text-[11px] text-white/45">
+                  Pre-filled from backend defaults. Adjust if needed.
+                </div>
+              </div>
+
+              {/* Extraction notes / signals */}
+              {((draft.notes?.length ?? 0) > 0 ||
+                (draft.signals?.length ?? 0) > 0) && (
+                <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs uppercase tracking-wide text-white/60 mb-2">
+                    Extraction notes
+                  </div>
+                  {draft.signals?.map((s, i) => (
+                    <div key={i} className="text-xs text-white/70">
+                      • {s}
+                    </div>
+                  ))}
+                  {draft.notes?.map((n, i) => (
+                    <div key={i} className="text-xs text-white/50">
+                      • {n}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {analyzeError && (
                 <div className="mt-3 text-sm text-red-400">{analyzeError}</div>
