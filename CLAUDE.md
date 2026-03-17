@@ -53,14 +53,15 @@ git clone https://github.com/Gurmindersingh27/flipforge-backend
 **Source files:**
 ```
 src/
-  main.tsx                    # App entry point
-  App.tsx                     # Root component
+  main.tsx                    # App entry point — wraps app in ClerkProvider
+  App.tsx                     # Root component — auth gate + analyzer + save deal button
   App.css / index.css         # Global styles
   config.ts                   # API_BASE_URL (reads VITE_API_BASE_URL, fallback http://127.0.0.1:8000)
   shield.ts                   # Shield logic
   AnalysisResult.tsx          # Deal analysis display
   components/
     ShieldHeader.tsx          # Header component
+    DealsPage.tsx             # /deals route — saved deals dashboard
   lib/
     api.ts                    # All fetch calls to backend — DO NOT restructure
     types.ts                  # All shared TypeScript types — canonical contract
@@ -73,6 +74,9 @@ src/
 - `POST /api/draft-from-url` → `draftFromUrl()`
 - `POST /api/finalize-and-analyze` → `finalizeAndAnalyze()` (handles 422 missing_fields)
 - `POST /api/export/lender-report` → PDF export
+- `POST /api/deals/save` → `saveDeal(payload, token)` (Clerk JWT required)
+- `GET /api/deals` → `getDeals(token)` (Clerk JWT required)
+- `GET /api/deals/{id}` → `getDeal(id, token)` (Clerk JWT required)
 
 **Key types (src/lib/types.ts):**
 - `AnalyzeRequest` / `AnalyzeResponse`
@@ -176,25 +180,31 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
 - **Frontend:** Vercel (linked to GitHub)
   - Live: https://flipforge-frontend.vercel.app
 - **CORS:** Currently `allow_origins=["*"]` — tighten to Vercel domain once deployed
-- **Env var:** Frontend reads `VITE_API_BASE_URL` — must be set to live Render URL on Vercel
-- **Pipeline status:** `/api/analyze`, `/api/export/lender-report`, and `/api/generate/negotiation-script` confirmed working in prod
+- **Env vars (frontend, set on Vercel):**
+  - `VITE_API_BASE_URL` — Render backend URL
+  - `VITE_CLERK_PUBLISHABLE_KEY` — Clerk publishable key
+- **Env vars (backend, set on Render):**
+  - `CLERK_JWKS_URL` — Clerk JWKS endpoint for JWT verification
+  - `DATABASE_URL` — optional; defaults to SQLite if not set
+- **Auth:** Clerk authentication live. GitHub OAuth enabled via Clerk dashboard. Signed-out users see auth wall; signed-in users access analyzer and deals dashboard.
+- **Pipeline status:** `/api/analyze`, `/api/export/lender-report`, `/api/deals/save`, `/api/deals` confirmed working in prod
 
 ---
 
 ## Commit History
 
-**Frontend:**
+**Frontend (recent, newest first):**
 ```
-3760c23  Fix lender report endpoint: resolve hardcoded localhost and wrong URL
-22d97b0  Fix hardcoded API_BASE in AnalysisResult.tsx
-ad39f86  Fix meta bridge + lender report + address override
-e307963  Restore UI styles
-23826a4  FlipForge frontend MVP
+b5f058c  fix: fall back to draft_input.address when address column is null
+9a60727  feat: gate analyzer behind Clerk auth, add SignUpButton
+5bec63f  fix: disable Open button in DealsPage until location.state is wired up
+666e37b  feat: add Clerk auth + saved deals frontend
 ```
 
-**Backend:**
+**Backend (recent, newest first):**
 ```
-741c4c2  FlipForge backend MVP
+1838408  fix: make JWKS preload startup-safe with lazy-load fallback
+621fb06  feat: add Clerk auth + saved deals persistence layer
 ```
 
 ---
