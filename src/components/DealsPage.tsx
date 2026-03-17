@@ -131,13 +131,9 @@ function DealsList() {
                 </td>
                 <td className="py-3 pr-4">
                   <div className="flex items-center gap-3">
-                    <Link
-                      to="/"
-                      state={{ savedDeal: deal }}
-                      className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                    >
+                    <span className="text-xs text-white/30 cursor-not-allowed">
                       Open
-                    </Link>
+                    </span>
                     <span className="text-xs text-white/30 cursor-not-allowed">
                       Compare
                     </span>
