@@ -50,7 +50,7 @@
 | Frontend | Gurmindersingh27/flipforge-frontend | https://flipforge-frontend.vercel.app |
 | Backend | Gurmindersingh27/flipforge-backend | https://flipforge-backend.onrender.com |
 
-Active dev branch (both repos): `claude/build-draft-editor-ui-xm2tq`
+Active dev branch (both repos): `claude/review-project-docs-Qquyh`
 Never push to `main` or `master` directly.
 
 ---
@@ -219,6 +219,11 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+3747221  Merge pull request #4 from Gurmindersingh27/claude/build-draft-editor-ui-xm2tq
+d9c5699  docs: correct PROJECT_STATE.md — remove completed items from Not Done
+c3ca8c1  Update package-lock.json after npm install
+4870de8  Update PROJECT_STATE.md: draft editor assumption fields + UX debt note
+998a88f  Draft editor: expose assumption fields + extraction notes
 3760c23  Fix lender report endpoint: resolve hardcoded localhost and wrong URL
 22d97b0  Fix hardcoded API_BASE in AnalysisResult.tsx
 ad39f86  Fix meta bridge + lender report + address override

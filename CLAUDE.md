@@ -177,8 +177,7 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
   - Live: https://flipforge-frontend.vercel.app
 - **CORS:** Currently `allow_origins=["*"]` — tighten to Vercel domain once deployed
 - **Env var:** Frontend reads `VITE_API_BASE_URL` — must be set to live Render URL on Vercel
-- **Pipeline status:** `/api/analyze` and `/api/export/lender-report` confirmed working in prod
-- **Not wired:** Negotiation Script button
+- **Pipeline status:** `/api/analyze`, `/api/export/lender-report`, and `/api/generate/negotiation-script` confirmed working in prod
 
 ---
 
