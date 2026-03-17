@@ -119,7 +119,9 @@ function DealsList() {
                 className="border-b border-white/5 hover:bg-white/5 transition-colors"
               >
                 <td className="py-3 pr-4 text-white/90 max-w-[200px] truncate">
-                  {deal.address ?? <span className="text-white/40">No address</span>}
+                  {deal.address
+                    ?? (deal.draft_input as any)?.address
+                    ?? <span className="text-white/40">No address</span>}
                 </td>
                 <td className="py-3 pr-4 text-white/80">{fmt(profit)}</td>
                 <td className="py-3 pr-4 text-white/80">{fmtPct(roi)}</td>
