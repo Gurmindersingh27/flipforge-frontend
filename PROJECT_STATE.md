@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-03-16
+2026-03-17
 
 ---
 
@@ -29,16 +29,17 @@
 - [x] POST /api/analyze confirmed working in prod
 - [x] POST /api/export/lender-report confirmed returning application/pdf in prod
 - [x] Full frontend → backend → PDF pipeline validated end-to-end
+- [x] Draft Deal editor: assumption fields (holding_months, annual_interest_rate, loan_to_cost_pct) exposed as editable inputs
+- [x] Draft Deal editor: extraction notes (draft.notes, draft.signals) displayed in panel
 
 ### Not Done
-- [ ] Negotiation Script button not yet wired to backend
-- [ ] CORS tightened to Vercel domain
-- [ ] Draft Deal editor UI (next phase)
+- [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
+- [ ] Polish assumption input display: convert interest rate / LTC to percentage display
 
 ### Next Session Goal
-1. Wire Negotiation Script button to backend
-2. Build Draft Deal editor UI
-3. Tighten CORS from * to https://flipforge-frontend.vercel.app
+1. Polish assumption input display (show percentages instead of decimals)
+2. Tighten CORS from * to https://flipforge-frontend.vercel.app
+3. Define Deal Alert Engine MVP scope
 
 ---
 
@@ -49,7 +50,7 @@
 | Frontend | Gurmindersingh27/flipforge-frontend | https://flipforge-frontend.vercel.app |
 | Backend | Gurmindersingh27/flipforge-backend | https://flipforge-backend.onrender.com |
 
-Active dev branch (both repos): `claude/understand-system-uz7Uw`
+Active dev branch (both repos): `claude/build-draft-editor-ui-xm2tq`
 Never push to `main` or `master` directly.
 
 ---
