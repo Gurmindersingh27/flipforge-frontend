@@ -539,31 +539,37 @@ export default function App() {
                   </div>
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
-                      Interest Rate (0.10 = 10%)
+                      Interest Rate (%)
                     </label>
                     <input
                       type="number"
                       min={0}
-                      step={0.01}
-                      value={draft.annual_interest_rate}
+                      step={0.25}
+                      value={Number((draft.annual_interest_rate * 100).toFixed(4))}
                       onChange={(e) =>
-                        setDraftAssumption("annual_interest_rate", e.target.value)
+                        setDraftAssumption(
+                          "annual_interest_rate",
+                          e.target.value === "" ? "" : String(Number(e.target.value) / 100)
+                        )
                       }
                       className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
                     />
                   </div>
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
-                      Loan-to-Cost (0.90 = 90%)
+                      Loan-to-Cost (LTC %)
                     </label>
                     <input
                       type="number"
                       min={0}
-                      max={1}
-                      step={0.01}
-                      value={draft.loan_to_cost_pct}
+                      max={100}
+                      step={1}
+                      value={Number((draft.loan_to_cost_pct * 100).toFixed(4))}
                       onChange={(e) =>
-                        setDraftAssumption("loan_to_cost_pct", e.target.value)
+                        setDraftAssumption(
+                          "loan_to_cost_pct",
+                          e.target.value === "" ? "" : String(Number(e.target.value) / 100)
+                        )
                       }
                       className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
                     />
