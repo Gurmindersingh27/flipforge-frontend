@@ -33,14 +33,13 @@
 - [x] Draft Deal editor: extraction notes (draft.notes, draft.signals) displayed in panel
 
 ### Not Done
-- [ ] Negotiation Script button not yet wired to backend
-- [ ] CORS tightened to Vercel domain
-- [ ] Known UX debt: assumption inputs display raw decimal values (0.10, 0.90) — needs percentage conversion + relabeling pass
+- [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
+- [ ] Polish assumption input display: convert interest rate / LTC to percentage display
 
 ### Next Session Goal
-1. Wire Negotiation Script button to backend
-2. Polish assumption input display: convert interest rate / LTC to percentage display (multiply by 100 for display, divide on change)
-3. Tighten CORS from * to https://flipforge-frontend.vercel.app
+1. Polish assumption input display (show percentages instead of decimals)
+2. Tighten CORS from * to https://flipforge-frontend.vercel.app
+3. Define Deal Alert Engine MVP scope
 
 ---
 
