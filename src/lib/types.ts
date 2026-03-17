@@ -166,3 +166,22 @@ export interface NegotiationScriptRequest {
 export interface NegotiationScriptResponse {
   negotiation_script: string;
 }
+
+// =========================================================
+// Saved Deals — persistence layer
+// =========================================================
+
+export interface SaveDealRequest {
+  address?: string | null;
+  draft_input?: Record<string, unknown> | null;
+  analysis_result: Record<string, unknown>;
+}
+
+export interface SavedDeal {
+  id: number;
+  user_id: string;
+  address?: string | null;
+  draft_input?: Record<string, unknown> | null;
+  analysis_result: Record<string, unknown>;
+  created_at: string; // ISO 8601
+}

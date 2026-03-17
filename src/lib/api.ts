@@ -5,6 +5,8 @@ import type {
   DraftFromUrlResponse,
   NegotiationScriptRequest,
   NegotiationScriptResponse,
+  SaveDealRequest,
+  SavedDeal,
 } from "./types";
 
 /**
@@ -164,6 +166,58 @@ export async function generateNegotiationScript(
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Script API error ${res.status}: ${text || "(no body)"}`);
+  }
+
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Saved Deals — auth-gated. Caller must supply a Clerk session token.
+// Obtain via: const { getToken } = useAuth(); const token = await getToken();
+// ---------------------------------------------------------------------------
+
+export async function saveDeal(
+  payload: SaveDealRequest,
+  token: string
+): Promise<SavedDeal> {
+  const res = await fetchWithTimeout(`${API_BASE_URL}/api/deals/save`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Save deal error ${res.status}: ${text || "(no body)"}`);
+  }
+
+  return res.json();
+}
+
+export async function getDeals(token: string): Promise<SavedDeal[]> {
+  const res = await fetchWithTimeout(`${API_BASE_URL}/api/deals`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Get deals error ${res.status}: ${text || "(no body)"}`);
+  }
+
+  return res.json();
+}
+
+export async function getDeal(id: number, token: string): Promise<SavedDeal> {
+  const res = await fetchWithTimeout(`${API_BASE_URL}/api/deals/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Get deal error ${res.status}: ${text || "(no body)"}`);
   }
 
   return res.json();
