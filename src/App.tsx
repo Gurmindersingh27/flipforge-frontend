@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
+import { Routes, Route, Link } from "react-router-dom";
+import { useAuth, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import AnalysisResult from "./AnalysisResult";
 import ShieldHeader from "./components/ShieldHeader";
-import { analyzeDeal, draftFromUrl, finalizeAndAnalyze } from "./lib/api";
+import DealsPage from "./components/DealsPage";
+import { analyzeDeal, draftFromUrl, finalizeAndAnalyze, saveDeal } from "./lib/api";
 import type {
   AnalyzeRequest,
   AnalyzeResponse,
@@ -34,7 +37,14 @@ function isLowConfidence(c?: Confidence) {
   return c === "LOW" || c === "MISSING";
 }
 
-export default function App() {
+function AnalyzerPage() {
+  const { getToken } = useAuth();
+
+  // Save Deal state
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string>("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
   // =========================
   // Phase 2 — URL + DraftDeal
   // =========================
@@ -202,6 +212,40 @@ export default function App() {
     }
   }
 
+  async function onSaveDeal() {
+    if (!result) return;
+    setSaveError("");
+    setSaveSuccess(false);
+
+    const token = await getToken().catch(() => null);
+    if (!token) {
+      setSaveError("Could not retrieve auth token. Are you signed in?");
+      return;
+    }
+
+    try {
+      setSaveLoading(true);
+      const addr =
+        (draft as DraftDeal | null)?.address ??
+        (pdfMeta.property_address as string | null) ??
+        null;
+      await saveDeal(
+        {
+          address: addr,
+          draft_input: draft ? (draft as unknown as Record<string, unknown>) : null,
+          analysis_result: result as unknown as Record<string, unknown>,
+        },
+        token
+      );
+      setSaveSuccess(true);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to save deal.";
+      setSaveError(msg);
+    } finally {
+      setSaveLoading(false);
+    }
+  }
+
   const verdictReason = result?.verdict_reason ?? "";
   const missing = new Set(missingFields);
 
@@ -334,6 +378,34 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      {/* Nav bar */}
+      <div className="border-b border-white/10 bg-slate-900/60 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-semibold text-white">FlipForge</span>
+          <SignedIn>
+            <Link
+              to="/deals"
+              className="text-xs text-white/60 hover:text-white transition-colors"
+            >
+              My Deals
+            </Link>
+          </SignedIn>
+        </div>
+        <div className="flex items-center gap-3">
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="rounded-lg px-3 py-1.5 text-xs font-semibold border border-white/20 bg-white/5 hover:bg-white/10 transition-colors">
+                Sign In
+              </button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <UserButton afterSignOutUrl="/" />
+          </SignedIn>
+        </div>
+      </div>
+
+      <SignedIn>
       <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
         {/* =========================
             Phase 2 — URL → DraftDeal
@@ -717,10 +789,81 @@ export default function App() {
               <div className="mt-3">
                 <AnalysisResult result={result} meta={pdfMeta} />
               </div>
+
+              {/* Save Deal — visible only when signed in */}
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <SignedIn>
+                  <button
+                    type="button"
+                    onClick={onSaveDeal}
+                    disabled={saveLoading || saveSuccess}
+                    className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                  >
+                    {saveLoading
+                      ? "Saving…"
+                      : saveSuccess
+                      ? "Saved!"
+                      : "Save Deal"}
+                  </button>
+                  {saveSuccess && (
+                    <Link
+                      to="/deals"
+                      className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      View in My Deals →
+                    </Link>
+                  )}
+                  {saveError && (
+                    <span className="text-xs text-red-400">{saveError}</span>
+                  )}
+                </SignedIn>
+                <SignedOut>
+                  <SignInButton mode="modal">
+                    <button
+                      type="button"
+                      className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+                    >
+                      Sign in to Save Deal
+                    </button>
+                  </SignInButton>
+                </SignedOut>
+              </div>
             </div>
           </div>
         )}
       </div>
+      </SignedIn>
+      <SignedOut>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+          <div className="text-center">
+            <div className="text-xl font-semibold text-white">Welcome to FlipForge</div>
+            <div className="mt-2 text-sm text-white/60">
+              Sign in or create an account to analyze deals.
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <SignInButton mode="modal">
+              <button className="rounded-lg px-4 py-2 text-sm font-semibold border border-white/20 bg-white/5 hover:bg-white/10 transition-colors">
+                Sign In
+              </button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <button className="rounded-lg px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 transition-colors">
+                Create Account
+              </button>
+            </SignUpButton>
+          </div>
+        </div>
+      </SignedOut>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<AnalyzerPage />} />
+      <Route path="/deals" element={<DealsPage />} />
+    </Routes>
   );
 }
