@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Routes, Route, Link } from "react-router-dom";
-import { useAuth, SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
+import { useAuth, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import AnalysisResult from "./AnalysisResult";
 import ShieldHeader from "./components/ShieldHeader";
 import DealsPage from "./components/DealsPage";
@@ -405,6 +405,7 @@ function AnalyzerPage() {
         </div>
       </div>
 
+      <SignedIn>
       <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
         {/* =========================
             Phase 2 — URL → DraftDeal
@@ -831,6 +832,29 @@ function AnalyzerPage() {
           </div>
         )}
       </div>
+      </SignedIn>
+      <SignedOut>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+          <div className="text-center">
+            <div className="text-xl font-semibold text-white">Welcome to FlipForge</div>
+            <div className="mt-2 text-sm text-white/60">
+              Sign in or create an account to analyze deals.
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <SignInButton mode="modal">
+              <button className="rounded-lg px-4 py-2 text-sm font-semibold border border-white/20 bg-white/5 hover:bg-white/10 transition-colors">
+                Sign In
+              </button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <button className="rounded-lg px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 transition-colors">
+                Create Account
+              </button>
+            </SignUpButton>
+          </div>
+        </div>
+      </SignedOut>
     </div>
   );
 }
