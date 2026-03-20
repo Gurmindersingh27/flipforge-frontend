@@ -45,12 +45,11 @@
   - Restore form state
   - Allow user to modify inputs and re-run analysis
   - Must not break AnalyzeRequest schema
+- [ ] Lender Report + Negotiation Script on /deal/:id — currently broken buttons; render as disabled "Soon" labels
 - [x] Polish assumption input display: convert interest rate / LTC to percentage display
 
 ### Next Session Goal
-1. Polish assumption input display (show percentages instead of decimals)
-2. Tighten CORS from * to https://flipforge-frontend.vercel.app
-3. Define Deal Alert Engine MVP scope
+Fix Lender Report and Negotiation Script on /deal/:id — render as disabled with "Soon" label instead of broken buttons (DealPage.tsx only, no backend changes)
 
 ---
 
@@ -61,7 +60,7 @@
 | Frontend | Gurmindersingh27/flipforge-frontend | https://flipforge-frontend.vercel.app |
 | Backend | Gurmindersingh27/flipforge-backend | https://flipforge-backend.onrender.com |
 
-Active dev branch (frontend): `claude/load-claude-skills-IpLZn`
+Active dev branch (frontend): `claude/flipforge-session-boot-N9rKT`
 Never push to `main` or `master` directly.
 
 ---
@@ -230,6 +229,8 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+1d592d8  fix: save manual-flow input values into draft_input so DealPage header renders them
+e0cbdd1  (origin/main) add DealPage.tsx + /deal/:id route + DealsPage link update
 3747221  Merge pull request #4 from Gurmindersingh27/claude/build-draft-editor-ui-xm2tq
 d9c5699  docs: correct PROJECT_STATE.md — remove completed items from Not Done
 c3ca8c1  Update package-lock.json after npm install
