@@ -4,6 +4,7 @@ import { useAuth, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } 
 import AnalysisResult from "./AnalysisResult";
 import ShieldHeader from "./components/ShieldHeader";
 import DealsPage from "./components/DealsPage";
+import DealPage from "./components/DealPage";
 import { analyzeDeal, draftFromUrl, finalizeAndAnalyze, saveDeal } from "./lib/api";
 import type {
   AnalyzeRequest,
@@ -864,6 +865,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<AnalyzerPage />} />
       <Route path="/deals" element={<DealsPage />} />
+      <Route path="/deal/:id" element={<DealPage />} />
     </Routes>
   );
 }
