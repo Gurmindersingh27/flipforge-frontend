@@ -233,7 +233,14 @@ function AnalyzerPage() {
       await saveDeal(
         {
           address: addr,
-          draft_input: draft ? (draft as unknown as Record<string, unknown>) : null,
+          draft_input: draft
+            ? (draft as unknown as Record<string, unknown>)
+            : {
+                purchase_price:   { value: pdfMeta.purchase_price   ?? null, confidence: "MANUAL" },
+                arv:              { value: pdfMeta.arv              ?? null, confidence: "MANUAL" },
+                rehab_budget:     { value: pdfMeta.rehab_budget     ?? null, confidence: "MANUAL" },
+                est_monthly_rent: { value: pdfMeta.est_monthly_rent ?? null, confidence: "MANUAL" },
+              },
           analysis_result: result as unknown as Record<string, unknown>,
         },
         token
