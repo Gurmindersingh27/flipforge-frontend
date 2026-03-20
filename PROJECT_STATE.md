@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-03-17
+2026-03-20
 
 ---
 
@@ -31,9 +31,20 @@
 - [x] Full frontend → backend → PDF pipeline validated end-to-end
 - [x] Draft Deal editor: assumption fields (holding_months, annual_interest_rate, loan_to_cost_pct) exposed as editable inputs
 - [x] Draft Deal editor: extraction notes (draft.notes, draft.signals) displayed in panel
+- [x] View Saved Deal — /deal/:id (read-only)
+  - User clicks saved deal from dashboard
+  - Navigates to /deal/:id
+  - Fetches saved deal via GET /api/deals/{id}
+  - Renders draft_input summary + analysis_result
+  - Read-only view (no analyzer rehydration)
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
+- [ ] Resume Deal (Analyzer Rehydration)
+  - Load saved draft_input into analyzer UI
+  - Restore form state
+  - Allow user to modify inputs and re-run analysis
+  - Must not break AnalyzeRequest schema
 - [x] Polish assumption input display: convert interest rate / LTC to percentage display
 
 ### Next Session Goal
@@ -50,7 +61,7 @@
 | Frontend | Gurmindersingh27/flipforge-frontend | https://flipforge-frontend.vercel.app |
 | Backend | Gurmindersingh27/flipforge-backend | https://flipforge-backend.onrender.com |
 
-Active dev branch (both repos): `claude/review-project-docs-Qquyh`
+Active dev branch (frontend): `claude/load-claude-skills-IpLZn`
 Never push to `main` or `master` directly.
 
 ---
