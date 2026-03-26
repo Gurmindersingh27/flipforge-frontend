@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-03-20
+2026-03-26
 
 ---
 
@@ -37,6 +37,7 @@
   - Fetches saved deal via GET /api/deals/{id}
   - Renders draft_input summary + analysis_result
   - Read-only view (no analyzer rehydration)
+- [x] Saved deal page — Lender Report and Negotiation Script disabled, labeled "Soon", no API calls for any verdict type
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
@@ -260,6 +261,7 @@ e307963  Restore UI styles
 - Zillow/Redfin block URL scraping (SOURCE_BLOCKED) — known limitation, not a bug
 - PDF generation must use in-memory bytes in production — disk writes will fail on Render
 - Render free tier cold starts — first request after inactivity may take 50+ seconds
+- Integrity Gate copy reads "suppressed when deal is non-viable" — inaccurate on BUY/CONDITIONAL saved deals; fix requires AnalysisResult.tsx edit, deferred
 
 ---
 
