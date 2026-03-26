@@ -38,20 +38,21 @@
   - Renders draft_input summary + analysis_result
   - Read-only view (no analyzer rehydration)
 - [x] Saved deal page — Lender Report and Negotiation Script disabled, labeled "Soon", no API calls for any verdict type
+- [x] Resume Deal (Analyzer Rehydration)
+  - Resume Deal button on saved deal page (disabled with tooltip when draft_input is null)
+  - Uses React Router `<Link state>` to pass draft_input to analyzer
+  - Hydrates analyzer form on mount via useEffect + useLocation
+  - Resets all analyzer state for fresh session
+  - Clears router state with replaceState to prevent re-hydration on refresh
+  - Legacy fix: sets source to "saved" when absent from draft_input
+  - Legacy fix: normalizes invalid confidence values ("MANUAL" → "MISSING") via fixDp
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
-- [ ] Resume Deal (Analyzer Rehydration)
-  - Load saved draft_input into analyzer UI
-  - Restore form state
-  - Allow user to modify inputs and re-run analysis
-  - Must not break AnalyzeRequest schema
 - [x] Polish assumption input display: convert interest rate / LTC to percentage display
 
 ### Next Session Goal
-1. Polish assumption input display (show percentages instead of decimals)
-2. Tighten CORS from * to https://flipforge-frontend.vercel.app
-3. Define Deal Alert Engine MVP scope
+1. Tighten CORS from * to https://flipforge-frontend.vercel.app
 
 ---
 
@@ -231,6 +232,11 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+1f350d7  fix(App): normalize invalid DataPoint confidence values on resume
+7aa90ff  fix(App): set source fallback on resumed legacy drafts to pass backend validation
+ebc0bbc  feat(DealPage): add Resume Deal — rehydrate analyzer from saved draft_input
+9a932a8  docs: update PROJECT_STATE.md for 2026-03-26 session
+9fb8690  fix(DealPage): disable Lender Report and Negotiation Script on saved deal view
 3747221  Merge pull request #4 from Gurmindersingh27/claude/build-draft-editor-ui-xm2tq
 d9c5699  docs: correct PROJECT_STATE.md — remove completed items from Not Done
 c3ca8c1  Update package-lock.json after npm install
@@ -262,6 +268,7 @@ e307963  Restore UI styles
 - PDF generation must use in-memory bytes in production — disk writes will fail on Render
 - Render free tier cold starts — first request after inactivity may take 50+ seconds
 - Integrity Gate copy reads "suppressed when deal is non-viable" — inaccurate on BUY/CONDITIONAL saved deals; fix requires AnalysisResult.tsx edit, deferred
+- Legacy manual saves store confidence: "MANUAL" on DataPoints — not in Confidence Literal; normalized to "MISSING" during resume hydration in App.tsx
 
 ---
 
