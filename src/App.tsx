@@ -76,7 +76,7 @@ function AnalyzerPage() {
 
     const resumeDraft = incoming as DraftDeal;
 
-    setDraft(resumeDraft);
+    setDraft({ ...resumeDraft, source: resumeDraft.source ?? "saved" });
     setListingUrl(resumeDraft.url ?? "");
     setManualAddress(resumeDraft.address ?? "");
 
