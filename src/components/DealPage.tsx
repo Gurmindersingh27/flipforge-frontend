@@ -63,9 +63,32 @@ function DealView({ deal }: { deal: SavedDeal }) {
       <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
         <ShieldHeader result={result} />
         <div className="mt-4">
-          <div className="text-sm font-semibold text-white">Results</div>
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-white">Results</div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold border bg-white/5 text-white/35 border-white/10 cursor-not-allowed"
+              >
+                Lender Report
+                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-white/30">Soon</span>
+              </button>
+              <button
+                type="button"
+                disabled
+                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold border bg-white/5 text-white/35 border-white/10 cursor-not-allowed"
+              >
+                Negotiation Script
+                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-white/30">Soon</span>
+              </button>
+            </div>
+          </div>
           <div className="mt-3">
-            <AnalysisResult result={result} meta={pdfMeta} />
+            <AnalysisResult
+              result={{ ...result, allowed_outputs: { lender_report: false, negotiation_script: false } }}
+              meta={pdfMeta}
+            />
           </div>
         </div>
       </div>
