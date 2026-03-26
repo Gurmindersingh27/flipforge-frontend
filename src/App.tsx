@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Routes, Route, Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { useAuth, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import AnalysisResult from "./AnalysisResult";
 import ShieldHeader from "./components/ShieldHeader";
@@ -61,6 +61,39 @@ function AnalyzerPage() {
   const [analyzeError, setAnalyzeError] = useState<string>("");
 
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
+
+  const location = useLocation();
+
+  useEffect(() => {
+    const state = location.state as { resumeDraft?: unknown } | null;
+    const incoming = state?.resumeDraft;
+
+    if (
+      !incoming ||
+      typeof incoming !== "object" ||
+      !("purchase_price" in incoming)
+    ) return;
+
+    const resumeDraft = incoming as DraftDeal;
+
+    setDraft(resumeDraft);
+    setListingUrl(resumeDraft.url ?? "");
+    setManualAddress(resumeDraft.address ?? "");
+
+    setMissingFields([]);
+    setDraftLoading(false);
+    setDraftError("");
+    setAnalyzeLoading(false);
+    setAnalyzeError("");
+    setResult(null);
+    setSaveLoading(false);
+    setSaveError("");
+    setSaveSuccess(false);
+    setLoading(false);
+    setError("");
+
+    window.history.replaceState({}, "");
+  }, [location.state]);
 
   const isSourceBlocked =
     draft?.source?.toUpperCase?.().includes("SOURCE_BLOCKED") ?? false;

@@ -31,8 +31,26 @@ function DealView({ deal }: { deal: SavedDeal }) {
     <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
       {/* Deal summary header */}
       <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
-        <div className="text-sm font-semibold text-white">
-          {pdfMeta.property_address ?? "Saved Deal"}
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold text-white">
+            {pdfMeta.property_address ?? "Saved Deal"}
+          </div>
+          {draft ? (
+            <Link
+              to="/"
+              state={{ resumeDraft: draft }}
+              className="rounded-xl px-3 py-1.5 text-xs font-semibold border border-indigo-500/40 bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 transition-colors"
+            >
+              Resume Deal
+            </Link>
+          ) : (
+            <span
+              className="rounded-xl px-3 py-1.5 text-xs font-semibold border border-white/10 bg-white/5 text-white/30 cursor-not-allowed"
+              title="Draft data not available for this deal"
+            >
+              Resume Deal
+            </span>
+          )}
         </div>
         {draft?.source && (
           <span className="mt-1 inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70">
