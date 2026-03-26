@@ -76,7 +76,25 @@ function AnalyzerPage() {
 
     const resumeDraft = incoming as DraftDeal;
 
-    setDraft({ ...resumeDraft, source: resumeDraft.source ?? "saved" });
+    const VALID_CONFIDENCE = new Set(["HIGH", "MEDIUM", "LOW", "MISSING"]);
+    const fixDp = (dp: any): any =>
+      dp && typeof dp === "object"
+        ? {
+            ...dp,
+            confidence:
+              typeof dp.confidence === "string" && VALID_CONFIDENCE.has(dp.confidence)
+                ? dp.confidence
+                : "MISSING",
+          }
+        : dp;
+    setDraft({
+      ...resumeDraft,
+      source: resumeDraft.source ?? "saved",
+      purchase_price: fixDp(resumeDraft.purchase_price),
+      arv: fixDp(resumeDraft.arv),
+      rehab_budget: fixDp(resumeDraft.rehab_budget),
+      est_monthly_rent: fixDp(resumeDraft.est_monthly_rent),
+    });
     setListingUrl(resumeDraft.url ?? "");
     setManualAddress(resumeDraft.address ?? "");
 
