@@ -38,6 +38,16 @@ function isLowConfidence(c?: Confidence) {
   return c === "LOW" || c === "MISSING";
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  purchase_price: "Purchase Price",
+  arv: "ARV",
+  rehab_budget: "Rehab Budget",
+  est_monthly_rent: "Est. Monthly Rent",
+  holding_months: "Holding Months",
+  annual_interest_rate: "Interest Rate (%)",
+  loan_to_cost_pct: "LTC (%)",
+};
+
 function AnalyzerPage() {
   const { getToken } = useAuth();
 
@@ -61,6 +71,7 @@ function AnalyzerPage() {
   const [analyzeError, setAnalyzeError] = useState<string>("");
 
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
+  const [isResumed, setIsResumed] = useState(false);
 
   const location = useLocation();
 
@@ -95,6 +106,7 @@ function AnalyzerPage() {
       rehab_budget: fixDp(resumeDraft.rehab_budget),
       est_monthly_rent: fixDp(resumeDraft.est_monthly_rent),
     });
+    setIsResumed(true);
     setListingUrl(resumeDraft.url ?? "");
     setManualAddress(resumeDraft.address ?? "");
 
@@ -136,6 +148,7 @@ function AnalyzerPage() {
     setAnalyzeError("");
     setMissingFields([]);
     setResult(null);
+    setIsResumed(false);
 
     if (!listingUrl.trim()) {
       setDraftError("Paste a listing URL first.");
@@ -202,11 +215,19 @@ function AnalyzerPage() {
       const res = await finalizeAndAnalyze(draft);
 
       if (!res.ok) {
-        setMissingFields(res.missing_fields || []);
-        setAnalyzeError("Missing required fields. Fill the highlighted inputs.");
+        const fields = res.missing_fields || [];
+        setMissingFields(fields);
+        const names = fields.map((f) => FIELD_LABELS[f] || f).join(", ");
+        setAnalyzeError(
+          names
+            ? `Missing: ${names}`
+            : "Missing required fields. Fill the highlighted inputs."
+        );
         return;
       }
 
+      setMissingFields([]);
+      setAnalyzeError("");
       setResult(res.result);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to finalize/analyze.";
@@ -472,9 +493,11 @@ function AnalyzerPage() {
         <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-white">Draft from URL</div>
+              <div className="text-sm font-semibold text-white">{isResumed ? "Resumed Deal" : "Draft from URL"}</div>
               <div className="mt-1 text-xs text-white/60">
-                Paste a listing URL. We extract what we can. Fill gaps. Then analyze.
+                {isResumed
+                  ? "Resumed from a saved deal. Review the fields and re-analyze."
+                  : "Paste a listing URL. We extract what we can. Fill gaps. Then analyze."}
               </div>
             </div>
 
@@ -665,7 +688,7 @@ function AnalyzerPage() {
                       onChange={(e) =>
                         setDraftAssumption("holding_months", e.target.value)
                       }
-                      className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+                      className={inputClass(missing.has("holding_months"), false)}
                     />
                   </div>
                   <div>
@@ -683,7 +706,7 @@ function AnalyzerPage() {
                           e.target.value === "" ? "" : String(Number(e.target.value) / 100)
                         )
                       }
-                      className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+                      className={inputClass(missing.has("annual_interest_rate"), false)}
                     />
                   </div>
                   <div>
@@ -702,7 +725,7 @@ function AnalyzerPage() {
                           e.target.value === "" ? "" : String(Number(e.target.value) / 100)
                         )
                       }
-                      className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+                      className={inputClass(missing.has("loan_to_cost_pct"), false)}
                     />
                   </div>
                 </div>
