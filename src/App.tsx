@@ -240,6 +240,7 @@ function AnalyzerPage() {
   // =========================
   // Legacy Manual Analyze
   // =========================
+  const [showLegacy, setShowLegacy] = useState(false);
   const [purchasePrice, setPurchasePrice] = useState<number>(120000);
   const [arv, setArv] = useState<number>(220000);
   const [rehabBudget, setRehabBudget] = useState<number>(35000);
@@ -778,9 +779,21 @@ function AnalyzerPage() {
           )}
         </div>
 
+        {/* Legacy toggle */}
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => setShowLegacy((v) => !v)}
+            className="text-xs text-white/40 hover:text-white/60 transition-colors"
+          >
+            {showLegacy ? "Hide legacy analyzer ↑" : "Show legacy analyzer ↓"}
+          </button>
+        </div>
+
         {/* =========================
             Legacy Manual Analyze
            ========================= */}
+        {showLegacy && (
         <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
           <div className="text-sm font-semibold text-white">
             Manual Analyze (Legacy)
@@ -857,6 +870,7 @@ function AnalyzerPage() {
             </div>
           )}
         </div>
+        )}
 
         {/* =========================
             Results
