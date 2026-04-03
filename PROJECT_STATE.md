@@ -4,13 +4,13 @@
 ---
 
 ## Last Updated
-2026-03-26
+2026-04-03
 
 ---
 
 ## 1. Current Phase & Progress
 
-**Current phase:** Full frontend → backend → PDF pipeline validated in production. Next: Draft Deal editor UI.
+**Current phase:** UX polish shipped across Resume, Results, Saved Deals, and Deal page. Legacy analyzer hidden. Ready for first real user.
 
 ### Done
 - [x] Backend Day 1 complete — DraftDeal, DataPoint/Confidence models built
@@ -38,20 +38,33 @@
   - Renders draft_input summary + analysis_result
   - Read-only view (no analyzer rehydration)
 - [x] Saved deal page — Lender Report and Negotiation Script disabled, labeled "Soon", no API calls for any verdict type
+- [x] Resume UX polish
+  - Conditional header label ("Resumed Deal" vs "Draft from URL")
+  - Specific 422 missing-field messaging with field names
+  - Assumption input highlighting on validation error
+- [x] Results page clarity
+  - max_safe_offer rendered
+  - confidence_score rendered
+  - Risk flags rendered
+  - Integrity Gate moved lower in results
+  - Integrity Gate copy fixed
+- [x] Saved Deals page clarity
+  - max_safe_offer column added
+  - Verdict badges added
+  - Resume action added
+  - Compare action removed
+- [x] Deal page clarity
+  - max_safe_offer added to header snapshot
+  - Duplicate disabled buttons removed
+  - allowed_outputs pass-through fixed with fallback
+- [x] Legacy Manual Analyze hidden by default behind subtle toggle link
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
-- [ ] Resume Deal (Analyzer Rehydration)
-  - Load saved draft_input into analyzer UI
-  - Restore form state
-  - Allow user to modify inputs and re-run analysis
-  - Must not break AnalyzeRequest schema
 - [x] Polish assumption input display: convert interest rate / LTC to percentage display
 
 ### Next Session Goal
-1. Polish assumption input display (show percentages instead of decimals)
-2. Tighten CORS from * to https://flipforge-frontend.vercel.app
-3. Define Deal Alert Engine MVP scope
+Get the product in front of a real user — zero market contact is the primary risk.
 
 ---
 
@@ -62,7 +75,7 @@
 | Frontend | Gurmindersingh27/flipforge-frontend | https://flipforge-frontend.vercel.app |
 | Backend | Gurmindersingh27/flipforge-backend | https://flipforge-backend.onrender.com |
 
-Active dev branch (frontend): `claude/load-claude-skills-IpLZn`
+Active dev branch (frontend): `claude/flipforge-execution-setup-ICNZ2`
 Never push to `main` or `master` directly.
 
 ---
@@ -231,6 +244,11 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+0c2a97a  Hide Legacy Manual Analyze section by default
+b744b2a  feat: deal page clarity — max offer, remove duplicate buttons, fix allowed_outputs
+18fe47e  feat: saved deals page clarity
+07fb928  feat: results page clarity polish
+9616d4e  feat: polish Resume UX — conditional header and specific validation messaging
 3747221  Merge pull request #4 from Gurmindersingh27/claude/build-draft-editor-ui-xm2tq
 d9c5699  docs: correct PROJECT_STATE.md — remove completed items from Not Done
 c3ca8c1  Update package-lock.json after npm install
