@@ -46,6 +46,18 @@ function verdictBadgeClass(verdict?: string) {
   return `${base} border-white/10 text-white/60 bg-white/5`;
 }
 
+function riskFlagBadgeClass(severity?: string) {
+  const base =
+    "inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border";
+  if (severity === "critical")
+    return `${base} border-red-500/40 text-red-200 bg-red-500/10`;
+  if (severity === "moderate")
+    return `${base} border-amber-500/40 text-amber-200 bg-amber-500/10`;
+  if (severity === "mild")
+    return `${base} border-slate-500/40 text-slate-200 bg-slate-500/10`;
+  return `${base} border-white/10 text-white/60 bg-white/5`;
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -81,22 +93,6 @@ export default function AnalysisResult({ result, meta }: Props) {
     whyBullets.push("Deal loses money in the base case.");
   } else {
     whyBullets.push("Deal is profitable assuming inputs are accurate.");
-  }
-
-  if (rehab) {
-    whyBullets.push(
-      `Rehab Reality: ${rehab.severity} (${(rehab.rehab_ratio * 100).toFixed(
-        0
-      )}% of purchase price).`
-    );
-  }
-
-  if (bp?.first_break_scenario) {
-    whyBullets.push(
-      `Breakpoint: ${bp.first_break_scenario} is the first scenario that kills this deal.`
-    );
-  } else {
-    whyBullets.push("Breakpoint: Deal holds up under mild stress.");
   }
 
   // Add verdict reason (authoritative line)
@@ -149,7 +145,7 @@ export default function AnalysisResult({ result, meta }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Top summary bar */}
+      {/* 1. Top summary bar */}
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm text-white/60">Verdict:</span>
         <span className={verdictBadgeClass((result as any)?.overall_verdict)}>
@@ -177,7 +173,68 @@ export default function AnalysisResult({ result, meta }: Props) {
         )}
       </div>
 
-      {/* Integrity Gate Actions */}
+      {/* 2. Metric cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="text-xs text-white/60 mb-1">Max Safe Offer</div>
+          <div className="text-lg font-semibold text-white">
+            ${result.max_safe_offer.toLocaleString()}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="text-xs text-white/60 mb-1">Confidence Score</div>
+          <div className="text-lg font-semibold text-white">
+            {result.confidence_score}
+            <span className="text-sm font-normal text-white/60"> / 100</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Risk Flags — typed_flags preferred, fallback to risk_flags strings */}
+      {((result.typed_flags?.length ?? 0) > 0 || (result.risk_flags?.length ?? 0) > 0) && (
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-2">Risk Flags</h3>
+          <div className="flex flex-wrap gap-2">
+            {(result.typed_flags?.length ?? 0) > 0
+              ? result.typed_flags.map((f, i) => (
+                  <span key={i} className={riskFlagBadgeClass(f.severity)}>
+                    {f.label}
+                  </span>
+                ))
+              : result.risk_flags.map((f, i) => (
+                  <span key={i} className={riskFlagBadgeClass(undefined)}>
+                    {f}
+                  </span>
+                ))}
+          </div>
+        </div>
+      )}
+
+      {/* 4. Why this verdict */}
+      <div>
+        <h3 className="text-sm font-semibold text-white mb-2">
+          Why this verdict
+        </h3>
+        <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+          {whyBullets.map((b, i) => (
+            <li key={i}>{b}</li>
+          ))}
+        </ul>
+      </div>
+
+      {/* 5. Notes */}
+      {result.notes?.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-2">Notes</h3>
+          <ul className="list-disc pl-5 space-y-1 text-sm text-white/70">
+            {result.notes.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* 6. Integrity Gate — moved below narrative */}
       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -185,7 +242,9 @@ export default function AnalysisResult({ result, meta }: Props) {
               Integrity Gate
             </div>
             <div className="mt-1 text-xs text-white/60">
-              Institutional outputs are suppressed when the deal is non-viable.
+              {canReport && canScript
+                ? "Lender Report and Negotiation Script are available."
+                : "Outputs are disabled — deal did not meet viability threshold."}
             </div>
           </div>
 
@@ -228,21 +287,17 @@ export default function AnalysisResult({ result, meta }: Props) {
           </div>
         </div>
 
-        {!canReport || !canScript ? (
+        {(!canReport || !canScript) && (
           <div className="mt-3 text-xs text-white/60">
             <span className="text-white/80">Suppressed:</span>{" "}
             {!canReport ? "Lender Report" : ""}
             {!canReport && !canScript ? " • " : ""}
             {!canScript ? "Negotiation Script" : ""}
           </div>
-        ) : (
-          <div className="mt-3 text-xs text-white/60">
-            Outputs enabled. Proceed with caution if flagged as CONDITIONAL.
-          </div>
         )}
       </div>
 
-      {/* Negotiation Script output */}
+      {/* Negotiation Script output — adjacent to Integrity Gate */}
       {scriptError && (
         <div className="text-xs text-red-400 px-1">{scriptError}</div>
       )}
@@ -263,30 +318,6 @@ export default function AnalysisResult({ result, meta }: Props) {
               <p key={i}>{para}</p>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Why this verdict */}
-      <div>
-        <h3 className="text-sm font-semibold text-white mb-2">
-          Why this verdict
-        </h3>
-        <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
-          {whyBullets.map((b, i) => (
-            <li key={i}>{b}</li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Notes (unchanged, still shown) */}
-      {result.notes?.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-white mb-2">Notes</h3>
-          <ul className="list-disc pl-5 space-y-1 text-sm text-white/70">
-            {result.notes.map((n, i) => (
-              <li key={i}>{n}</li>
-            ))}
-          </ul>
         </div>
       )}
     </div>
