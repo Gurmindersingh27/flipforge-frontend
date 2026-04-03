@@ -57,7 +57,7 @@ function DealView({ deal }: { deal: SavedDeal }) {
             Source: {draft.source}
           </span>
         )}
-        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
           <div>
             <div className="text-xs text-slate-400">Purchase Price</div>
             <div className="text-white/90">{fmt(pdfMeta.purchase_price)}</div>
@@ -74,6 +74,10 @@ function DealView({ deal }: { deal: SavedDeal }) {
             <div className="text-xs text-slate-400">Est. Monthly Rent</div>
             <div className="text-white/90">{fmt(pdfMeta.est_monthly_rent)}</div>
           </div>
+          <div>
+            <div className="text-xs text-slate-400">Max Safe Offer</div>
+            <div className="text-white/90">{fmt(result?.max_safe_offer)}</div>
+          </div>
         </div>
       </div>
 
@@ -81,30 +85,10 @@ function DealView({ deal }: { deal: SavedDeal }) {
       <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
         <ShieldHeader result={result} />
         <div className="mt-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-white">Results</div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled
-                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold border bg-white/5 text-white/35 border-white/10 cursor-not-allowed"
-              >
-                Lender Report
-                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-white/30">Soon</span>
-              </button>
-              <button
-                type="button"
-                disabled
-                className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold border bg-white/5 text-white/35 border-white/10 cursor-not-allowed"
-              >
-                Negotiation Script
-                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-white/30">Soon</span>
-              </button>
-            </div>
-          </div>
+          <div className="text-sm font-semibold text-white">Results</div>
           <div className="mt-3">
             <AnalysisResult
-              result={{ ...result, allowed_outputs: { lender_report: false, negotiation_script: false } }}
+              result={{ ...result, allowed_outputs: result?.allowed_outputs ?? { lender_report: false, negotiation_script: false } }}
               meta={pdfMeta}
             />
           </div>
