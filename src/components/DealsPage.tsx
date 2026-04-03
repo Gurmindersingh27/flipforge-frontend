@@ -102,6 +102,7 @@ function DealsList() {
             <th className="py-3 pr-4">Profit</th>
             <th className="py-3 pr-4">ROI</th>
             <th className="py-3 pr-4">Verdict</th>
+            <th className="py-3 pr-4">Max Offer</th>
             <th className="py-3 pr-4">Date</th>
             <th className="py-3 pr-4">Actions</th>
           </tr>
@@ -112,6 +113,7 @@ function DealsList() {
             const profit = r?.net_profit as number | null;
             const roi = r?.annualized_roi as number | null;
             const verdict = (r?.overall_verdict as string) ?? "—";
+            const maxOffer = r?.max_safe_offer as number | null;
 
             return (
               <tr
@@ -125,9 +127,18 @@ function DealsList() {
                 </td>
                 <td className="py-3 pr-4 text-white/80">{fmt(profit)}</td>
                 <td className="py-3 pr-4 text-white/80">{fmtPct(roi)}</td>
-                <td className={`py-3 pr-4 font-semibold ${verdictClass(verdict)}`}>
-                  {verdict}
+                <td className="py-3 pr-4">
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${verdictClass(verdict)} ${
+                    verdict === "BUY"
+                      ? "border-emerald-500/40 bg-emerald-500/10"
+                      : verdict === "CONDITIONAL"
+                      ? "border-amber-500/40 bg-amber-500/10"
+                      : "border-red-500/40 bg-red-500/10"
+                  }`}>
+                    {verdict}
+                  </span>
                 </td>
+                <td className="py-3 pr-4 text-white/80">{fmt(maxOffer)}</td>
                 <td className="py-3 pr-4 text-white/50 text-xs">
                   {fmtDate(deal.created_at)}
                 </td>
@@ -139,9 +150,13 @@ function DealsList() {
                     >
                       Open
                     </Link>
-                    <span className="text-xs text-white/30 cursor-not-allowed">
-                      Compare
-                    </span>
+                    <Link
+                      to="/"
+                      state={{ resumeDraft: deal.draft_input }}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                    >
+                      Resume
+                    </Link>
                   </div>
                 </td>
               </tr>
