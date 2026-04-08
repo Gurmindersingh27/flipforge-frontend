@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-04-03
+2026-04-08
 
 ---
 
@@ -61,7 +61,6 @@
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
-- [x] Polish assumption input display: convert interest rate / LTC to percentage display
 
 ### Next Session Goal
 Get the product in front of a real user — zero market contact is the primary risk.
@@ -263,6 +262,7 @@ e307963  Restore UI styles
 
 **Backend:**
 ```
+fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 741c4c2  FlipForge backend MVP
 ```
 
@@ -279,7 +279,6 @@ e307963  Restore UI styles
 - Zillow/Redfin block URL scraping (SOURCE_BLOCKED) — known limitation, not a bug
 - PDF generation must use in-memory bytes in production — disk writes will fail on Render
 - Render free tier cold starts — first request after inactivity may take 50+ seconds
-- Integrity Gate copy reads "suppressed when deal is non-viable" — inaccurate on BUY/CONDITIONAL saved deals; fix requires AnalysisResult.tsx edit, deferred
 
 ---
 
