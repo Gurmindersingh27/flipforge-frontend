@@ -458,7 +458,7 @@ function AnalyzerPage() {
   ]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-transparent text-slate-100">
       {/* Nav bar */}
       <div className="border-b border-white/10 bg-slate-900/60 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -491,7 +491,7 @@ function AnalyzerPage() {
         {/* =========================
             Phase 2 — URL → DraftDeal
            ========================= */}
-        <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+        <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-white">{isResumed ? "Resumed Deal" : "Draft from URL"}</div>
@@ -520,7 +520,7 @@ function AnalyzerPage() {
               type="button"
               onClick={onFetchDraft}
               disabled={draftLoading}
-              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-white text-slate-900 disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-white text-slate-900 hover:bg-slate-100 active:scale-95 transition-all duration-150 disabled:opacity-50"
             >
               {draftLoading ? "Fetching…" : "Fetch Draft"}
             </button>
@@ -764,7 +764,7 @@ function AnalyzerPage() {
                   type="button"
                   onClick={onFinalizeAnalyze}
                   disabled={!canFinalize || analyzeLoading}
-                  className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-indigo-600 disabled:opacity-50"
+                  className="rounded-xl px-4 py-2 text-sm font-semibold border border-[#E8C547]/30 bg-[#E8C547] text-slate-900 hover:bg-[#d4b33e] active:scale-95 transition-all duration-150 disabled:opacity-50"
                 >
                   {analyzeLoading ? "Analyzing…" : "Finalize & Analyze"}
                 </button>
@@ -794,7 +794,7 @@ function AnalyzerPage() {
             Legacy Manual Analyze
            ========================= */}
         {showLegacy && (
-        <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+        <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
           <div className="text-sm font-semibold text-white">
             Manual Analyze (Legacy)
           </div>
@@ -876,7 +876,7 @@ function AnalyzerPage() {
             Results
            ========================= */}
         {result && (
-          <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+          <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
             {/* ✅ moved ShieldHeader here so it doesn't sit above inputs */}
             <ShieldHeader result={result} />
 

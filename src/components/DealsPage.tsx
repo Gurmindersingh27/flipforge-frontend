@@ -15,8 +15,8 @@ function fmtPct(n: unknown): string {
 }
 
 function verdictClass(v: string): string {
-  if (v === "BUY") return "text-emerald-400";
-  if (v === "CONDITIONAL") return "text-amber-400";
+  if (v === "BUY") return "text-[#E8C547]";
+  if (v === "CONDITIONAL") return "text-amber-300";
   return "text-red-400";
 }
 
@@ -125,20 +125,20 @@ function DealsList() {
                     ?? (deal.draft_input as any)?.address
                     ?? <span className="text-white/40">No address</span>}
                 </td>
-                <td className="py-3 pr-4 text-white/80">{fmt(profit)}</td>
-                <td className="py-3 pr-4 text-white/80">{fmtPct(roi)}</td>
+                <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmt(profit)}</td>
+                <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmtPct(roi)}</td>
                 <td className="py-3 pr-4">
-                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${verdictClass(verdict)} ${
+                  <span className={`verdict-badge inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold ${verdictClass(verdict)} ${
                     verdict === "BUY"
-                      ? "border-emerald-500/40 bg-emerald-500/10"
+                      ? "border-[#E8C547]/40 bg-[#E8C547]/10 shadow-[0_0_8px_rgba(232,197,71,0.2)]"
                       : verdict === "CONDITIONAL"
-                      ? "border-amber-500/40 bg-amber-500/10"
+                      ? "border-amber-400/50 bg-amber-400/10"
                       : "border-red-500/40 bg-red-500/10"
                   }`}>
                     {verdict}
                   </span>
                 </td>
-                <td className="py-3 pr-4 text-white/80">{fmt(maxOffer)}</td>
+                <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmt(maxOffer)}</td>
                 <td className="py-3 pr-4 text-white/50 text-xs">
                   {fmtDate(deal.created_at)}
                 </td>
@@ -170,7 +170,7 @@ function DealsList() {
 
 export default function DealsPage() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-transparent text-slate-100">
       {/* Nav bar */}
       <div className="border-b border-white/10 bg-slate-900/60 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -198,7 +198,7 @@ export default function DealsPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+        <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
           <SignedIn>
             <DealsList />
           </SignedIn>
