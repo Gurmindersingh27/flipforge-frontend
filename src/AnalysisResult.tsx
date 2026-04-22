@@ -36,13 +36,13 @@ function breakpointBadgeClass(isFragile?: boolean) {
 
 function verdictBadgeClass(verdict?: string) {
   const base =
-    "inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border";
+    "verdict-badge font-serif-display inline-flex items-center rounded-lg px-3 py-1.5 text-sm font-bold border";
   if (verdict === "BUY")
-    return `${base} border-emerald-500/40 text-emerald-200 bg-emerald-500/10`;
+    return `${base} border-[#E8C547]/50 text-[#E8C547] bg-[#E8C547]/10 shadow-[0_0_14px_rgba(232,197,71,0.3)]`;
   if (verdict === "CONDITIONAL")
-    return `${base} border-amber-500/40 text-amber-200 bg-amber-500/10`;
+    return `${base} border-amber-400/60 text-amber-300 bg-amber-400/10 shadow-[0_0_10px_rgba(251,191,36,0.2)]`;
   if (verdict === "PASS")
-    return `${base} border-red-500/40 text-red-200 bg-red-500/10`;
+    return `${base} border-red-500/50 text-red-300 bg-red-500/10 shadow-[0_0_10px_rgba(239,68,68,0.2)]`;
   return `${base} border-white/10 text-white/60 bg-white/5`;
 }
 
@@ -175,17 +175,17 @@ export default function AnalysisResult({ result, meta }: Props) {
 
       {/* 2. Metric cards */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-xs text-white/60 mb-1">Max Safe Offer</div>
-          <div className="text-lg font-semibold text-white">
+        <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/50 bg-white/5 p-3 pl-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Max Safe Offer</div>
+          <div className="font-jetbrains text-2xl font-semibold text-[#E8C547]">
             ${result.max_safe_offer.toLocaleString()}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-xs text-white/60 mb-1">Confidence Score</div>
-          <div className="text-lg font-semibold text-white">
+        <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/25 bg-white/5 p-3 pl-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Confidence Score</div>
+          <div className="font-jetbrains text-2xl font-semibold text-white">
             {result.confidence_score}
-            <span className="text-sm font-normal text-white/60"> / 100</span>
+            <span className="text-base font-normal text-white/40"> / 100</span>
           </div>
         </div>
       </div>
@@ -193,7 +193,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       {/* 3. Risk Flags — typed_flags preferred, fallback to risk_flags strings */}
       {((result.typed_flags?.length ?? 0) > 0 || (result.risk_flags?.length ?? 0) > 0) && (
         <div>
-          <h3 className="text-sm font-semibold text-white mb-2">Risk Flags</h3>
+          <h3 className="font-serif-display text-sm font-semibold text-white mb-2">Risk Flags</h3>
           <div className="flex flex-wrap gap-2">
             {(result.typed_flags?.length ?? 0) > 0
               ? result.typed_flags.map((f, i) => (
@@ -212,7 +212,7 @@ export default function AnalysisResult({ result, meta }: Props) {
 
       {/* 4. Why this verdict */}
       <div>
-        <h3 className="text-sm font-semibold text-white mb-2">
+        <h3 className="font-serif-display text-sm font-semibold text-white mb-2">
           Why this verdict
         </h3>
         <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
@@ -225,7 +225,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       {/* 5. Notes */}
       {result.notes?.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-white mb-2">Notes</h3>
+          <h3 className="font-serif-display text-sm font-semibold text-white mb-2">Notes</h3>
           <ul className="list-disc pl-5 space-y-1 text-sm text-white/70">
             {result.notes.map((n, i) => (
               <li key={i}>{n}</li>
@@ -235,7 +235,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       )}
 
       {/* 6. Integrity Gate — moved below narrative */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-sm font-semibold text-white">
@@ -302,7 +302,7 @@ export default function AnalysisResult({ result, meta }: Props) {
         <div className="text-xs text-red-400 px-1">{scriptError}</div>
       )}
       {script && (
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm font-semibold text-white">Negotiation Script</div>
             <button

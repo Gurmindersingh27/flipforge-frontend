@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;600&display=swap');
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -5,7 +7,7 @@
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  background-color: #030712;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -28,7 +30,18 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  background: radial-gradient(ellipse at 50% 20%, #14192e 0%, #030712 100%) fixed;
+  background-size: 100% 100%;
 }
+
+.font-jetbrains { font-family: 'JetBrains Mono', monospace; }
+.font-serif-display { font-family: 'DM Serif Display', serif; }
+
+@keyframes verdict-in {
+  from { opacity: 0; transform: scale(0.93); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.verdict-badge { animation: verdict-in 0.3s ease-out both; }
 
 h1 {
   font-size: 3.2em;
