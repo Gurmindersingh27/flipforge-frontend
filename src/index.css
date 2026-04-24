@@ -26,12 +26,9 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
   background: radial-gradient(ellipse at 50% 20%, #14192e 0%, #030712 100%) fixed;
-  background-size: 100% 100%;
 }
 
 .font-jetbrains { font-family: 'JetBrains Mono', monospace; }

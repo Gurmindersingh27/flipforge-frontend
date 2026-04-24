@@ -458,7 +458,7 @@ function AnalyzerPage() {
   ]);
 
   return (
-    <div className="min-h-screen bg-transparent text-slate-100">
+    <div className="min-h-screen bg-slate-950/95 text-slate-100">
       {/* Nav bar */}
       <div className="border-b border-white/10 bg-slate-900/60 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
