@@ -146,15 +146,15 @@ export default function AnalysisResult({ result, meta }: Props) {
   return (
     <div className="space-y-6">
       {/* 1. Top summary bar */}
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm text-white/60">Verdict:</span>
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+        <span className="text-[10px] uppercase tracking-widest text-white/40">Verdict</span>
         <span className={verdictBadgeClass((result as any)?.overall_verdict)}>
           {(result as any)?.overall_verdict}
         </span>
 
         {rehab && (
           <>
-            <span className="text-sm text-white/60">Rehab Reality:</span>
+            <span className="text-[10px] text-white/40">Rehab</span>
             <span className={rehabBadgeClass(rehab.severity)}>
               {rehab.severity}
             </span>
@@ -163,7 +163,7 @@ export default function AnalysisResult({ result, meta }: Props) {
 
         {bp && (
           <>
-            <span className="text-sm text-white/60">Breakpoint:</span>
+            <span className="text-[10px] text-white/40">Breakpoint</span>
             <span className={breakpointBadgeClass(bp.is_fragile)}>
               {bp.first_break_scenario
                 ? bp.first_break_scenario
@@ -175,24 +175,24 @@ export default function AnalysisResult({ result, meta }: Props) {
 
       {/* 2. Metric cards */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/50 bg-white/5 p-3 pl-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+        <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/80 bg-[#E8C547]/5 p-3 pl-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
           <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Max Safe Offer</div>
-          <div className="font-jetbrains text-2xl font-semibold text-[#E8C547]">
+          <div className="font-jetbrains text-3xl font-bold text-[#E8C547]">
             ${result.max_safe_offer.toLocaleString()}
           </div>
         </div>
         <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/25 bg-white/5 p-3 pl-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
           <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Confidence Score</div>
-          <div className="font-jetbrains text-2xl font-semibold text-white">
+          <div className="font-jetbrains text-xl font-semibold text-white/70">
             {result.confidence_score}
-            <span className="text-base font-normal text-white/40"> / 100</span>
+            <span className="text-sm font-normal text-white/40"> / 100</span>
           </div>
         </div>
       </div>
 
       {/* 3. Risk Flags — typed_flags preferred, fallback to risk_flags strings */}
       {((result.typed_flags?.length ?? 0) > 0 || (result.risk_flags?.length ?? 0) > 0) && (
-        <div>
+        <div className="border-t border-white/10 pt-2">
           <h3 className="font-serif-display text-sm font-semibold text-white mb-2">Risk Flags</h3>
           <div className="flex flex-wrap gap-2">
             {(result.typed_flags?.length ?? 0) > 0
@@ -212,7 +212,7 @@ export default function AnalysisResult({ result, meta }: Props) {
 
       {/* 4. Why this verdict */}
       <div>
-        <h3 className="font-serif-display text-sm font-semibold text-white mb-2">
+        <h3 className="font-serif-display text-base font-semibold text-white mb-2">
           Why this verdict
         </h3>
         <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">

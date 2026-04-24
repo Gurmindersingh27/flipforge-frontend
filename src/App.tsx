@@ -881,7 +881,7 @@ function AnalyzerPage() {
             <ShieldHeader result={result} />
 
             <div className="mt-4">
-              <div className="text-sm font-semibold text-white">Results</div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40">Results</div>
               <div className="mt-3">
                 <AnalysisResult result={result} meta={pdfMeta} />
               </div>
