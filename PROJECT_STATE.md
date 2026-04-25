@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-04-08
+2026-04-25
 
 ---
 
@@ -58,12 +58,19 @@
   - Duplicate disabled buttons removed
   - allowed_outputs pass-through fixed with fallback
 - [x] Legacy Manual Analyze hidden by default behind subtle toggle link
+- [x] Tailwind v4 installed and compiling (`@tailwindcss/vite` plugin, single `@import "tailwindcss";` in `src/index.css`, no config file)
+- [x] Global `#root` `text-align: center` removed from `src/App.css` (Vite template leftover)
+- [x] `AnalysisResult.tsx` layout restructured — sectioned cards (Verdict / Key Numbers / Risk Flags / Narrative / Actions), Max Safe Offer dominant, Net Profit / Profit % / ROI grid added (uses existing fields, no logic change)
+- [x] Button styling normalized — `Fetch Draft` and legacy toggle in `App.tsx`, action buttons in `AnalysisResult.tsx` all use muted `bg-white/[0.08]` variant
+- [x] Low-contrast text fixed (5 targeted spots): helper text 11px/45% → 12px/65%; extraction notes /50 → /70; eyebrow labels 10px/40% → 11px/60%; URL + address inputs got `placeholder:text-white/40`
+- [x] Backend CORS already tightened to specific origins (`https://flipforge-frontend.vercel.app`, localhost:5173) — confirmed in `app/main.py:39-49`
+- [x] Core analyze flow confirmed working in prod (after Render warm-up)
 
 ### Not Done
-- [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
+- [ ] Increase `fetchWithTimeout` cap in `src/lib/api.ts` from 30s to 60s and pass a reason to `controller.abort()` — current 30s cap is shorter than Render's ~50s cold start, causing "signal is aborted without reason" on first request after inactivity
 
 ### Next Session Goal
-Get the product in front of a real user — zero market contact is the primary risk.
+Increase API timeout in `src/lib/api.ts`: `timeoutMs = 30_000 → 60_000` and `controller.abort() → controller.abort("timeout")`. One-file, surgical edit.
 
 ---
 
@@ -243,6 +250,11 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+84f81d7  style: fix low-contrast text in deal form and results page
+6a8d26c  style: restyle Fetch Draft and legacy toggle buttons
+964ed63  feat: restructure AnalysisResult layout — sectioned cards, full metrics grid
+27a5023  chore: remove global root text alignment
+d0953ae  chore: install Tailwind v4
 0c2a97a  Hide Legacy Manual Analyze section by default
 b744b2a  feat: deal page clarity — max offer, remove duplicate buttons, fix allowed_outputs
 18fe47e  feat: saved deals page clarity
