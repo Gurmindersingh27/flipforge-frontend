@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-04-08
+2026-04-25
 
 ---
 
@@ -58,12 +58,18 @@
   - Duplicate disabled buttons removed
   - allowed_outputs pass-through fixed with fallback
 - [x] Legacy Manual Analyze hidden by default behind subtle toggle link
+- [x] UI stability restored — Bloomberg upgrade layout bugs fixed (bg-transparent cards, body flex centering)
+- [x] Visual tone improved — flat #0f1115 background, white/opacity surface system, no gradients, no glows, no animations
+- [x] Core hierarchy improvements applied — MSO dominant, labels demoted, verdict badge de-cluttered, gold accent system unified, indigo remnants removed, emerald Save Deal button converted to gold outline
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
+- [ ] AnalysisResult layout still unstructured (centered text, no section cards)
+- [ ] Draft/Input page lacks proper container and hierarchy
+- [ ] Metrics layout still weak (floating pills, no grid structure)
 
 ### Next Session Goal
-Get the product in front of a real user — zero market contact is the primary risk.
+Restructure AnalysisResult.tsx layout into sectioned, left-aligned cards — goal: professional underwriting interface.
 
 ---
 
@@ -74,7 +80,7 @@ Get the product in front of a real user — zero market contact is the primary r
 | Frontend | Gurmindersingh27/flipforge-frontend | https://flipforge-frontend.vercel.app |
 | Backend | Gurmindersingh27/flipforge-backend | https://flipforge-backend.onrender.com |
 
-Active dev branch (frontend): `claude/flipforge-execution-setup-ICNZ2`
+Active dev branch (frontend): `claude/flipforge-ui-upgrade-i3viY`
 Never push to `main` or `master` directly.
 
 ---
@@ -243,6 +249,9 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+cc86028  feat: institutional palette — flat surfaces, no glows, gold accent system, indigo removed
+9029f65  feat: UI hierarchy — MSO dominant, labels demoted, verdict badge de-cluttered
+8a13d52  fix: restore card visibility and fix body flex layout from Bloomberg upgrade
 0c2a97a  Hide Legacy Manual Analyze section by default
 b744b2a  feat: deal page clarity — max offer, remove duplicate buttons, fix allowed_outputs
 18fe47e  feat: saved deals page clarity
