@@ -144,56 +144,101 @@ export default function AnalysisResult({ result, meta }: Props) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* 1. Top summary bar */}
-      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
-        <span className="text-[10px] uppercase tracking-widest text-white/40">Verdict</span>
-        <span className={verdictBadgeClass((result as any)?.overall_verdict)}>
-          {(result as any)?.overall_verdict}
-        </span>
+    <div className="max-w-4xl mx-auto px-6 py-8 space-y-6 text-left">
+      {/* 1. Verdict card */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
+        <div className="text-[10px] uppercase tracking-widest text-white/40 mb-3">
+          Verdict
+        </div>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <span className={verdictBadgeClass((result as any)?.overall_verdict)}>
+            {(result as any)?.overall_verdict}
+          </span>
 
-        {rehab && (
-          <>
-            <span className="text-[10px] text-white/40">Rehab</span>
-            <span className={rehabBadgeClass(rehab.severity)}>
-              {rehab.severity}
-            </span>
-          </>
-        )}
+          {rehab && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-widest text-white/40">
+                Rehab
+              </span>
+              <span className={rehabBadgeClass(rehab.severity)}>
+                {rehab.severity}
+              </span>
+            </div>
+          )}
 
-        {bp && (
-          <>
-            <span className="text-[10px] text-white/40">Breakpoint</span>
-            <span className={breakpointBadgeClass(bp.is_fragile)}>
-              {bp.first_break_scenario
-                ? bp.first_break_scenario
-                : "Holds under mild stress"}
-            </span>
-          </>
-        )}
-      </div>
+          {bp && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-widest text-white/40">
+                Breakpoint
+              </span>
+              <span className={breakpointBadgeClass(bp.is_fragile)}>
+                {bp.first_break_scenario
+                  ? bp.first_break_scenario
+                  : "Holds under mild stress"}
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
 
-      {/* 2. Metric cards */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/80 bg-[#E8C547]/5 p-3 pl-4 hover:bg-[#E8C547]/[0.06] transition-colors duration-150">
-          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Max Safe Offer</div>
-          <div className="font-jetbrains text-3xl font-bold text-[#E8C547]">
-            ${result.max_safe_offer.toLocaleString()}
+      {/* 2. Key numbers card */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-5">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Max Safe Offer
+            </div>
+            <div className="font-jetbrains text-4xl font-bold text-[#E8C547] leading-none">
+              ${result.max_safe_offer.toLocaleString()}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Confidence
+            </div>
+            <div className="font-jetbrains text-xl font-semibold text-white/70 leading-none">
+              {result.confidence_score}
+              <span className="text-sm font-normal text-white/40"> / 100</span>
+            </div>
           </div>
         </div>
-        <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/25 bg-white/5 p-3 pl-4 hover:bg-white/[0.06] transition-colors duration-150">
-          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Confidence Score</div>
-          <div className="font-jetbrains text-xl font-semibold text-white/70">
-            {result.confidence_score}
-            <span className="text-sm font-normal text-white/40"> / 100</span>
+
+        <div className="grid grid-cols-3 gap-3 border-t border-white/[0.06] pt-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Net Profit
+            </div>
+            <div className="font-jetbrains text-xl font-semibold text-white">
+              {result.net_profit < 0 ? "-" : ""}$
+              {Math.abs(result.net_profit).toLocaleString()}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Profit %
+            </div>
+            <div className="font-jetbrains text-xl font-semibold text-white">
+              {result.profit_pct.toFixed(1)}%
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              ROI
+            </div>
+            <div className="font-jetbrains text-xl font-semibold text-white">
+              {result.annualized_roi.toFixed(1)}%
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* 3. Risk Flags — typed_flags preferred, fallback to risk_flags strings */}
-      {((result.typed_flags?.length ?? 0) > 0 || (result.risk_flags?.length ?? 0) > 0) && (
-        <div className="border-t border-white/10 pt-2">
-          <h3 className="font-serif-display text-sm font-semibold text-white mb-2">Risk Flags</h3>
+      {/* 3. Risk Flags card */}
+      {((result.typed_flags?.length ?? 0) > 0 ||
+        (result.risk_flags?.length ?? 0) > 0) && (
+        <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
+          <h3 className="font-serif-display text-base font-semibold text-white mb-3">
+            Risk Flags
+          </h3>
           <div className="flex flex-wrap gap-2">
             {(result.typed_flags?.length ?? 0) > 0
               ? result.typed_flags.map((f, i) => (
@@ -207,104 +252,105 @@ export default function AnalysisResult({ result, meta }: Props) {
                   </span>
                 ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* 4. Why this verdict */}
-      <div>
-        <h3 className="font-serif-display text-base font-semibold text-white mb-2">
-          Why this verdict
-        </h3>
-        <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
-          {whyBullets.map((b, i) => (
-            <li key={i}>{b}</li>
-          ))}
-        </ul>
-      </div>
-
-      {/* 5. Notes */}
-      {result.notes?.length > 0 && (
+      {/* 4. Narrative card — Why this verdict + Notes combined */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-5">
         <div>
-          <h3 className="font-serif-display text-sm font-semibold text-white mb-2">Notes</h3>
-          <ul className="list-disc pl-5 space-y-1 text-sm text-white/70">
-            {result.notes.map((n, i) => (
-              <li key={i}>{n}</li>
+          <h3 className="font-serif-display text-base font-semibold text-white mb-2">
+            Why this verdict
+          </h3>
+          <ul className="list-disc pl-5 space-y-1.5 text-sm text-white/85 leading-relaxed">
+            {whyBullets.map((b, i) => (
+              <li key={i}>{b}</li>
             ))}
           </ul>
         </div>
-      )}
 
-      {/* 6. Integrity Gate — moved below narrative */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-3 hover:bg-white/[0.06] transition-colors duration-150">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-sm font-semibold text-white">
-              Integrity Gate
-            </div>
-            <div className="mt-1 text-xs text-white/60">
-              {canReport && canScript
-                ? "Lender Report and Negotiation Script are available."
-                : "Outputs are disabled — deal did not meet viability threshold."}
-            </div>
+        {result.notes?.length > 0 && (
+          <div className="border-t border-white/[0.06] pt-4">
+            <h3 className="font-serif-display text-sm font-semibold text-white mb-2">
+              Notes
+            </h3>
+            <ul className="list-disc pl-5 space-y-1.5 text-sm text-white/75 leading-relaxed">
+              {result.notes.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
           </div>
+        )}
+      </section>
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={!canReport}
-              title={
-                canReport
-                  ? "Generate lender report"
-                  : "Suppressed by Integrity Gate"
-              }
-              className={`rounded-xl px-4 py-2 text-sm font-semibold border ${
-                canReport
-                  ? "bg-white text-slate-900 border-white/10"
-                  : "bg-white/5 text-white/40 border-white/10 cursor-not-allowed"
-              }`}
-              onClick={onDownloadLenderReport}
-            >
-              Lender Report
-            </button>
-
-            <button
-              type="button"
-              disabled={!canScript || scriptLoading}
-              title={
-                canScript
-                  ? "Generate negotiation script"
-                  : "Suppressed by Integrity Gate"
-              }
-              className={`rounded-xl px-4 py-2 text-sm font-semibold border ${
-                canScript && !scriptLoading
-                  ? "bg-white/10 text-white border-white/10"
-                  : "bg-white/5 text-white/40 border-white/10 cursor-not-allowed"
-              }`}
-              onClick={onGenerateScript}
-            >
-              {scriptLoading ? "Generating…" : "Negotiation Script"}
-            </button>
+      {/* 5. Actions card — Integrity Gate copy + grouped buttons */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-4">
+        <div>
+          <div className="text-sm font-semibold text-white">Integrity Gate</div>
+          <div className="mt-1 text-xs text-white/60">
+            {canReport && canScript
+              ? "Lender Report and Negotiation Script are available."
+              : "Outputs are disabled — deal did not meet viability threshold."}
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={!canReport}
+            title={
+              canReport
+                ? "Generate lender report"
+                : "Suppressed by Integrity Gate"
+            }
+            className={`rounded-xl px-4 py-2 text-sm font-semibold border ${
+              canReport
+                ? "bg-white/[0.08] text-white border-white/[0.15] hover:bg-white/[0.12]"
+                : "bg-white/5 text-white/40 border-white/10 cursor-not-allowed"
+            }`}
+            onClick={onDownloadLenderReport}
+          >
+            Lender Report
+          </button>
+
+          <button
+            type="button"
+            disabled={!canScript || scriptLoading}
+            title={
+              canScript
+                ? "Generate negotiation script"
+                : "Suppressed by Integrity Gate"
+            }
+            className={`rounded-xl px-4 py-2 text-sm font-semibold border ${
+              canScript && !scriptLoading
+                ? "bg-white/[0.08] text-white border-white/[0.15] hover:bg-white/[0.12]"
+                : "bg-white/5 text-white/40 border-white/10 cursor-not-allowed"
+            }`}
+            onClick={onGenerateScript}
+          >
+            {scriptLoading ? "Generating…" : "Negotiation Script"}
+          </button>
+        </div>
+
         {(!canReport || !canScript) && (
-          <div className="mt-3 text-xs text-white/60">
+          <div className="text-xs text-white/60">
             <span className="text-white/80">Suppressed:</span>{" "}
             {!canReport ? "Lender Report" : ""}
             {!canReport && !canScript ? " • " : ""}
             {!canScript ? "Negotiation Script" : ""}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Negotiation Script output — adjacent to Integrity Gate */}
+      {/* Negotiation Script output — appears below actions when generated */}
       {scriptError && (
         <div className="text-xs text-red-400 px-1">{scriptError}</div>
       )}
       {script && (
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 hover:bg-white/[0.06] transition-colors duration-150">
+        <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
           <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-semibold text-white">Negotiation Script</div>
+            <div className="text-sm font-semibold text-white">
+              Negotiation Script
+            </div>
             <button
               type="button"
               onClick={() => navigator.clipboard.writeText(script)}
@@ -318,7 +364,7 @@ export default function AnalysisResult({ result, meta }: Props) {
               <p key={i}>{para}</p>
             ))}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
