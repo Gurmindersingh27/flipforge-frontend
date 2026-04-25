@@ -400,7 +400,7 @@ function AnalyzerPage() {
         </div>
       </div>
 
-      <div className="mt-2 text-[11px] text-white/45">
+      <div className="mt-2 text-xs text-white/65">
         Used only to estimate carry in the lender report. Does not change underwriting
         math.
       </div>
@@ -514,13 +514,13 @@ function AnalyzerPage() {
               value={listingUrl}
               onChange={(e) => setListingUrl(e.target.value)}
               placeholder="https://..."
-              className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+              className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 placeholder:text-white/40"
             />
             <button
               type="button"
               onClick={onFetchDraft}
               disabled={draftLoading}
-              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-white text-slate-900 hover:bg-slate-100 active:scale-95 transition-all duration-150 disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] disabled:opacity-50"
             >
               {draftLoading ? "Fetching…" : "Fetch Draft"}
             </button>
@@ -535,9 +535,9 @@ function AnalyzerPage() {
               value={manualAddress}
               onChange={(e) => setManualAddress(e.target.value)}
               placeholder="123 Main St, City, ST 12345"
-              className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+              className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 placeholder:text-white/40"
             />
-            <div className="mt-1 text-[11px] text-white/45">
+            <div className="mt-1 text-xs text-white/65">
               Use this if scraping fails or for manual deals
             </div>
           </div>
@@ -730,7 +730,7 @@ function AnalyzerPage() {
                     />
                   </div>
                 </div>
-                <div className="mt-2 text-[11px] text-white/45">
+                <div className="mt-2 text-xs text-white/65">
                   Pre-filled from backend defaults. Adjust if needed.
                 </div>
               </div>
@@ -748,7 +748,7 @@ function AnalyzerPage() {
                     </div>
                   ))}
                   {draft.notes?.map((n, i) => (
-                    <div key={i} className="text-xs text-white/50">
+                    <div key={i} className="text-xs text-white/70">
                       • {n}
                     </div>
                   ))}
@@ -784,7 +784,7 @@ function AnalyzerPage() {
           <button
             type="button"
             onClick={() => setShowLegacy((v) => !v)}
-            className="text-xs text-white/40 hover:text-white/60 transition-colors"
+            className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12]"
           >
             {showLegacy ? "Hide legacy analyzer ↑" : "Show legacy analyzer ↓"}
           </button>
@@ -881,7 +881,7 @@ function AnalyzerPage() {
             <ShieldHeader result={result} />
 
             <div className="mt-4">
-              <div className="text-[10px] uppercase tracking-widest text-white/40">Results</div>
+              <div className="text-[11px] uppercase tracking-widest text-white/60">Results</div>
               <div className="mt-3">
                 <AnalysisResult result={result} meta={pdfMeta} />
               </div>
