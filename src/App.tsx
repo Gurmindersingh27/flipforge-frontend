@@ -342,7 +342,7 @@ function AnalyzerPage() {
   }
 
   const FinancingAssumptions = (
-    <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/40 p-4">
+    <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4">
       <div className="text-xs uppercase tracking-wide text-white/60">
         Financing assumptions (optional)
       </div>
@@ -458,9 +458,9 @@ function AnalyzerPage() {
   ]);
 
   return (
-    <div className="min-h-screen bg-transparent text-slate-100">
+    <div className="min-h-screen bg-[#0f1115] text-slate-100">
       {/* Nav bar */}
-      <div className="border-b border-white/10 bg-slate-900/60 px-6 py-3 flex items-center justify-between">
+      <div className="border-b border-white/10 bg-white/[0.04] px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <span className="text-sm font-semibold text-white">FlipForge</span>
           <SignedIn>
@@ -491,7 +491,7 @@ function AnalyzerPage() {
         {/* =========================
             Phase 2 — URL → DraftDeal
            ========================= */}
-        <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-white">{isResumed ? "Resumed Deal" : "Draft from URL"}</div>
@@ -672,7 +672,7 @@ function AnalyzerPage() {
               </div>
 
               {/* Assumptions — editable in draft flow */}
-              <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/40 p-4">
+              <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4">
                 <div className="text-xs uppercase tracking-wide text-white/60">
                   Assumptions
                 </div>
@@ -794,7 +794,7 @@ function AnalyzerPage() {
             Legacy Manual Analyze
            ========================= */}
         {showLegacy && (
-        <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
           <div className="text-sm font-semibold text-white">
             Manual Analyze (Legacy)
           </div>
@@ -876,12 +876,12 @@ function AnalyzerPage() {
             Results
            ========================= */}
         {result && (
-          <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
             {/* ✅ moved ShieldHeader here so it doesn't sit above inputs */}
             <ShieldHeader result={result} />
 
             <div className="mt-4">
-              <div className="text-sm font-semibold text-white">Results</div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40">Results</div>
               <div className="mt-3">
                 <AnalysisResult result={result} meta={pdfMeta} />
               </div>
@@ -893,7 +893,7 @@ function AnalyzerPage() {
                     type="button"
                     onClick={onSaveDeal}
                     disabled={saveLoading || saveSuccess}
-                    className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                    className="rounded-xl px-4 py-2 text-sm font-semibold border border-[#E8C547]/40 text-[#E8C547] hover:bg-[#E8C547]/10 disabled:opacity-50 transition-colors"
                   >
                     {saveLoading
                       ? "Saving…"
