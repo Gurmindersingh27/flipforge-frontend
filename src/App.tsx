@@ -520,7 +520,7 @@ function AnalyzerPage() {
               type="button"
               onClick={onFetchDraft}
               disabled={draftLoading}
-              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-white text-slate-900 hover:bg-slate-100 active:scale-95 transition-all duration-150 disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] disabled:opacity-50"
             >
               {draftLoading ? "Fetching…" : "Fetch Draft"}
             </button>
@@ -784,7 +784,7 @@ function AnalyzerPage() {
           <button
             type="button"
             onClick={() => setShowLegacy((v) => !v)}
-            className="text-xs text-white/40 hover:text-white/60 transition-colors"
+            className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12]"
           >
             {showLegacy ? "Hide legacy analyzer ↑" : "Show legacy analyzer ↓"}
           </button>
