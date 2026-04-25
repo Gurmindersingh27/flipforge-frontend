@@ -7,7 +7,7 @@
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #030712;
+  background-color: #0f1115;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -17,28 +17,23 @@
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: inherit;
   text-decoration: inherit;
 }
 a:hover {
-  color: #535bf2;
+  color: inherit;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: radial-gradient(ellipse at 50% 20%, #14192e 0%, #030712 100%) fixed;
+  background-color: #0f1115;
 }
 
 .font-jetbrains { font-family: 'JetBrains Mono', monospace; }
 .font-serif-display { font-family: 'DM Serif Display', serif; }
 
-@keyframes verdict-in {
-  from { opacity: 0; transform: scale(0.93); }
-  to   { opacity: 1; transform: scale(1); }
-}
-.verdict-badge { animation: verdict-in 0.3s ease-out both; }
 
 h1 {
   font-size: 3.2em;
@@ -57,7 +52,7 @@ button {
   transition: border-color 0.25s;
 }
 button:hover {
-  border-color: #646cff;
+  border-color: transparent;
 }
 button:focus,
 button:focus-visible {

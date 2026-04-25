@@ -38,11 +38,11 @@ function verdictBadgeClass(verdict?: string) {
   const base =
     "verdict-badge font-serif-display inline-flex items-center rounded-lg px-3 py-1.5 text-sm font-bold border";
   if (verdict === "BUY")
-    return `${base} border-[#E8C547]/50 text-[#E8C547] bg-[#E8C547]/10 shadow-[0_0_14px_rgba(232,197,71,0.3)]`;
+    return `${base} border-[#E8C547]/50 text-[#E8C547] bg-[#E8C547]/10`;
   if (verdict === "CONDITIONAL")
-    return `${base} border-amber-400/60 text-amber-300 bg-amber-400/10 shadow-[0_0_10px_rgba(251,191,36,0.2)]`;
+    return `${base} border-amber-400/60 text-amber-300 bg-amber-400/10`;
   if (verdict === "PASS")
-    return `${base} border-red-500/50 text-red-300 bg-red-500/10 shadow-[0_0_10px_rgba(239,68,68,0.2)]`;
+    return `${base} border-red-500/50 text-red-300 bg-red-500/10`;
   return `${base} border-white/10 text-white/60 bg-white/5`;
 }
 
@@ -175,13 +175,13 @@ export default function AnalysisResult({ result, meta }: Props) {
 
       {/* 2. Metric cards */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/80 bg-[#E8C547]/5 p-3 pl-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+        <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/80 bg-[#E8C547]/5 p-3 pl-4 hover:bg-[#E8C547]/[0.06] transition-colors duration-150">
           <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Max Safe Offer</div>
           <div className="font-jetbrains text-3xl font-bold text-[#E8C547]">
             ${result.max_safe_offer.toLocaleString()}
           </div>
         </div>
-        <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/25 bg-white/5 p-3 pl-4 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+        <div className="rounded-2xl border border-white/10 border-l-2 border-l-[#E8C547]/25 bg-white/5 p-3 pl-4 hover:bg-white/[0.06] transition-colors duration-150">
           <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Confidence Score</div>
           <div className="font-jetbrains text-xl font-semibold text-white/70">
             {result.confidence_score}
@@ -235,7 +235,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       )}
 
       {/* 6. Integrity Gate — moved below narrative */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-3 hover:bg-white/[0.06] transition-colors duration-150">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-sm font-semibold text-white">
@@ -302,7 +302,7 @@ export default function AnalysisResult({ result, meta }: Props) {
         <div className="text-xs text-red-400 px-1">{scriptError}</div>
       )}
       {script && (
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 hover:bg-white/[0.06] transition-colors duration-150">
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm font-semibold text-white">Negotiation Script</div>
             <button

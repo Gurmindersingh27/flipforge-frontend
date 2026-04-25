@@ -130,7 +130,7 @@ function DealsList() {
                 <td className="py-3 pr-4">
                   <span className={`verdict-badge inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold ${verdictClass(verdict)} ${
                     verdict === "BUY"
-                      ? "border-[#E8C547]/40 bg-[#E8C547]/10 shadow-[0_0_8px_rgba(232,197,71,0.2)]"
+                      ? "border-[#E8C547]/40 bg-[#E8C547]/10"
                       : verdict === "CONDITIONAL"
                       ? "border-amber-400/50 bg-amber-400/10"
                       : "border-red-500/40 bg-red-500/10"
@@ -146,14 +146,14 @@ function DealsList() {
                   <div className="flex items-center gap-3">
                     <Link
                       to={`/deal/${deal.id}`}
-                      className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                      className="text-xs text-white/50 hover:text-white/80 transition-colors"
                     >
                       Open
                     </Link>
                     <Link
                       to="/"
                       state={{ resumeDraft: deal.draft_input }}
-                      className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                      className="text-xs text-white/50 hover:text-white/80 transition-colors"
                     >
                       Resume
                     </Link>
@@ -170,9 +170,9 @@ function DealsList() {
 
 export default function DealsPage() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-[#0f1115] text-slate-100">
       {/* Nav bar */}
-      <div className="border-b border-white/10 bg-slate-900/60 px-6 py-3 flex items-center justify-between">
+      <div className="border-b border-white/10 bg-white/[0.04] px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link
             to="/"
@@ -198,7 +198,7 @@ export default function DealsPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-3 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
           <SignedIn>
             <DealsList />
           </SignedIn>
