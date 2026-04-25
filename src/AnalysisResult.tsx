@@ -147,7 +147,7 @@ export default function AnalysisResult({ result, meta }: Props) {
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-6 text-left">
       {/* 1. Verdict card */}
       <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
-        <div className="text-[10px] uppercase tracking-widest text-white/40 mb-3">
+        <div className="text-[11px] uppercase tracking-widest text-white/60 mb-3">
           Verdict
         </div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
@@ -157,7 +157,7 @@ export default function AnalysisResult({ result, meta }: Props) {
 
           {rehab && (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-widest text-white/40">
+              <span className="text-[11px] uppercase tracking-widest text-white/60">
                 Rehab
               </span>
               <span className={rehabBadgeClass(rehab.severity)}>
@@ -168,7 +168,7 @@ export default function AnalysisResult({ result, meta }: Props) {
 
           {bp && (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-widest text-white/40">
+              <span className="text-[11px] uppercase tracking-widest text-white/60">
                 Breakpoint
               </span>
               <span className={breakpointBadgeClass(bp.is_fragile)}>
