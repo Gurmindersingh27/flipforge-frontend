@@ -30,10 +30,10 @@ const API_BASE_URL = (() => {
 async function fetchWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit = {},
-  timeoutMs = 30_000
+  timeoutMs = 60_000
 ): Promise<Response> {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
+  const id = setTimeout(() => controller.abort("timeout"), timeoutMs);
 
   try {
     return await fetch(input, {
