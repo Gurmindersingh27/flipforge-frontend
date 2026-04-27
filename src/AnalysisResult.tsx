@@ -230,6 +230,10 @@ export default function AnalysisResult({ result, meta }: Props) {
             </div>
           )}
         </div>
+
+        {verdictReason && (
+          <p className="text-sm text-white/70 mt-2">{verdictReason}</p>
+        )}
       </section>
 
       {/* 3. Risk Flags card */}
