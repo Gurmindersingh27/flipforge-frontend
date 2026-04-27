@@ -145,50 +145,14 @@ export default function AnalysisResult({ result, meta }: Props) {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-6 text-left">
-      {/* 1. Verdict card */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
-        <div className="text-[11px] uppercase tracking-widest text-white/60 mb-3">
-          Verdict
-        </div>
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <span className={verdictBadgeClass((result as any)?.overall_verdict)}>
-            {(result as any)?.overall_verdict}
-          </span>
-
-          {rehab && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-widest text-white/60">
-                Rehab
-              </span>
-              <span className={rehabBadgeClass(rehab.severity)}>
-                {rehab.severity}
-              </span>
-            </div>
-          )}
-
-          {bp && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-widest text-white/60">
-                Breakpoint
-              </span>
-              <span className={breakpointBadgeClass(bp.is_fragile)}>
-                {bp.first_break_scenario
-                  ? bp.first_break_scenario
-                  : "Holds under mild stress"}
-              </span>
-            </div>
-          )}
-        </div>
-      </section>
-
       {/* 2. Key numbers card */}
       <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+          <div className="mb-4">
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">
               Max Safe Offer
             </div>
-            <div className="font-jetbrains text-4xl font-bold text-[#E8C547] leading-none">
+            <div className="font-jetbrains text-5xl font-bold text-[#E8C547] leading-none pb-1">
               ${result.max_safe_offer.toLocaleString()}
             </div>
           </div>
@@ -229,6 +193,42 @@ export default function AnalysisResult({ result, meta }: Props) {
               {result.annualized_roi.toFixed(1)}%
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* 1. Verdict card */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
+        <div className="text-[11px] uppercase tracking-widest text-white/60 mb-3">
+          Verdict
+        </div>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <span className={verdictBadgeClass((result as any)?.overall_verdict)}>
+            {(result as any)?.overall_verdict}
+          </span>
+
+          {rehab && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] uppercase tracking-widest text-white/60">
+                Rehab
+              </span>
+              <span className={rehabBadgeClass(rehab.severity)}>
+                {rehab.severity}
+              </span>
+            </div>
+          )}
+
+          {bp && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] uppercase tracking-widest text-white/60">
+                Breakpoint
+              </span>
+              <span className={breakpointBadgeClass(bp.is_fragile)}>
+                {bp.first_break_scenario
+                  ? bp.first_break_scenario
+                  : "Holds under mild stress"}
+              </span>
+            </div>
+          )}
         </div>
       </section>
 
