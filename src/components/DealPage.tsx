@@ -188,7 +188,7 @@ export default function DealPage() {
             Sign in to view this deal.
           </div>
           <SignInButton mode="modal">
-            <button className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-white text-slate-900">
+            <button className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12]">
               Sign In
             </button>
           </SignInButton>

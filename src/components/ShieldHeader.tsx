@@ -200,7 +200,7 @@ export default function ShieldHeader({ result }: Props) {
         "w-full rounded-2xl border p-4 md:p-5",
         "bg-slate-950/60 backdrop-blur",
         v.borderClass,
-        "border-white/10 bg-white/5",
+        "border-white/10 bg-white/[0.04]",
       ].join(" ")}
     >
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -242,7 +242,7 @@ export default function ShieldHeader({ result }: Props) {
               <button
                 type="button"
                 onClick={onCopyOffer}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10"
+                className="rounded-full border border-white/[0.15] bg-white/[0.08] text-white px-3 py-1 text-xs font-semibold hover:bg-white/[0.12]"
                 title="Copy max safe offer number to clipboard"
               >
                 {copied ? "Copied ✓" : `Copy Offer ${offerText}`}
@@ -251,7 +251,7 @@ export default function ShieldHeader({ result }: Props) {
               <button
                 type="button"
                 onClick={onCopySummary}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10"
+                className="rounded-full border border-white/[0.15] bg-white/[0.08] text-white px-3 py-1 text-xs font-semibold hover:bg-white/[0.12]"
                 title="Copy a one-line deal summary"
               >
                 {summaryCopied ? "Summary Copied ✓" : "Copy Summary"}
@@ -310,7 +310,7 @@ function Metric({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left hover:bg-white/10"
+      className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left hover:bg-white/10"
       title="Click to copy"
     >
       <div className="text-[11px] uppercase tracking-wide text-white/60">{label}</div>
