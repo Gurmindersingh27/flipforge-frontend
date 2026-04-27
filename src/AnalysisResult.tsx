@@ -160,7 +160,7 @@ export default function AnalysisResult({ result, meta }: Props) {
             <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
               Confidence
             </div>
-            <div className="font-jetbrains text-xl font-semibold text-white/70 leading-none">
+            <div className="font-jetbrains text-lg font-medium text-white/70 leading-none">
               {result.confidence_score}
               <span className="text-sm font-normal text-white/40"> / 100</span>
             </div>
