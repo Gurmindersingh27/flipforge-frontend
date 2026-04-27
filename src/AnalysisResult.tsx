@@ -145,6 +145,57 @@ export default function AnalysisResult({ result, meta }: Props) {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-6 text-left">
+      {/* 2. Key numbers card */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-5">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div className="mb-4">
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">
+              Max Safe Offer
+            </div>
+            <div className="font-jetbrains text-5xl font-bold text-[#E8C547] leading-none pb-1">
+              ${result.max_safe_offer.toLocaleString()}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Confidence
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70 leading-none">
+              {result.confidence_score}
+              <span className="text-sm font-normal text-white/40"> / 100</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 border-t border-white/[0.06] pt-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Net Profit
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {result.net_profit < 0 ? "-" : ""}$
+              {Math.abs(result.net_profit).toLocaleString()}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Profit %
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {result.profit_pct.toFixed(1)}%
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              ROI
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {result.annualized_roi.toFixed(1)}%
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* 1. Verdict card */}
       <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
         <div className="text-[11px] uppercase tracking-widest text-white/60 mb-3">
@@ -178,57 +229,6 @@ export default function AnalysisResult({ result, meta }: Props) {
               </span>
             </div>
           )}
-        </div>
-      </section>
-
-      {/* 2. Key numbers card */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-5">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
-              Max Safe Offer
-            </div>
-            <div className="font-jetbrains text-4xl font-bold text-[#E8C547] leading-none">
-              ${result.max_safe_offer.toLocaleString()}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
-              Confidence
-            </div>
-            <div className="font-jetbrains text-xl font-semibold text-white/70 leading-none">
-              {result.confidence_score}
-              <span className="text-sm font-normal text-white/40"> / 100</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3 border-t border-white/[0.06] pt-4">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
-              Net Profit
-            </div>
-            <div className="font-jetbrains text-xl font-semibold text-white">
-              {result.net_profit < 0 ? "-" : ""}$
-              {Math.abs(result.net_profit).toLocaleString()}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
-              Profit %
-            </div>
-            <div className="font-jetbrains text-xl font-semibold text-white">
-              {result.profit_pct.toFixed(1)}%
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
-              ROI
-            </div>
-            <div className="font-jetbrains text-xl font-semibold text-white">
-              {result.annualized_roi.toFixed(1)}%
-            </div>
-          </div>
         </div>
       </section>
 
