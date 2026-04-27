@@ -475,7 +475,7 @@ function AnalyzerPage() {
         <div className="flex items-center gap-3">
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="rounded-lg px-3 py-1.5 text-xs font-semibold border border-white/20 bg-white/5 hover:bg-white/10 transition-colors">
+              <button className="rounded-lg px-3 py-1.5 text-xs font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors">
                 Sign In
               </button>
             </SignInButton>
@@ -520,7 +520,7 @@ function AnalyzerPage() {
               type="button"
               onClick={onFetchDraft}
               disabled={draftLoading}
-              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
             >
               {draftLoading ? "Fetching…" : "Fetch Draft"}
             </button>
@@ -784,7 +784,7 @@ function AnalyzerPage() {
           <button
             type="button"
             onClick={() => setShowLegacy((v) => !v)}
-            className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12]"
+            className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors"
           >
             {showLegacy ? "Hide legacy analyzer ↑" : "Show legacy analyzer ↓"}
           </button>
@@ -856,7 +856,7 @@ function AnalyzerPage() {
               type="button"
               onClick={onAnalyze}
               disabled={loading}
-              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-white text-slate-900 disabled:opacity-50"
+              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
             >
               {loading ? "Analyzing…" : "Analyze Deal"}
             </button>
@@ -893,7 +893,7 @@ function AnalyzerPage() {
                     type="button"
                     onClick={onSaveDeal}
                     disabled={saveLoading || saveSuccess}
-                    className="rounded-xl px-4 py-2 text-sm font-semibold border border-[#E8C547]/40 text-[#E8C547] hover:bg-[#E8C547]/10 disabled:opacity-50 transition-colors"
+                    className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
                   >
                     {saveLoading
                       ? "Saving…"
@@ -917,7 +917,7 @@ function AnalyzerPage() {
                   <SignInButton mode="modal">
                     <button
                       type="button"
-                      className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+                      className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors"
                     >
                       Sign in to Save Deal
                     </button>
@@ -939,12 +939,12 @@ function AnalyzerPage() {
           </div>
           <div className="flex items-center gap-3">
             <SignInButton mode="modal">
-              <button className="rounded-lg px-4 py-2 text-sm font-semibold border border-white/20 bg-white/5 hover:bg-white/10 transition-colors">
+              <button className="rounded-lg px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors">
                 Sign In
               </button>
             </SignInButton>
             <SignUpButton mode="modal">
-              <button className="rounded-lg px-4 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 transition-colors">
+              <button className="rounded-lg px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors">
                 Create Account
               </button>
             </SignUpButton>
