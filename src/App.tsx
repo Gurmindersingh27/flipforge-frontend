@@ -893,7 +893,7 @@ function AnalyzerPage() {
                     type="button"
                     onClick={onSaveDeal}
                     disabled={saveLoading || saveSuccess}
-                    className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
+                    className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.25] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
                   >
                     {saveLoading
                       ? "Saving…"
