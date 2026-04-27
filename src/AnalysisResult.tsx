@@ -172,7 +172,7 @@ export default function AnalysisResult({ result, meta }: Props) {
             <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
               Net Profit
             </div>
-            <div className="font-jetbrains text-xl font-semibold text-white">
+            <div className="font-jetbrains text-lg font-medium text-white/70">
               {result.net_profit < 0 ? "-" : ""}$
               {Math.abs(result.net_profit).toLocaleString()}
             </div>
@@ -181,7 +181,7 @@ export default function AnalysisResult({ result, meta }: Props) {
             <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
               Profit %
             </div>
-            <div className="font-jetbrains text-xl font-semibold text-white">
+            <div className="font-jetbrains text-lg font-medium text-white/70">
               {result.profit_pct.toFixed(1)}%
             </div>
           </div>
@@ -189,7 +189,7 @@ export default function AnalysisResult({ result, meta }: Props) {
             <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
               ROI
             </div>
-            <div className="font-jetbrains text-xl font-semibold text-white">
+            <div className="font-jetbrains text-lg font-medium text-white/70">
               {result.annualized_roi.toFixed(1)}%
             </div>
           </div>
