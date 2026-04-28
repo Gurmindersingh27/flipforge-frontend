@@ -182,7 +182,7 @@ export default function AnalysisResult({ result, meta }: Props) {
               Profit %
             </div>
             <div className="font-jetbrains text-lg font-medium text-white/70">
-              {result.profit_pct.toFixed(1)}%
+              {(result.profit_pct * 100).toFixed(1)}%
             </div>
           </div>
           <div>
@@ -190,7 +190,7 @@ export default function AnalysisResult({ result, meta }: Props) {
               ROI
             </div>
             <div className="font-jetbrains text-lg font-medium text-white/70">
-              {result.annualized_roi.toFixed(1)}%
+              {(result.annualized_roi * 100).toFixed(1)}%
             </div>
           </div>
         </div>
