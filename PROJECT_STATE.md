@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-04-08
+2026-04-28
 
 ---
 
@@ -58,6 +58,15 @@
   - Duplicate disabled buttons removed
   - allowed_outputs pass-through fixed with fallback
 - [x] Legacy Manual Analyze hidden by default behind subtle toggle link
+- [x] Button normalization across App.tsx — all secondary buttons use ghost standard `border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12]`; gold "Finalize & Analyze" CTA preserved; Save Deal bumped to `border-white/[0.25]` for emphasis (PR #26)
+- [x] Results page visual hierarchy — Max Safe Offer promoted above Verdict, sized to `text-5xl font-bold` as primary decision anchor; Net Profit / Profit % / ROI / Confidence de-emphasized to `text-lg font-medium text-white/70` (PR #27)
+- [x] Decision layer — backend `verdict_reason` surfaced as `<p>` directly below the Verdict badge row in AnalysisResult.tsx (PR #27)
+- [x] White/light UI bug fixes (PR #28, PR #29)
+  - ShieldHeader root card, Copy Offer / Copy Summary buttons, and metric tiles darkened from `bg-white/5` to `bg-white/[0.04]`/`bg-white/[0.08]` ghost tier
+  - Sign-In buttons on DealPage.tsx and DealsPage.tsx normalized to ghost standard (was `bg-white text-slate-900`)
+  - Removed global `@media (prefers-color-scheme: light)` override from `src/index.css` that was leaking `button { background-color: #f9f9f9 }` into the dark UI
+  - Bumped ShieldHeader metric tile background to `bg-white/[0.08]` for readability
+- [x] Profit % / ROI display bug in AnalysisResult.tsx — values are decimals (e.g. 0.201) but Results card was rendering raw via `.toFixed(1)`, producing 0.2% while header (which multiplies via `fmtPctDecimalToPct`) showed 20.1%. Fixed by multiplying `result.profit_pct` and `result.annualized_roi` by 100 before rendering (PR #29)
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
@@ -74,7 +83,7 @@ Get the product in front of a real user — zero market contact is the primary r
 | Frontend | Gurmindersingh27/flipforge-frontend | https://flipforge-frontend.vercel.app |
 | Backend | Gurmindersingh27/flipforge-backend | https://flipforge-backend.onrender.com |
 
-Active dev branch (frontend): `claude/flipforge-execution-setup-ICNZ2`
+Active dev branch (frontend): on `main` — last feature branches merged: `fix/button-normalization` (PR #26, #27), `fix/white-ui-bug` (PR #28, #29).
 Never push to `main` or `master` directly.
 
 ---
@@ -243,6 +252,18 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+6e81bd0  Merge PR #29 — fix/white-ui-bug (Profit %/ROI formatting + metric tile bg + remove light-mode media query)
+104a207  fix(ui): multiply profit_pct and annualized_roi by 100 in Results card
+1810a1b  fix(ui): bump metric tile to bg-white/[0.08] and remove light-mode media query
+27c2c01  Merge PR #28 — fix/white-ui-bug (washed-out surfaces + Sign-In button normalization)
+7195627  fix(ui): darken washed-out surfaces and normalize Sign-In buttons
+5776b05  Merge PR #27 — fix/button-normalization (results hierarchy + verdict_reason surface)
+770b040  fix(ui): de-emphasize Confidence to match secondary metric tier
+fef14f3  fix(ui): de-emphasize secondary metrics to reinforce MSO dominance
+890e41f  fix(ui): elevate Max Safe Offer above Verdict on results page
+57998df  Merge PR #26 — fix/button-normalization (App.tsx ghost button standard)
+ff91433  fix(ui): bump Save Deal border to white/[0.25] for emphasis
+53f2ed6  fix(ui): normalize secondary buttons to ghost standard across App.tsx
 0c2a97a  Hide Legacy Manual Analyze section by default
 b744b2a  feat: deal page clarity — max offer, remove duplicate buttons, fix allowed_outputs
 18fe47e  feat: saved deals page clarity
