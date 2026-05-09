@@ -185,3 +185,37 @@ export interface SavedDeal {
   analysis_result: Record<string, unknown>;
   created_at: string; // ISO 8601
 }
+
+// =========================================================
+// Address Enrichment — RentCast passthrough
+// =========================================================
+
+export interface PropertyFacts {
+  formatted_address: string | null;
+  property_type: string | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  square_footage: number | null;
+  lot_size: number | null;
+  year_built: number | null;
+  last_sale_date: string | null;
+  last_sale_price: number | null;
+}
+
+export interface ValueSignal {
+  estimate: number | null;
+  low: number | null;
+  high: number | null;
+}
+
+export interface RentSignal {
+  estimate: number | null;
+  low: number | null;
+  high: number | null;
+}
+
+export interface EnrichAddressResponse {
+  property_facts: PropertyFacts;
+  value_signal: ValueSignal;
+  rent_signal: RentSignal;
+}

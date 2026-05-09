@@ -3,6 +3,7 @@ import type {
   AnalyzeResponse,
   DraftDeal,
   DraftFromUrlResponse,
+  EnrichAddressResponse,
   NegotiationScriptRequest,
   NegotiationScriptResponse,
   SaveDealRequest,
@@ -218,6 +219,27 @@ export async function getDeal(id: number, token: string): Promise<SavedDeal> {
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Get deal error ${res.status}: ${text || "(no body)"}`);
+  }
+
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Address enrichment — RentCast passthrough
+// ---------------------------------------------------------------------------
+
+export async function enrichAddress(
+  address: string
+): Promise<EnrichAddressResponse> {
+  const res = await fetchWithTimeout(`${API_BASE_URL}/api/enrich-address`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Enrich API error ${res.status}: ${text || "(no body)"}`);
   }
 
   return res.json();
