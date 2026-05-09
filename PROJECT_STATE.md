@@ -308,39 +308,34 @@ Do not make any code changes yet.
 
 ---
 
-## Session 2026-05-09: Fixed Finalize & Analyze Button Visibility
+## Session 2026-05-09 — Finalize & Analyze button visibility fixed
 
-**Bug:** Finalize & Analyze button in Address draft flow appeared dark/invisible when enabled
+**Verified in production:**
+- Finalize & Analyze button is bright gold and visible.
+- Resume Deal flow shows the correct gold CTA.
+- Diagnostic panel is removed from production.
+- Legacy manual analyzer button is still gray/dark; separate cosmetic cleanup only, not part of this bug.
 
-**Root cause:** Vite boilerplate leftover in src/index.css:
-button { background-color: #1a1a1a; }
+**Root cause:**
+- src/index.css still had Vite scaffold global button styles:
+  button { background-color: #1a1a1a; ... }
+- Tailwind v4 utilities are emitted inside cascade layers.
+- The un-layered global button rule overrode Tailwind utility classes like bg-[#E8C547].
+- Result: enabled button kept dark Vite background while text-slate-900 applied, causing dark text on dark background.
 
-Un-layered global CSS overrides Tailwind v4 @layer utilities, so
-bg-[#E8C547] class was present but not rendering.
+**Diagnostic method:**
+- Temporary runtime panel showed:
+  canFinalize=true
+  analyzeLoading=false
+  btn.disabled=false
+  computed backgroundColor=rgb(26,26,26)
+- That proved it was a CSS cascade issue, not disabled logic or RentCast data.
 
-**Diagnostic method:** Added runtime panel (PR #35) showing:
-- canFinalize: true
-- btn.disabled: false
-- computed.backgroundColor: rgb(26,26,26) (not gold)
+**Fixes merged:**
+- PR #34: Coerced RentCast ARV/rent estimates to Number in enrichResponseToDraft.
+- PR #36: Removed global Vite button/button:hover/button:focus rules from src/index.css.
+- PR #37: Removed accidentally merged diagnostic panel.
 
-Proved CSS override, not state/logic bug.
-
-**Fixes:**
-- PR #34: RentCast estimate Number() coercion (arv/rent stored as numbers)
-- PR #36: Removed global button rules from index.css
-- PR #37: Cleanup diagnostic code (PR #35 accidentally merged)
-
-**Verified working:**
-- Address lookup → draft → Finalize & Analyze = bright gold, clickable
-- Resume Deal → same gold button
-- Diagnostic panel removed from production
-
-**Known cosmetic issue (not blocking):**
-Legacy manual analyzer "Analyze Deal" button still gray - separate
-styling, not same bug. Can be updated separately if desired.
-
-**Lesson:** Runtime inspection > source speculation. Diagnostic panel
-exposed real bug in 5 min after 45 min of symptom-chasing.
-
-**Note:** RentCast quota exhausted (50 calls/month free tier).
-Future: add caching/rate-limit.
+**Important note:**
+- RentCast quota was exhausted during debugging. Do not run more live /api/enrich-address tests unless explicitly approved.
+- Future task: add caching/rate-limit protection for RentCast lookups.
