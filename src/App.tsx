@@ -922,7 +922,7 @@ function AnalyzerPage() {
                   type="button"
                   onClick={onFinalizeAnalyze}
                   disabled={!canFinalize || analyzeLoading}
-                  className="rounded-xl px-4 py-2 text-sm font-semibold bg-[#E8C547] text-slate-900 shadow-sm shadow-[#E8C547]/20 hover:bg-[#d4b33e] active:scale-95 transition-all duration-150 disabled:bg-[#E8C547]/35 disabled:text-slate-950/60 disabled:border disabled:border-[#E8C547]/30 disabled:shadow-none disabled:cursor-not-allowed"
+                  className="rounded-xl px-4 py-2 text-sm font-semibold bg-[#E8C547] text-slate-900 shadow-sm shadow-[#E8C547]/20 hover:bg-[#d4b33e] active:scale-95 transition-all duration-150 disabled:bg-[#E8C547]/35 disabled:text-[#F6E27A]/70 disabled:border disabled:border-[#E8C547]/30 disabled:shadow-none disabled:cursor-not-allowed"
                 >
                   {analyzeLoading ? "Analyzing…" : "Finalize & Analyze"}
                 </button>
