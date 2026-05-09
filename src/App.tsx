@@ -65,13 +65,17 @@ function enrichResponseToDraft(
     region: null,
     purchase_price: { value: null, confidence: "MISSING", source: null },
     arv: {
-      value: data.value_signal.estimate,
+      value: data.value_signal?.estimate != null
+        ? Number(data.value_signal.estimate)
+        : null,
       confidence: data.value_signal.estimate != null ? "MEDIUM" : "MISSING",
       source: data.value_signal.estimate != null ? "rentcast" : null,
     },
     rehab_budget: { value: null, confidence: "MISSING", source: null },
     est_monthly_rent: {
-      value: data.rent_signal.estimate,
+      value: data.rent_signal?.estimate != null
+        ? Number(data.rent_signal.estimate)
+        : null,
       confidence: data.rent_signal.estimate != null ? "MEDIUM" : "MISSING",
       source: data.rent_signal.estimate != null ? "rentcast" : null,
     },
