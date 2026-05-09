@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { useAuth, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import AnalysisResult from "./AnalysisResult";
@@ -199,6 +199,27 @@ function AnalyzerPage() {
       rehab >= 0
     );
   }, [draft]);
+
+  // DIAGNOSTIC ONLY — temporary, do not merge
+  const finalizeBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [btnDiag, setBtnDiag] = useState<{
+    disabled: boolean;
+    className: string;
+    bg: string;
+    color: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const el = finalizeBtnRef.current;
+    if (!el) return;
+    const cs = getComputedStyle(el);
+    setBtnDiag({
+      disabled: el.disabled,
+      className: el.className,
+      bg: cs.backgroundColor,
+      color: cs.color,
+    });
+  }, [draft, canFinalize, analyzeLoading]);
 
   async function onFetchDraft() {
     setDraftError("");
@@ -924,6 +945,7 @@ function AnalyzerPage() {
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
+                  ref={finalizeBtnRef}
                   onClick={onFinalizeAnalyze}
                   disabled={!canFinalize || analyzeLoading}
                   className="rounded-xl px-4 py-2 text-sm font-semibold bg-[#E8C547] text-slate-900 shadow-sm shadow-[#E8C547]/20 hover:bg-[#d4b33e] active:scale-95 transition-all duration-150 disabled:bg-[#E8C547]/35 disabled:text-[#F6E27A]/70 disabled:border disabled:border-[#E8C547]/30 disabled:shadow-none disabled:cursor-not-allowed"
@@ -937,6 +959,23 @@ function AnalyzerPage() {
                   </div>
                 )}
               </div>
+
+              {/* DIAGNOSTIC ONLY — DO NOT MERGE */}
+              {btnDiag && (
+                <div className="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3 font-mono text-[11px] text-cyan-100/90 space-y-0.5 break-all">
+                  <div className="text-cyan-300 font-semibold">DIAGNOSTIC — DO NOT MERGE</div>
+                  <div>canFinalize: {String(canFinalize)}</div>
+                  <div>analyzeLoading: {String(analyzeLoading)}</div>
+                  <div>btn.disabled: {String(btnDiag.disabled)}</div>
+                  <div>btn.className: {btnDiag.className}</div>
+                  <div>computed.backgroundColor: {btnDiag.bg}</div>
+                  <div>computed.color: {btnDiag.color}</div>
+                  <div>purchase_price.value: {JSON.stringify(draft.purchase_price?.value)} (typeof {typeof draft.purchase_price?.value})</div>
+                  <div>arv.value: {JSON.stringify(draft.arv?.value)} (typeof {typeof draft.arv?.value})</div>
+                  <div>rehab_budget.value: {JSON.stringify(draft.rehab_budget?.value)} (typeof {typeof draft.rehab_budget?.value})</div>
+                  <div>est_monthly_rent.value: {JSON.stringify(draft.est_monthly_rent?.value)} (typeof {typeof draft.est_monthly_rent?.value})</div>
+                </div>
+              )}
             </div>
           )}
         </div>
