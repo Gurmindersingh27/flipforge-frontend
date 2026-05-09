@@ -5,12 +5,13 @@ import AnalysisResult from "./AnalysisResult";
 import ShieldHeader from "./components/ShieldHeader";
 import DealsPage from "./components/DealsPage";
 import DealPage from "./components/DealPage";
-import { analyzeDeal, draftFromUrl, finalizeAndAnalyze, saveDeal } from "./lib/api";
+import { analyzeDeal, draftFromUrl, enrichAddress, finalizeAndAnalyze, saveDeal } from "./lib/api";
 import type {
   AnalyzeRequest,
   AnalyzeResponse,
   DraftDeal,
   Confidence,
+  EnrichAddressResponse,
 } from "./lib/types";
 import "./App.css";
 
@@ -48,6 +49,43 @@ const FIELD_LABELS: Record<string, string> = {
   loan_to_cost_pct: "LTC (%)",
 };
 
+// 3d — Maps a RentCast EnrichAddressResponse into a DraftDeal for the editor.
+// ARV ← value_signal.estimate, rent ← rent_signal.estimate.
+// purchase_price and rehab_budget are always null — user must fill them.
+// All defaults match the backend DraftDeal model exactly (loan_to_cost_pct: 0.90).
+function enrichResponseToDraft(
+  address: string,
+  data: EnrichAddressResponse
+): DraftDeal {
+  return {
+    source: "rentcast",
+    address,
+    url: null,
+    zip_code: null,
+    region: null,
+    purchase_price: { value: null, confidence: "MISSING", source: null },
+    arv: {
+      value: data.value_signal.estimate,
+      confidence: data.value_signal.estimate != null ? "MEDIUM" : "MISSING",
+      source: data.value_signal.estimate != null ? "rentcast" : null,
+    },
+    rehab_budget: { value: null, confidence: "MISSING", source: null },
+    est_monthly_rent: {
+      value: data.rent_signal.estimate,
+      confidence: data.rent_signal.estimate != null ? "MEDIUM" : "MISSING",
+      source: data.rent_signal.estimate != null ? "rentcast" : null,
+    },
+    closing_cost_pct: 0.03,
+    selling_cost_pct: 0.08,
+    holding_months: 6,
+    annual_interest_rate: 0.10,
+    loan_to_cost_pct: 0.90,
+    required_profit_margin_pct: 0.12,
+    notes: [],
+    signals: [],
+  };
+}
+
 function AnalyzerPage() {
   const { getToken } = useAuth();
 
@@ -72,6 +110,12 @@ function AnalyzerPage() {
 
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [isResumed, setIsResumed] = useState(false);
+
+  // 3c — Address enrichment flow
+  const [activeTab, setActiveTab] = useState<"address" | "url">("address");
+  const [addressInput, setAddressInput] = useState<string>("");
+  const [enrichLoading, setEnrichLoading] = useState(false);
+  const [enrichError, setEnrichError] = useState<string>("");
 
   const location = useLocation();
 
@@ -107,12 +151,21 @@ function AnalyzerPage() {
       est_monthly_rent: fixDp(resumeDraft.est_monthly_rent),
     });
     setIsResumed(true);
-    setListingUrl(resumeDraft.url ?? "");
-    setManualAddress(resumeDraft.address ?? "");
+
+    // 3f — Restore correct tab and address input when resuming
+    if (resumeDraft.source === "rentcast") {
+      setActiveTab("address");
+      setAddressInput(resumeDraft.address ?? "");
+    } else {
+      setActiveTab("url");
+      setListingUrl(resumeDraft.url ?? "");
+      setManualAddress(resumeDraft.address ?? "");
+    }
 
     setMissingFields([]);
     setDraftLoading(false);
     setDraftError("");
+    setEnrichError("");
     setAnalyzeLoading(false);
     setAnalyzeError("");
     setResult(null);
@@ -145,6 +198,7 @@ function AnalyzerPage() {
 
   async function onFetchDraft() {
     setDraftError("");
+    setEnrichError("");
     setAnalyzeError("");
     setMissingFields([]);
     setResult(null);
@@ -165,6 +219,34 @@ function AnalyzerPage() {
       setDraft(null);
     } finally {
       setDraftLoading(false);
+    }
+  }
+
+  // 3e — Address enrichment handler
+  async function onEnrichAddress() {
+    setEnrichError("");
+    setDraftError("");
+    setAnalyzeError("");
+    setMissingFields([]);
+    setResult(null);
+    setIsResumed(false);
+
+    const trimmed = addressInput.trim();
+    if (!trimmed) {
+      setEnrichError("Enter a property address first.");
+      return;
+    }
+
+    try {
+      setEnrichLoading(true);
+      const data = await enrichAddress(trimmed);
+      setDraft(enrichResponseToDraft(trimmed, data));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to look up address.";
+      setEnrichError(msg);
+      setDraft(null);
+    } finally {
+      setEnrichLoading(false);
     }
   }
 
@@ -195,6 +277,7 @@ function AnalyzerPage() {
   async function onFinalizeAnalyze() {
     setAnalyzeError("");
     setDraftError("");
+    setEnrichError("");
     setMissingFields([]);
     setResult(null);
 
@@ -407,11 +490,10 @@ function AnalyzerPage() {
     </div>
   );
 
-  // Meta passed to AnalysisResult so PDF can show URL + financing assumptions + deal snapshot
+  // 3g — Meta passed to AnalysisResult for PDF. Address flow uses addressInput.
   const pdfMeta = useMemo(() => {
     const addr = (draft as any)?.address ?? null;
 
-    // Prefer draft values when using the URL flow; otherwise use manual fields.
     const usingDraft = !!draft;
 
     const purchase = usingDraft
@@ -430,8 +512,12 @@ function AnalyzerPage() {
 
     return {
       // identity
-      listing_url: listingUrl?.trim() || null,
-      property_address: addr || manualAddress.trim() || null,
+      listing_url: activeTab === "url" ? (listingUrl?.trim() || null) : null,
+      property_address:
+        (activeTab === "address" ? addressInput.trim() || null : null) ??
+        addr ??
+        manualAddress.trim() ??
+        null,
 
       // deal snapshot
       purchase_price: purchase,
@@ -446,6 +532,8 @@ function AnalyzerPage() {
     };
   }, [
     draft,
+    activeTab,
+    addressInput,
     listingUrl,
     manualAddress,
     purchasePrice,
@@ -489,61 +577,118 @@ function AnalyzerPage() {
       <SignedIn>
       <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
         {/* =========================
-            Phase 2 — URL → DraftDeal
+            Address / URL → DraftDeal
            ========================= */}
         <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
+
+          {/* 3h — Card header: tabs when not resumed, plain label when resumed */}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-white">{isResumed ? "Resumed Deal" : "Draft from URL"}</div>
+              {isResumed ? (
+                <div className="text-sm font-semibold text-white">Resumed Deal</div>
+              ) : (
+                <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("address")}
+                    className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+                      activeTab === "address"
+                        ? "bg-white/[0.12] text-white"
+                        : "text-white/50 hover:text-white/80"
+                    }`}
+                  >
+                    Address
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("url")}
+                    className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+                      activeTab === "url"
+                        ? "bg-white/[0.12] text-white"
+                        : "text-white/50 hover:text-white/80"
+                    }`}
+                  >
+                    URL
+                  </button>
+                </div>
+              )}
               <div className="mt-1 text-xs text-white/60">
                 {isResumed
                   ? "Resumed from a saved deal. Review the fields and re-analyze."
+                  : activeTab === "address"
+                  ? "Enter a property address to look up data. Fill gaps. Then analyze."
                   : "Paste a listing URL. We extract what we can. Fill gaps. Then analyze."}
               </div>
             </div>
 
+            {/* 3l — Source badge: special copy for rentcast */}
             {draft?.source && (
               <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/70">
-                Source: {draft.source}
+                {draft.source === "rentcast"
+                  ? "Source: RentCast · Suggested fields are estimates. Review before analyzing."
+                  : `Source: ${draft.source}`}
               </span>
             )}
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 md:flex-row">
-            <input
-              value={listingUrl}
-              onChange={(e) => setListingUrl(e.target.value)}
-              placeholder="https://..."
-              className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 placeholder:text-white/40"
-            />
-            <button
-              type="button"
-              onClick={onFetchDraft}
-              disabled={draftLoading}
-              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
-            >
-              {draftLoading ? "Fetching…" : "Fetch Draft"}
-            </button>
-          </div>
-
-          {/* ✅ NEW: Manual address override */}
-          <div className="mt-3">
-            <label className="block text-xs text-slate-400 mb-1">
-              Property Address (optional - for PDF)
-            </label>
-            <input
-              value={manualAddress}
-              onChange={(e) => setManualAddress(e.target.value)}
-              placeholder="123 Main St, City, ST 12345"
-              className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 placeholder:text-white/40"
-            />
-            <div className="mt-1 text-xs text-white/65">
-              Use this if scraping fails or for manual deals
+          {/* 3i + 3j — Conditional inputs: address tab vs URL tab */}
+          {activeTab === "address" ? (
+            <div className="mt-4 flex flex-col gap-3 md:flex-row">
+              <input
+                value={addressInput}
+                onChange={(e) => setAddressInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && onEnrichAddress()}
+                placeholder="123 Main St, City, ST 12345"
+                className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 placeholder:text-white/40"
+              />
+              <button
+                type="button"
+                onClick={onEnrichAddress}
+                disabled={enrichLoading}
+                className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
+              >
+                {enrichLoading ? "Looking up…" : "Look Up"}
+              </button>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="mt-4 flex flex-col gap-3 md:flex-row">
+                <input
+                  value={listingUrl}
+                  onChange={(e) => setListingUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 placeholder:text-white/40"
+                />
+                <button
+                  type="button"
+                  onClick={onFetchDraft}
+                  disabled={draftLoading}
+                  className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
+                >
+                  {draftLoading ? "Fetching…" : "Fetch Draft"}
+                </button>
+              </div>
 
-          {draftError && (
-            <div className="mt-3 text-sm text-red-400">{draftError}</div>
+              {/* Manual address override — URL flow only */}
+              <div className="mt-3">
+                <label className="block text-xs text-slate-400 mb-1">
+                  Property Address (optional - for PDF)
+                </label>
+                <input
+                  value={manualAddress}
+                  onChange={(e) => setManualAddress(e.target.value)}
+                  placeholder="123 Main St, City, ST 12345"
+                  className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2 placeholder:text-white/40"
+                />
+                <div className="mt-1 text-xs text-white/65">
+                  Use this if scraping fails or for manual deals
+                </div>
+              </div>
+            </>
+          )}
+
+          {(draftError || enrichError) && (
+            <div className="mt-3 text-sm text-red-400">{draftError || enrichError}</div>
           )}
 
           {isSourceBlocked && (
@@ -584,6 +729,10 @@ function AnalyzerPage() {
                       isLowConfidence(draft.purchase_price?.confidence)
                     )}
                   />
+                  {/* 3k — Suggested label for RentCast-filled fields */}
+                  {draft.purchase_price?.source === "rentcast" && (
+                    <div className="mt-1 text-[10px] text-amber-400/70">Suggested · Verify before analyzing</div>
+                  )}
                 </div>
 
                 <div>
@@ -608,6 +757,9 @@ function AnalyzerPage() {
                       isLowConfidence(draft.arv?.confidence)
                     )}
                   />
+                  {draft.arv?.source === "rentcast" && (
+                    <div className="mt-1 text-[10px] text-amber-400/70">Suggested · Verify before analyzing</div>
+                  )}
                 </div>
 
                 <div>
@@ -638,6 +790,9 @@ function AnalyzerPage() {
                       isLowConfidence(draft.rehab_budget?.confidence)
                     )}
                   />
+                  {draft.rehab_budget?.source === "rentcast" && (
+                    <div className="mt-1 text-[10px] text-amber-400/70">Suggested · Verify before analyzing</div>
+                  )}
                 </div>
 
                 <div>
@@ -668,6 +823,9 @@ function AnalyzerPage() {
                       isLowConfidence(draft.est_monthly_rent?.confidence)
                     )}
                   />
+                  {draft.est_monthly_rent?.source === "rentcast" && (
+                    <div className="mt-1 text-[10px] text-amber-400/70">Suggested · Verify before analyzing</div>
+                  )}
                 </div>
               </div>
 
