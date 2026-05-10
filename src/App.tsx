@@ -1014,6 +1014,8 @@ function AnalyzerPage() {
             </div>
           </div>
 
+          <RepairBudgetBuilder onApply={(v) => setRehabBudget(v)} />
+
           {FinancingAssumptions}
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
