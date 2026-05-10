@@ -5,6 +5,7 @@ import AnalysisResult from "./AnalysisResult";
 import ShieldHeader from "./components/ShieldHeader";
 import DealsPage from "./components/DealsPage";
 import DealPage from "./components/DealPage";
+import RepairBudgetBuilder from "./components/RepairBudgetBuilder";
 import { analyzeDeal, draftFromUrl, enrichAddress, finalizeAndAnalyze, saveDeal } from "./lib/api";
 import type {
   AnalyzeRequest,
@@ -832,6 +833,8 @@ function AnalyzerPage() {
                   )}
                 </div>
               </div>
+
+              <RepairBudgetBuilder onApply={(v) => setDraftDpNumber("rehab_budget", v)} />
 
               {/* Assumptions — editable in draft flow */}
               <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4">
