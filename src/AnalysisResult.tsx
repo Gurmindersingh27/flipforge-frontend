@@ -58,6 +58,63 @@ function riskFlagBadgeClass(severity?: string) {
   return `${base} border-white/10 text-white/60 bg-white/5`;
 }
 
+function verdictRank(v: string): number {
+  if (v === "BUY") return 2;
+  if (v === "CONDITIONAL") return 1;
+  return 0;
+}
+
+function buildOfferGapCallout(purchasePrice: number, mao: number) {
+  if (purchasePrice <= 0 || mao <= 0) return null;
+  const gap = purchasePrice - mao;
+  const absGap = Math.abs(gap);
+  const fmtGap = `$${absGap.toLocaleString()}`;
+
+  if (gap > 0) {
+    return (
+      <section className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
+        <div className="text-[10px] uppercase tracking-widest text-red-300/70 mb-1.5">
+          Overpay Risk
+        </div>
+        <p className="text-sm text-red-200 leading-relaxed">
+          You are <span className="font-semibold">{fmtGap} over</span> the Max
+          Safe Offer.{", "}
+          {absGap >= 15000
+            ? "At this price, the deal has limited room for ARV or rehab misses."
+            : "This deal may still work, but leaves little margin for error."}
+        </p>
+      </section>
+    );
+  }
+
+  if (absGap <= 5000) {
+    return (
+      <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
+        <div className="text-[10px] uppercase tracking-widest text-amber-300/70 mb-1.5">
+          Offer Gap
+        </div>
+        <p className="text-sm text-amber-200 leading-relaxed">
+          You are <span className="font-semibold">within {fmtGap}</span> of the
+          Max Safe Offer. This deal may work, but only if ARV and rehab
+          assumptions hold.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+      <div className="text-[10px] uppercase tracking-widest text-emerald-300/70 mb-1.5">
+        Offer Cushion
+      </div>
+      <p className="text-sm text-emerald-200 leading-relaxed">
+        You are <span className="font-semibold">{fmtGap} under</span> the Max
+        Safe Offer. The offer has some cushion before the deal breaks.
+      </p>
+    </section>
+  );
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -82,23 +139,38 @@ export default function AnalysisResult({ result, meta }: Props) {
   const [scriptLoading, setScriptLoading] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
 
-  const verdictReason =
-    (result as any)?.verdict_reason ||
-    (result as any)?.verdictReason ||
-    "";
-
+  // Build verdict rationale bullets from backend notes (primary) + stress context.
+  // result.notes is populated by build_notes() in analysis_engine.py — human-readable.
   const whyBullets: string[] = [];
-
-  if (result.net_profit <= 0) {
+  if (result.notes?.length > 0) {
+    whyBullets.push(...result.notes);
+  } else if (result.net_profit <= 0) {
     whyBullets.push("Deal loses money in the base case.");
   } else {
     whyBullets.push("Deal is profitable assuming inputs are accurate.");
   }
-
-  // Add verdict reason (authoritative line)
-  if (verdictReason) {
-    whyBullets.unshift(verdictReason);
+  if (bp?.is_fragile && bp?.first_break_scenario) {
+    whyBullets.push(`Breaks under "${bp.first_break_scenario}" stress test.`);
   }
+  const baseRank = verdictRank(result.stress_tests?.[0]?.verdict ?? "");
+  const firstDowngrade = result.stress_tests?.slice(1).find(
+    (s) => verdictRank(s.verdict) < baseRank
+  );
+  if (firstDowngrade) {
+    whyBullets.push(
+      `"${firstDowngrade.name}" stress test reduces verdict to ${firstDowngrade.verdict}.`
+    );
+  }
+
+  // Offer Gap callout — only renders when purchase_price is passed via meta.
+  const purchasePriceMeta =
+    typeof meta?.purchase_price === "number" && meta.purchase_price > 0
+      ? meta.purchase_price
+      : null;
+  const offerGapBlock =
+    purchasePriceMeta !== null
+      ? buildOfferGapCallout(purchasePriceMeta, result.max_safe_offer)
+      : null;
 
   async function onGenerateScript() {
     setScriptLoading(true);
@@ -196,6 +268,9 @@ export default function AnalysisResult({ result, meta }: Props) {
         </div>
       </section>
 
+      {/* Offer Gap callout — only renders when purchase_price is known via meta */}
+      {offerGapBlock}
+
       {/* 1. Verdict card */}
       <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
         <div className="text-[11px] uppercase tracking-widest text-white/60 mb-3">
@@ -255,31 +330,16 @@ export default function AnalysisResult({ result, meta }: Props) {
         </section>
       )}
 
-      {/* 4. Narrative card — Why this verdict + Notes combined */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-5">
-        <div>
-          <h3 className="font-serif-display text-base font-semibold text-white mb-2">
-            Why this verdict
-          </h3>
-          <ul className="list-disc pl-5 space-y-1.5 text-sm text-white/85 leading-relaxed">
-            {whyBullets.map((b, i) => (
-              <li key={i}>{b}</li>
-            ))}
-          </ul>
-        </div>
-
-        {result.notes?.length > 0 && (
-          <div className="border-t border-white/[0.06] pt-4">
-            <h3 className="font-serif-display text-sm font-semibold text-white mb-2">
-              Notes
-            </h3>
-            <ul className="list-disc pl-5 space-y-1.5 text-sm text-white/75 leading-relaxed">
-              {result.notes.map((n, i) => (
-                <li key={i}>{n}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+      {/* 4. Narrative card — Why this verdict (notes + stress context) */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
+        <h3 className="font-serif-display text-base font-semibold text-white mb-2">
+          Why this verdict
+        </h3>
+        <ul className="list-disc pl-5 space-y-1.5 text-sm text-white/85 leading-relaxed">
+          {whyBullets.map((b, i) => (
+            <li key={i}>{b}</li>
+          ))}
+        </ul>
       </section>
 
       {/* 5. Actions card — Integrity Gate copy + grouped buttons */}
@@ -333,7 +393,7 @@ export default function AnalysisResult({ result, meta }: Props) {
 
         {(!canReport || !canScript) && (
           <div className="text-xs text-white/60">
-            <span className="text-white/80">Suppressed:</span>{" "}
+            <span className="text-white/80">Suppressed:</span>{", "}
             {!canReport ? "Lender Report" : ""}
             {!canReport && !canScript ? " • " : ""}
             {!canScript ? "Negotiation Script" : ""}
