@@ -89,7 +89,7 @@ export interface AnalyzeResponse {
   rent_to_cost_ratio?: number | null;
   assignment_spread?: number | null;
 
-  // optional newer stuff (won’t break old UI)
+  // optional newer stuff (won't break old UI)
   verdict_reason?: string;
   allowed_outputs?: Record<string, boolean>;
   narratives?: Record<string, unknown> | null;
@@ -214,8 +214,18 @@ export interface RentSignal {
   high: number | null;
 }
 
+export type ProviderStatus =
+  | "cache_hit"
+  | "live_success"
+  | "quota_exhausted"
+  | "provider_unavailable";
+
 export interface EnrichAddressResponse {
   property_facts: PropertyFacts;
   value_signal: ValueSignal;
   rent_signal: RentSignal;
+  from_cache?: boolean;
+  cached_at?: string | null;
+  provider_status?: ProviderStatus;
+  provider_error?: string | null;
 }
