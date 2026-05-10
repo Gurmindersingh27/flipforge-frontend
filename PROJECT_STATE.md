@@ -10,7 +10,7 @@
 
 ## 1. Current Phase & Progress
 
-**Current phase:** UX polish shipped across Resume, Results, Saved Deals, and Deal page. Legacy analyzer hidden. Ready for first real user.
+**Current phase:** Result screen deal-memo polish shipped. Product feels investor-grade. Ready for first real user.
 
 ### Done
 - [x] Backend Day 1 complete — DraftDeal, DataPoint/Confidence models built
@@ -59,6 +59,19 @@
   - allowed_outputs pass-through fixed with fallback
 - [x] Legacy Manual Analyze hidden by default behind subtle toggle link
 - [x] RentCast address lookup cache — ProviderStatus type + cache metadata fields added to types.ts (PR #38, mirrors backend PR #10)
+- [x] Repair Budget Builder — src/components/RepairBudgetBuilder.tsx (PR #39, frontend-only)
+  - 9 repair categories with None/Light/Medium/Heavy levels
+  - Bathroom count stepper, sqft-based flooring
+  - Low/Mid/High estimates + contingency selector
+  - "Use Mid as Rehab Budget" writes into rehab_budget field
+  - Available in Draft Deal / Resume Deal / Legacy Manual Analyze flows
+- [x] Result screen deal-memo polish — src/AnalysisResult.tsx (PR #40, frontend-only)
+  - Offer Gap callout: Overpay Risk (red) / Offer Gap (amber) / Offer Cushion (green)
+    comparing meta.purchase_price vs result.max_safe_offer
+  - "Why this verdict" now uses backend result.notes as primary bullets
+  - Optional breakpoint context if deal is fragile
+  - Optional first stress-test downgrade line
+  - Removed redundant Notes subsection (was showing same content as notes)
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
@@ -80,8 +93,7 @@ Get the product in front of a real user — zero market contact is the primary r
 | Frontend | Gurmindersingh27/flipforge-frontend | https://flipforge-frontend.vercel.app |
 | Backend | Gurmindersingh27/flipforge-backend | https://flipforge-backend.onrender.com |
 
-Active dev branch (frontend): `claude/flipforge-execution-setup-ICNZ2`
-Never push to `main` or `master` directly.
+No active dev branch. Work on named feature branches; never push to main directly.
 
 ---
 
@@ -91,11 +103,13 @@ FlipForge is a risk-first real estate deal underwriting tool for serious investo
 - Net profit, ROI, profit margin
 - Flip / BRRRR / Wholesale scores and verdicts (BUY / CONDITIONAL / PASS)
 - Max Safe Offer (MAO)
+- Offer Gap callout comparing offer vs MAO (Overpay Risk / Offer Gap / Offer Cushion)
 - Rehab Reality classification (LIGHT / MEDIUM / HEAVY / EXTREME)
 - Stress test scenarios (ARV -5%, ARV -10%, Rehab +15%, Hold +2mo)
 - Risk flags with severity levels
 - Breakpoints (first stress scenario that kills the deal)
 - Confidence score (0-100)
+- "Why this verdict" rationale (backend notes + stress context)
 - Lender report PDF export
 
 ---
@@ -165,6 +179,7 @@ POST /api/enrich-address           ← { address } → EnrichAddressResponse (SQ
 - `compute_breakpoints()` — finds first stress scenario that fails
 - `compute_confidence_score()` — weighted: margin strength (45%), stress robustness (30%), risk penalty (25%)
 - Verdict thresholds: score >= 75 = BUY, >= 55 = CONDITIONAL, else PASS
+- `build_notes()` — produces 2–3 human-readable rationale strings surfaced in frontend "Why this verdict"
 
 ### URL Scraping (url_service.py)
 - httpx fetch with browser User-Agent
@@ -193,9 +208,10 @@ src/
   App.css / index.css         ← Global styles
   config.ts                   ← API_BASE_URL (keep separate from api.ts — do not merge)
   shield.ts                   ← Shield logic
-  AnalysisResult.tsx          ← Deal analysis results display
+  AnalysisResult.tsx          ← Deal analysis results display (Offer Gap callout, verdict rationale)
   components/
     ShieldHeader.tsx          ← Header component
+    RepairBudgetBuilder.tsx   ← Repair budget estimator (PR #39, frontend-only)
   lib/
     api.ts                    ← ALL fetch calls to backend
     types.ts                  ← ALL TypeScript types (canonical contract)
@@ -253,22 +269,18 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
-c5809c2  fix: add ProviderStatus type and cache metadata fields to EnrichAddressResponse (#38)
-0c2a97a  Hide Legacy Manual Analyze section by default
-b744b2a  feat: deal page clarity — max offer, remove duplicate buttons, fix allowed_outputs
-18fe47e  feat: saved deals page clarity
-07fb928  feat: results page clarity polish
-9616d4e  feat: polish Resume UX — conditional header and specific validation messaging
-3747221  Merge pull request #4 from Gurmindersingh27/claude/build-draft-editor-ui-xm2tq
-d9c5699  docs: correct PROJECT_STATE.md — remove completed items from Not Done
-c3ca8c1  Update package-lock.json after npm install
-4870de8  Update PROJECT_STATE.md: draft editor assumption fields + UX debt note
-998a88f  Draft editor: expose assumption fields + extraction notes
-3760c23  Fix lender report endpoint: resolve hardcoded localhost and wrong URL
-22d97b0  Fix hardcoded API_BASE in AnalysisResult.tsx
-ad39f86  Fix meta bridge + lender report + address override
-e307963  Restore UI styles
-23826a4  FlipForge frontend MVP
+07654861  feat: result screen deal-memo polish — offer gap callout + verdict rationale (#40)
+a46dda8   Merge pull request #39 — feat: add Repair Budget Builder
+c5809c2   fix: add ProviderStatus type and cache metadata fields to EnrichAddressResponse (#38)
+0c2a97a   Hide Legacy Manual Analyze section by default
+b744b2a   feat: deal page clarity — max offer, remove duplicate buttons, fix allowed_outputs
+18fe47e   feat: saved deals page clarity
+07fb928   feat: results page clarity polish
+9616d4e   feat: polish Resume UX — conditional header and specific validation messaging
+22d97b0   Fix hardcoded API_BASE in AnalysisResult.tsx
+ad39f86   Fix meta bridge + lender report + address override
+e307963   Restore UI styles
+23826a4   FlipForge frontend MVP
 ```
 
 **Backend:**
@@ -292,6 +304,7 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - PDF generation must use in-memory bytes in production — disk writes will fail on Render
 - Render free tier cold starts — first request after inactivity may take 50+ seconds
 - No GitHub Actions CI — import/type errors are only caught at review time
+- Offer Gap callout is silent in legacy Manual Analyze path (no meta.purchase_price passed) — by design
 
 ---
 
@@ -367,3 +380,73 @@ Do not make any code changes yet.
 RentCast quota is currently exhausted. Do not run live `/api/enrich-address` tests without explicit approval.
 
 **Deploy:** Vercel auto-deploy triggered on main merge (commit c5809c2)
+
+---
+
+## Session 2026-05-10 — Repair Budget Builder
+
+**Branch:** `claude/review-flipforge-docs-YN2Ye`
+**PR:** #39 (merged, commit a46dda8)
+**Changed file:** `src/components/RepairBudgetBuilder.tsx` (new), `src/App.tsx` (+1 import, +1 JSX element)
+
+**Feature:**
+- Self-contained repair cost estimator component
+- 9 repair categories: roof, HVAC, electrical, plumbing, kitchen, bathrooms, flooring, windows, paint/misc
+- Severity levels: None / Light / Medium / Heavy per category
+- Bathroom count stepper (1–4); sqft input for flooring (per-sqft pricing)
+- Contingency selector: None / 10% / 15% / 20% of subtotal
+- Displays Low / Mid / High estimates per category and totals
+- "Use Mid as Rehab Budget" applies rounded mid to existing rehab_budget field
+- Collapsed by default; expand via "Build Repair Budget →" link
+- Disclaimer: SE US contractor pricing, 2026, planning tool only
+
+**Guardrails confirmed:**
+- No backend changes, no AnalyzeRequest changes, no types.ts changes, no analysis_engine.py changes
+
+---
+
+## Session 2026-05-10 — Result screen deal-memo polish
+
+**Branch:** `claude/deal-decision-memo`
+**PR:** #40 (merged)
+**Merge commit:** `07654861`
+**Changed file:** `src/AnalysisResult.tsx` only
+
+**Features shipped:**
+
+1. **Offer Gap callout** — new section between Key Numbers card and Verdict card
+   - Compares `meta.purchase_price` (passed from App.tsx `pdfMeta`) vs `result.max_safe_offer`
+   - Three states:
+     - Overpay Risk (red border/bg): `purchase_price > max_safe_offer`
+       - ≥ $15k over: "limited room for ARV or rehab misses"
+       - < $15k over: "leaves little margin for error"
+     - Offer Gap (amber): within $5k under max_safe_offer
+     - Offer Cushion (green): more than $5k under max_safe_offer
+   - Silent no-op when `meta.purchase_price` is absent (legacy Manual Analyze path)
+
+2. **Verdict rationale** — "Why this verdict" section rebuilt
+   - `result.notes` (from backend `build_notes()`) used as primary bullets — human-readable, already specific
+   - Falls back to generic bullet only if `notes` is empty
+   - Optional: appends breakpoint context if `bp.is_fragile && bp.first_break_scenario`
+   - Optional: appends first stress-test downgrade if any scenario worsens base verdict
+   - Dead `verdictReason` lookup removed (field never populated by backend `AnalyzeResponse`)
+
+3. **Notes subsection removed** — the only deleted UI block
+   - Old `{result.notes?.length > 0 && <div>Notes…</div>}` subsection removed
+   - Notes content now lives in "Why this verdict" above; subsection was redundant
+   - `space-y-5` removed from narrative card only because the subsection was removed
+
+**New helpers (module-level):**
+- `verdictRank(v: string): number` — BUY=2, CONDITIONAL=1, PASS=0
+- `buildOfferGapCallout(purchasePrice, mao)` — returns colored JSX section or null
+
+**Guardrails confirmed:**
+- `analysis_engine.py` untouched
+- `AnalyzeRequest` untouched
+- No backend changes
+- No schema changes
+- No `api.ts` / `types.ts` changes
+- No RentCast calls
+
+**Build/deploy:** Vercel auto-deploy triggered on main merge (commit 07654861).
+TypeScript verified clean by source review (no local runner in this session environment).

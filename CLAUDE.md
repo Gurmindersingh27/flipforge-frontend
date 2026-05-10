@@ -58,9 +58,10 @@ src/
   App.css / index.css         # Global styles
   config.ts                   # API_BASE_URL (reads VITE_API_BASE_URL, fallback http://127.0.0.1:8000)
   shield.ts                   # Shield logic
-  AnalysisResult.tsx          # Deal analysis display
+  AnalysisResult.tsx          # Deal analysis display (Offer Gap callout, verdict rationale)
   components/
     ShieldHeader.tsx          # Header component
+    RepairBudgetBuilder.tsx   # Repair budget estimator (frontend-only, PR #39)
   lib/
     api.ts                    # All fetch calls to backend — DO NOT restructure
     types.ts                  # All shared TypeScript types — canonical contract
@@ -190,12 +191,14 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
 
 **Frontend:**
 ```
-c5809c2  fix: add ProviderStatus type and cache metadata fields to EnrichAddressResponse
-3760c23  Fix lender report endpoint: resolve hardcoded localhost and wrong URL
-22d97b0  Fix hardcoded API_BASE in AnalysisResult.tsx
-ad39f86  Fix meta bridge + lender report + address override
-e307963  Restore UI styles
-23826a4  FlipForge frontend MVP
+07654861  feat: result screen deal-memo polish — offer gap callout + verdict rationale (#40)
+a46dda8   Merge pull request #39 — feat: add Repair Budget Builder
+c5809c2   fix: add ProviderStatus type and cache metadata fields to EnrichAddressResponse (#38)
+3760c23   Fix lender report endpoint: resolve hardcoded localhost and wrong URL
+22d97b0   Fix hardcoded API_BASE in AnalysisResult.tsx
+ad39f86   Fix meta bridge + lender report + address override
+e307963   Restore UI styles
+23826a4   FlipForge frontend MVP
 ```
 
 **Backend:**
