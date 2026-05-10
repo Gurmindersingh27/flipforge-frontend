@@ -78,7 +78,7 @@ function buildOfferGapCallout(purchasePrice: number, mao: number) {
         </div>
         <p className="text-sm text-red-200 leading-relaxed">
           You are <span className="font-semibold">{fmtGap} over</span> the Max
-          Safe Offer.{", "}
+          Safe Offer.{" "}
           {absGap >= 15000
             ? "At this price, the deal has limited room for ARV or rehab misses."
             : "This deal may still work, but leaves little margin for error."}
