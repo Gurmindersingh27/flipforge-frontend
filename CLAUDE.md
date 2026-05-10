@@ -61,6 +61,7 @@ src/
   AnalysisResult.tsx          # Deal analysis display
   components/
     ShieldHeader.tsx          # Header component
+    RepairBudgetBuilder.tsx   # Repair estimate calculator — self-contained, no backend calls
   lib/
     api.ts                    # All fetch calls to backend — DO NOT restructure
     types.ts                  # All shared TypeScript types — canonical contract
@@ -190,6 +191,9 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
 
 **Frontend:**
 ```
+a46dda8  feat: add Repair Budget Builder (#39)
+897e802  fix: add RepairBudgetBuilder to Manual Analyze (Legacy) flow
+ae8f358  feat: add repair budget builder
 c5809c2  fix: add ProviderStatus type and cache metadata fields to EnrichAddressResponse
 3760c23  Fix lender report endpoint: resolve hardcoded localhost and wrong URL
 22d97b0  Fix hardcoded API_BASE in AnalysisResult.tsx

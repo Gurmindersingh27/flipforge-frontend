@@ -59,6 +59,15 @@
   - allowed_outputs pass-through fixed with fallback
 - [x] Legacy Manual Analyze hidden by default behind subtle toggle link
 - [x] RentCast address lookup cache — ProviderStatus type + cache metadata fields added to types.ts (PR #38, mirrors backend PR #10)
+- [x] Repair Budget Builder — frontend-only MVP (PR #39)
+  - Available in: Draft Deal flow, Resume Deal flow, Manual Analyze Legacy flow
+  - 9 categories: Kitchen, Bathrooms, Flooring, Paint/Drywall, Roof, HVAC, Electrical, Plumbing, Windows/Exterior
+  - Bathroom count stepper (1–4); sqft input for flooring (per-sqft rates)
+  - Percentage-based contingency selector (None / 10% / 15% / 20% of subtotal)
+  - Displays Low / Mid / High estimates per category + totals
+  - "Use Mid as Rehab Budget" writes into existing rehab_budget field
+  - Existing rehab_budget input remains manually editable after applying
+  - No backend changes, no AnalyzeRequest changes, no types.ts/api.ts changes
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
@@ -69,7 +78,14 @@
   - Not urgent, but should be done soon
 
 ### Next Session Goal
-Get the product in front of a real user — zero market contact is the primary risk.
+Result screen deal-memo polish (planning only — not built yet).
+
+Potential items:
+- Make Max Safe Offer the dominant result
+- Add "Why this deal fails" / "What kills this deal" section
+- Show overpay risk clearly
+- Show stress-test breakpoint more clearly
+- Improve copyable investor summary
 
 ---
 
@@ -80,7 +96,7 @@ Get the product in front of a real user — zero market contact is the primary r
 | Frontend | Gurmindersingh27/flipforge-frontend | https://flipforge-frontend.vercel.app |
 | Backend | Gurmindersingh27/flipforge-backend | https://flipforge-backend.onrender.com |
 
-Active dev branch (frontend): `claude/flipforge-execution-setup-ICNZ2`
+Active dev branch (frontend): none — PR #39 merged to main on 2026-05-10
 Never push to `main` or `master` directly.
 
 ---
@@ -253,6 +269,9 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+a46dda8  feat: add Repair Budget Builder (#39) — merge commit
+897e802  fix: add RepairBudgetBuilder to Manual Analyze (Legacy) flow
+ae8f358  feat: add repair budget builder
 c5809c2  fix: add ProviderStatus type and cache metadata fields to EnrichAddressResponse (#38)
 0c2a97a  Hide Legacy Manual Analyze section by default
 b744b2a  feat: deal page clarity — max offer, remove duplicate buttons, fix allowed_outputs
@@ -367,3 +386,38 @@ Do not make any code changes yet.
 RentCast quota is currently exhausted. Do not run live `/api/enrich-address` tests without explicit approval.
 
 **Deploy:** Vercel auto-deploy triggered on main merge (commit c5809c2)
+
+---
+
+## Session 2026-05-10 — Repair Budget Builder MVP
+
+**Goal:** Give users a credible way to estimate rehab costs instead of guessing.
+
+**Implementation (frontend-only, PR #39):**
+- New `src/components/RepairBudgetBuilder.tsx` — self-contained, 277 lines, no external state
+- 9 repair categories with None / Light / Medium / Heavy levels
+- Bathroom count stepper (1–4) multiplies per-bathroom ranges
+- Sqft input for flooring — per-sqft rates; shows $0 + note if sqft not entered
+- Contingency selector: None (0%) / Light (10%) / Medium (15%) / Heavy (20%) of subtotal
+- Line-item Low / Mid / High per category + subtotal + contingency row + final total
+- "Use Mid as Rehab Budget" applies Math.round(totalMid) to existing rehab_budget field
+- Existing rehab_budget input remains manually editable after applying
+- Collapsed by default; "Build Repair Budget →" link expands it
+- Disclaimer: SE US contractor pricing, 2026, planning tool only
+
+**Available in all three flows:**
+- Draft Deal (Address / URL) — below field grid, above Assumptions
+- Resume Deal — same draft editor, no separate placement needed
+- Manual Analyze (Legacy) — below legacy input grid, above Financing Assumptions
+
+**App.tsx changes:** +1 import line, +2 JSX insertions (draft flow + legacy flow), no other changes
+
+**Guardrails confirmed:**
+- analysis_engine.py — untouched
+- AnalyzeRequest — untouched
+- types.ts — untouched
+- api.ts — untouched
+- No backend changes
+- Build: tsc -b && vite build → ✓ 108 modules, 0 TypeScript errors
+
+**Deploy:** Vercel auto-deploy triggered on main merge (commit a46dda8)
