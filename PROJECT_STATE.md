@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-05-09
+2026-05-10
 
 ---
 
@@ -58,9 +58,15 @@
   - Duplicate disabled buttons removed
   - allowed_outputs pass-through fixed with fallback
 - [x] Legacy Manual Analyze hidden by default behind subtle toggle link
+- [x] RentCast address lookup cache — ProviderStatus type + cache metadata fields added to types.ts (PR #38, mirrors backend PR #10)
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
+- [ ] Add minimal GitHub Actions CI
+  - Backend: import/startup check for FastAPI app
+  - Frontend: TypeScript + build check (tsc --noEmit && vite build)
+  - Goal: catch import/type errors before manual PR review
+  - Not urgent, but should be done soon
 
 ### Next Session Goal
 Get the product in front of a real user — zero market contact is the primary risk.
@@ -125,6 +131,7 @@ app/
   services/
     url_service.py             ← Scrapes listing URLs → DraftDeal
     pdf_service.py             ← Generates lender report PDF (ReportLab)
+    rentcast_service.py        ← RentCast enrichment + SQLite cache (30-day TTL, provider_status contract)
     analyze_service.py
     deal_service.py
     scenario_service.py
@@ -132,7 +139,7 @@ app/
   api/
     deals.py
     v1/analyze.py, deals.py, profile.py, scenarios.py
-  db/                          ← SQLite models (deal, user, analysis, scenario, investor_profile)
+  db/                          ← SQLite models (deal, user, analysis, scenario, investor_profile, rentcast_cache)
 main.py                        ← Root entry — older v1 router setup, NOT active
 render.yaml
 requirements.txt
@@ -145,6 +152,8 @@ POST /api/analyze                  ← AnalyzeRequest → AnalyzeResponse (SCHEM
 POST /api/draft-from-url           ← { url } → DraftFromUrlResponse
 POST /api/finalize-and-analyze     ← DraftDeal → AnalyzeResponse (422 if fields missing)
 POST /api/export/lender-report     ← LenderReportRequest → PDF bytes
+POST /api/enrich-address           ← { address } → EnrichAddressResponse (SQLite cache, 30d TTL)
+                                      provider_status: cache_hit | live_success | quota_exhausted | provider_unavailable
 ```
 
 ### Analysis Engine Logic (analysis_engine.py)
@@ -234,6 +243,7 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 | `Strategy` | `"flip"\|"brrrr"\|"wholesale"` | same |
 | `Confidence` | `"HIGH"\|"MEDIUM"\|"LOW"\|"MISSING"` | same |
 | `RehabSeverity` | `"LIGHT"\|"MEDIUM"\|"HEAVY"\|"EXTREME"` | same |
+| `ProviderStatus` | `"cache_hit"\|"live_success"\|"quota_exhausted"\|"provider_unavailable"` | same |
 
 **AnalyzeRequest schema is frozen. Do not modify it.**
 
@@ -243,6 +253,7 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+c5809c2  fix: add ProviderStatus type and cache metadata fields to EnrichAddressResponse (#38)
 0c2a97a  Hide Legacy Manual Analyze section by default
 b744b2a  feat: deal page clarity — max offer, remove duplicate buttons, fix allowed_outputs
 18fe47e  feat: saved deals page clarity
@@ -262,6 +273,7 @@ e307963  Restore UI styles
 
 **Backend:**
 ```
+196502b  fix: add RentCast cache and provider status handling (#10)
 fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 741c4c2  FlipForge backend MVP
 ```
@@ -279,6 +291,7 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - Zillow/Redfin block URL scraping (SOURCE_BLOCKED) — known limitation, not a bug
 - PDF generation must use in-memory bytes in production — disk writes will fail on Render
 - Render free tier cold starts — first request after inactivity may take 50+ seconds
+- No GitHub Actions CI — import/type errors are only caught at review time
 
 ---
 
@@ -339,3 +352,18 @@ Do not make any code changes yet.
 **Important note:**
 - RentCast quota was exhausted during debugging. Do not run more live /api/enrich-address tests unless explicitly approved.
 - Future task: add caching/rate-limit protection for RentCast lookups.
+
+---
+
+## Session 2026-05-10 — RentCast caching / quota protection (types)
+
+**Changes:** `src/lib/types.ts` only. No behavior changes, no UI changes.
+
+- Added `ProviderStatus` union type: `"cache_hit" | "live_success" | "quota_exhausted" | "provider_unavailable"`
+- Added optional fields to `EnrichAddressResponse`: `from_cache`, `cached_at`, `provider_status`, `provider_error`
+- All new fields optional — existing call sites unaffected
+
+**Quota note:**
+RentCast quota is currently exhausted. Do not run live `/api/enrich-address` tests without explicit approval.
+
+**Deploy:** Vercel auto-deploy triggered on main merge (commit c5809c2)
