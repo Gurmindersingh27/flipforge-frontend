@@ -393,7 +393,7 @@ export default function AnalysisResult({ result, meta }: Props) {
 
         {(!canReport || !canScript) && (
           <div className="text-xs text-white/60">
-            <span className="text-white/80">Suppressed:</span>{", "}
+            <span className="text-white/80">Suppressed:</span>{" "}
             {!canReport ? "Lender Report" : ""}
             {!canReport && !canScript ? " • " : ""}
             {!canScript ? "Negotiation Script" : ""}
