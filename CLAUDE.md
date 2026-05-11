@@ -62,6 +62,7 @@ src/
   components/
     ShieldHeader.tsx          # Header component
     RepairBudgetBuilder.tsx   # Repair budget estimator (frontend-only, PR #39)
+                              # Available in: Draft Deal, Resume Deal, Legacy Manual Analyze (PR #41)
   lib/
     api.ts                    # All fetch calls to backend — DO NOT restructure
     types.ts                  # All shared TypeScript types — canonical contract
@@ -191,6 +192,7 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
 
 **Frontend:**
 ```
+3a2b600  fix: show repair budget builder in legacy manual analyzer (#41)
 07654861  feat: result screen deal-memo polish — offer gap callout + verdict rationale (#40)
 a46dda8   Merge pull request #39 — feat: add Repair Budget Builder
 c5809c2   fix: add ProviderStatus type and cache metadata fields to EnrichAddressResponse (#38)

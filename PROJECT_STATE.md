@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-05-10
+2026-05-11
 
 ---
 
@@ -59,12 +59,13 @@
   - allowed_outputs pass-through fixed with fallback
 - [x] Legacy Manual Analyze hidden by default behind subtle toggle link
 - [x] RentCast address lookup cache — ProviderStatus type + cache metadata fields added to types.ts (PR #38, mirrors backend PR #10)
-- [x] Repair Budget Builder — src/components/RepairBudgetBuilder.tsx (PR #39, frontend-only)
+- [x] Repair Budget Builder — src/components/RepairBudgetBuilder.tsx (PR #39, frontend-only; Legacy flow wired in PR #41)
   - 9 repair categories with None/Light/Medium/Heavy levels
   - Bathroom count stepper, sqft-based flooring
   - Low/Mid/High estimates + contingency selector
   - "Use Mid as Rehab Budget" writes into rehab_budget field
-  - Available in Draft Deal / Resume Deal / Legacy Manual Analyze flows
+  - Available in Draft Deal / Resume Deal flows (PR #39)
+  - Available in Legacy Manual Analyze flow (PR #41 — was a documentation/session-note error from PR #39, not a regression)
 - [x] Result screen deal-memo polish — src/AnalysisResult.tsx (PR #40, frontend-only)
   - Offer Gap callout: Overpay Risk (red) / Offer Gap (amber) / Offer Cushion (green)
     comparing meta.purchase_price vs result.max_safe_offer
@@ -72,6 +73,10 @@
   - Optional breakpoint context if deal is fragile
   - Optional first stress-test downgrade line
   - Removed redundant Notes subsection (was showing same content as notes)
+- [x] RepairBudgetBuilder wired into Legacy Manual Analyze (PR #41, src/App.tsx only)
+  - PR #39 session notes incorrectly claimed Legacy flow was wired — it was not
+  - PR #40 (AnalysisResult.tsx) was not involved — not a regression
+  - Fix: one line added inside {showLegacy && ...} after 4-field input grid, wired to setRehabBudget
 
 ### Not Done
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
@@ -269,6 +274,7 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+3a2b600  fix: show repair budget builder in legacy manual analyzer (#41)
 07654861  feat: result screen deal-memo polish — offer gap callout + verdict rationale (#40)
 a46dda8   Merge pull request #39 — feat: add Repair Budget Builder
 c5809c2   fix: add ProviderStatus type and cache metadata fields to EnrichAddressResponse (#38)
@@ -400,6 +406,11 @@ RentCast quota is currently exhausted. Do not run live `/api/enrich-address` tes
 - Collapsed by default; expand via "Build Repair Budget →" link
 - Disclaimer: SE US contractor pricing, 2026, planning tool only
 
+**Documentation error (corrected in PR #41):**
+Session notes for PR #39 incorrectly claimed RepairBudgetBuilder was available in "Legacy Manual Analyze flow."
+The actual PR #39 diff shows it was only added inside `{draft && ...}` (Draft Deal / Resume Deal).
+Legacy flow was wired in PR #41 — not a regression from PR #40.
+
 **Guardrails confirmed:**
 - No backend changes, no AnalyzeRequest changes, no types.ts changes, no analysis_engine.py changes
 
@@ -450,3 +461,35 @@ RentCast quota is currently exhausted. Do not run live `/api/enrich-address` tes
 
 **Build/deploy:** Vercel auto-deploy triggered on main merge (commit 07654861).
 TypeScript verified clean by source review (no local runner in this session environment).
+
+---
+
+## Session 2026-05-11 — Wire RepairBudgetBuilder into Legacy Manual Analyze
+
+**Branch:** `claude/legacy-rehab-builder`
+**PR:** #41 (merged)
+**Merge commit:** `3a2b600`
+**Changed file:** `src/App.tsx` only
+
+**Issue diagnosed:** RepairBudgetBuilder was not visible in Manual Analyze Legacy flow on live app.
+
+**Root cause:** Documentation/session-note error from PR #39. PR #39's actual diff shows only two lines
+added to App.tsx: the import, and `<RepairBudgetBuilder>` inside `{draft && ...}` only. The Legacy
+`{showLegacy && ...}` section was never touched. PR #40 (AnalysisResult.tsx only) was not involved
+— this was not a regression.
+
+**Fix:** One line added to `src/App.tsx` inside `{showLegacy && (...)}` block:
+```tsx
+<RepairBudgetBuilder onApply={(mid) => setRehabBudget(mid)} />
+```
+Placed after the 4-field input grid, before `{FinancingAssumptions}`, wired to existing `setRehabBudget`.
+
+**Guardrails confirmed:**
+- No backend changes
+- No schema changes
+- No analysis_engine.py changes
+- No api.ts / types.ts changes
+- No AnalysisResult.tsx changes
+- No RepairBudgetBuilder.tsx changes
+- Draft/Resume flow unchanged
+- Stale branch `claude/review-flipforge-docs-Sdr3P` was NOT merged
