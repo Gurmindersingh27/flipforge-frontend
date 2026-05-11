@@ -10,7 +10,11 @@
 
 ## 1. Current Phase & Progress
 
-**Current phase:** Result screen deal-memo polish shipped. Product feels investor-grade. Ready for first real user.
+**Current phase:** Result screen deal-memo polish shipped. Input and output credibility both improved. Product feels investor-grade. Ready for first real user.
+
+**Current product state:**
+- Input credibility: Repair Budget Builder visible in all three flows (Draft Deal, Resume Deal, Legacy Manual Analyze).
+- Output credibility: Result screen calls out whether user is over/near/under Max Safe Offer. "Why this verdict" uses backend notes. Screen reads like an investor decision memo, not a generic dashboard.
 
 ### Done
 - [x] Backend Day 1 complete — DraftDeal, DataPoint/Confidence models built
@@ -69,25 +73,39 @@
 - [x] Result screen deal-memo polish — src/AnalysisResult.tsx (PR #40, frontend-only)
   - Offer Gap callout: Overpay Risk (red) / Offer Gap (amber) / Offer Cushion (green)
     comparing meta.purchase_price vs result.max_safe_offer
+  - Callout renders in all flows including Legacy Manual Analyze
+    (pdfMeta.purchase_price is populated from purchasePrice state even without a draft)
   - "Why this verdict" now uses backend result.notes as primary bullets
   - Optional breakpoint context if deal is fragile
   - Optional first stress-test downgrade line
   - Removed redundant Notes subsection (was showing same content as notes)
+  - Live QA confirmed: Offer Cushion state renders correctly in Legacy Manual Analyze flow
 - [x] RepairBudgetBuilder wired into Legacy Manual Analyze (PR #41, src/App.tsx only)
   - PR #39 session notes incorrectly claimed Legacy flow was wired — it was not
   - PR #40 (AnalysisResult.tsx) was not involved — not a regression
   - Fix: one line added inside {showLegacy && ...} after 4-field input grid, wired to setRehabBudget
+  - Live QA confirmed: RepairBudgetBuilder visible in Manual Analyze Legacy
+  - Live QA confirmed: result screen still renders after Analyze Deal
 
 ### Not Done
+- [ ] Visual QA: all three Offer Gap callout states (next session priority)
+  - Red Overpay Risk — purchase price above Max Safe Offer
+  - Amber Offer Gap — purchase price within $5k of Max Safe Offer
+  - Green Offer Cushion — purchase price below Max Safe Offer
+- [ ] Make strongest deal-killer / stress-test breakpoint more headline-level
+- [ ] Improve copyable investor summary (future polish)
+- [ ] PDF lender report — future monetizable wedge, do not start yet
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
 - [ ] Add minimal GitHub Actions CI
   - Backend: import/startup check for FastAPI app
   - Frontend: TypeScript + build check (tsc --noEmit && vite build)
   - Goal: catch import/type errors before manual PR review
   - Not urgent, but should be done soon
+- [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion yet
 
 ### Next Session Goal
-Get the product in front of a real user — zero market contact is the primary risk.
+Visual QA across all three Offer Gap callout states. Do not start new features until QA is complete.
+After QA: make the strongest deal-killer / stress-test breakpoint more headline-level.
 
 ---
 
@@ -108,7 +126,8 @@ FlipForge is a risk-first real estate deal underwriting tool for serious investo
 - Net profit, ROI, profit margin
 - Flip / BRRRR / Wholesale scores and verdicts (BUY / CONDITIONAL / PASS)
 - Max Safe Offer (MAO)
-- Offer Gap callout comparing offer vs MAO (Overpay Risk / Offer Gap / Offer Cushion)
+- Offer Gap callout comparing offer vs MAO (Overpay Risk / Offer Gap / Offer Cushion) — renders in all flows
+- Repair Budget Builder — line-item rehab estimator, available in all flows
 - Rehab Reality classification (LIGHT / MEDIUM / HEAVY / EXTREME)
 - Stress test scenarios (ARV -5%, ARV -10%, Rehab +15%, Hold +2mo)
 - Risk flags with severity levels
@@ -216,7 +235,7 @@ src/
   AnalysisResult.tsx          ← Deal analysis results display (Offer Gap callout, verdict rationale)
   components/
     ShieldHeader.tsx          ← Header component
-    RepairBudgetBuilder.tsx   ← Repair budget estimator (PR #39, frontend-only)
+    RepairBudgetBuilder.tsx   ← Repair budget estimator (PR #39+#41, all three flows)
   lib/
     api.ts                    ← ALL fetch calls to backend
     types.ts                  ← ALL TypeScript types (canonical contract)
@@ -274,6 +293,7 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+b2d2307  docs: update PROJECT_STATE and CLAUDE.md after PR #41 merge
 3a2b600  fix: show repair budget builder in legacy manual analyzer (#41)
 07654861  feat: result screen deal-memo polish — offer gap callout + verdict rationale (#40)
 a46dda8   Merge pull request #39 — feat: add Repair Budget Builder
@@ -310,7 +330,9 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - PDF generation must use in-memory bytes in production — disk writes will fail on Render
 - Render free tier cold starts — first request after inactivity may take 50+ seconds
 - No GitHub Actions CI — import/type errors are only caught at review time
-- Offer Gap callout is silent in legacy Manual Analyze path (no meta.purchase_price passed) — by design
+- Offer Gap callout renders in Legacy Manual Analyze flow (pdfMeta.purchase_price is populated
+  from the purchasePrice state default even without a draft). PR #40 description claiming it was
+  a "silent no-op" in legacy path was incorrect. Live QA confirmed it renders there.
 
 ---
 
@@ -428,12 +450,14 @@ Legacy flow was wired in PR #41 — not a regression from PR #40.
 1. **Offer Gap callout** — new section between Key Numbers card and Verdict card
    - Compares `meta.purchase_price` (passed from App.tsx `pdfMeta`) vs `result.max_safe_offer`
    - Three states:
-     - Overpay Risk (red border/bg): `purchase_price > max_safe_offer`
+     - Overpay Risk (red): `purchase_price > max_safe_offer`
        - ≥ $15k over: "limited room for ARV or rehab misses"
        - < $15k over: "leaves little margin for error"
      - Offer Gap (amber): within $5k under max_safe_offer
      - Offer Cushion (green): more than $5k under max_safe_offer
-   - Silent no-op when `meta.purchase_price` is absent (legacy Manual Analyze path)
+   - Renders in all flows — pdfMeta.purchase_price is populated from purchasePrice state even
+     in legacy flow (defaults to 120000). PR #40 description claiming "silent no-op in legacy
+     path" was incorrect. Live QA confirmed Offer Cushion renders correctly in Legacy flow.
 
 2. **Verdict rationale** — "Why this verdict" section rebuilt
    - `result.notes` (from backend `build_notes()`) used as primary bullets — human-readable, already specific
@@ -484,6 +508,10 @@ added to App.tsx: the import, and `<RepairBudgetBuilder>` inside `{draft && ...}
 ```
 Placed after the 4-field input grid, before `{FinancingAssumptions}`, wired to existing `setRehabBudget`.
 
+**Live QA confirmed:**
+- RepairBudgetBuilder is visible in Manual Analyze Legacy
+- Result screen still renders correctly after Analyze Deal
+
 **Guardrails confirmed:**
 - No backend changes
 - No schema changes
@@ -493,3 +521,4 @@ Placed after the 4-field input grid, before `{FinancingAssumptions}`, wired to e
 - No RepairBudgetBuilder.tsx changes
 - Draft/Resume flow unchanged
 - Stale branch `claude/review-flipforge-docs-Sdr3P` was NOT merged
+- No RentCast calls
