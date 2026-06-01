@@ -4,13 +4,13 @@
 ---
 
 ## Last Updated
-2026-05-11
+2026-06-01
 
 ---
 
 ## 1. Current Phase & Progress
 
-**Current phase:** Result screen deal-memo polish shipped. Input and output credibility both improved. Product feels investor-grade. Ready for first real user.
+**Current phase:** Offer Gap visual QA complete across all three states. Backend verdict gate fix merged and confirmed live. Product is investor-grade and ready for demo decision.
 
 **Current product state:**
 - Input credibility: Repair Budget Builder visible in all three flows (Draft Deal, Resume Deal, Legacy Manual Analyze).
@@ -86,12 +86,17 @@
   - Fix: one line added inside {showLegacy && ...} after 4-field input grid, wired to setRehabBudget
   - Live QA confirmed: RepairBudgetBuilder visible in Manual Analyze Legacy
   - Live QA confirmed: result screen still renders after Analyze Deal
+- [x] Verdict gate fix — backend PR #11 (merged, live), app/analysis_engine.py only
+  - overall_verdict hard-fails to PASS when net_profit <= 0 AND purchase_price > max_safe_offer
+  - Fixes live QA mismatch: negative-profit overpay deal was showing CONDITIONAL while notes said PASS
+  - No frontend changes, no schema/model/route changes, no BRRRR scoring redesign
+  - Individual strategy verdicts unchanged
+- [x] Offer Gap visual QA — all three states confirmed in production (2026-06-01)
+  - Red Overpay Risk ✅ (purchase_price 220000 / ARV 300000 / rehab 50000 — after PR #11 fix)
+  - Amber Tight Offer ✅ (purchase_price 176000 / ARV 300000 / rehab 50000)
+  - Green Offer Cushion ✅ (purchase_price 160000 / ARV 300000 / rehab 50000)
 
 ### Not Done
-- [ ] Visual QA: all three Offer Gap callout states (next session priority)
-  - Red Overpay Risk — purchase price above Max Safe Offer
-  - Amber Offer Gap — purchase price within $5k of Max Safe Offer
-  - Green Offer Cushion — purchase price below Max Safe Offer
 - [ ] Make strongest deal-killer / stress-test breakpoint more headline-level
 - [ ] Improve copyable investor summary (future polish)
 - [ ] PDF lender report — future monetizable wedge, do not start yet
@@ -104,8 +109,8 @@
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion yet
 
 ### Next Session Goal
-Visual QA across all three Offer Gap callout states. Do not start new features until QA is complete.
-After QA: make the strongest deal-killer / stress-test breakpoint more headline-level.
+Offer Gap QA is complete. Decide whether the product is ready for a soft demo to hard-money lenders / investors, or whether one small polish pass is needed first.
+After that decision: make the strongest deal-killer / stress-test breakpoint more headline-level.
 
 ---
 
@@ -311,6 +316,9 @@ e307963   Restore UI styles
 
 **Backend:**
 ```
+1aec418  docs: session closeout 2026-06-01 — verdict gate fix (backend PR #11)
+2a6d8b0  fix: hard-fail overall_verdict to PASS when net_profit <= 0 and purchase_price > max_safe_offer (#11)
+036f36e  docs: session closeout 2026-05-10 — deal-memo polish (frontend-only)
 196502b  fix: add RentCast cache and provider status handling (#10)
 fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 741c4c2  FlipForge backend MVP
@@ -522,3 +530,34 @@ Placed after the 4-field input grid, before `{FinancingAssumptions}`, wired to e
 - Draft/Resume flow unchanged
 - Stale branch `claude/review-flipforge-docs-Sdr3P` was NOT merged
 - No RentCast calls
+
+---
+
+## Session 2026-06-01 — Offer Gap visual QA closeout
+
+**QA completed in production. All three Offer Gap states confirmed.**
+
+**Backend change required (PR #11, merged and live):**
+- `app/analysis_engine.py` only — `overall_verdict` hard-fails to PASS when `net_profit <= 0` AND `purchase_price > max_safe_offer`
+- No frontend changes, no schema/model/route changes, no BRRRR scoring redesign
+- Individual strategy verdicts (`flip_verdict`, `brrrr_verdict`, `wholesale_verdict`) unchanged
+
+**QA results:**
+
+1. **Red Overpay Risk** ✅
+   - Input: purchase_price 220000 / ARV 300000 / rehab 50000 / rent 1800 / holding 6 / interest 12% / LTC 90%
+   - Initial run exposed verdict mismatch: `overall_verdict = CONDITIONAL` while notes said "PASS unless terms change"
+   - Root cause: BRRRR score (59) clears CONDITIONAL threshold via rent-to-cost boost; no net_profit gate existed
+   - Backend PR #11 added hard gate in `analyze_deal()`
+   - Retest passed: top verdict PASS ✅, red Overpay Risk card rendered ✅, narrative agrees ✅, Integrity Gate suppresses Lender Report and Negotiation Script ✅
+
+2. **Amber Tight Offer** ✅
+   - Input: purchase_price 176000 / ARV 300000 / rehab 50000 / rent 1800 / holding 6 / interest 12% / LTC 90%
+   - Offer Gap card shown in amber ✅
+   - Message: within ~$2,200 of Max Safe Offer; deal may work only if ARV and rehab assumptions hold ✅
+
+3. **Green Offer Cushion** ✅
+   - Input: purchase_price 160000 / ARV 300000 / rehab 50000 / rent 1800 / holding 6 / interest 12% / LTC 90%
+   - Offer Cushion card shown in green ✅
+   - Message: ~$18,200 under Max Safe Offer ✅
+   - Lender Report and Negotiation Script remain available ✅
