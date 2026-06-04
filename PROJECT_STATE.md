@@ -23,12 +23,12 @@
 6. User decides whether to offer, negotiate, verify, or walk away.
 
 **Current product state:**
-- Photo Rehab Analyzer v1 is built and deployed (backend PR #13, frontend PR #42).
-- Live browser QA not yet complete — next session is QA only.
+- Photo Rehab Analyzer v1 is built, deployed, and QA-verified in production (backend PR #13, frontend PR #42).
+- Live browser QA complete — core loop validated end-to-end in production.
+- Live Anthropic vision call confirmed working in production (provider_status: live_success).
 - Repair Budget Builder available in all three flows.
 - Offer Gap callout, verdict rationale, and stress tests render in all flows.
 - Verdict and narrative agree (hard-fail fix from backend PR #11).
-- Real Anthropic vision call has not yet been manually QA'd in browser.
 
 ### Done
 - [x] Backend Day 1 complete — DraftDeal, DataPoint/Confidence models built
@@ -95,12 +95,16 @@
   - "Use Mid as Rehab Budget" applies result.totals.mid (post-contingency, not subtotal_mid)
   - provider_status handled: live_success (normal), dev_stub (amber warning), ai_not_configured (red warning), ai_error (red warning)
   - npm run build passes cleanly. No new dependencies.
+- [x] Photo Rehab Analyzer live browser QA — COMPLETE (2026-06-04)
+  - Manual Analyze Legacy flow: 1 photo uploaded, live_success, estimate displayed, mid applied, Analyze Deal ran successfully
+  - Draft/Resume flow: URL draft opened, photo uploaded, live_success, mid applied into draft rehab_budget, Finalize & Analyze ran successfully
+  - Invalid upload: PDF blocked at file-picker, 12 photos triggered frontend validation ("Maximum 8 photos. You selected 12.")
+  - Oversized file not tested (no >3MB test file available — not a blocker)
+  - Core loop validated: upload photo → estimate rehab → apply mid → run underwriting
 
 ### Not Done / Blocked
-- [ ] **Photo Rehab Analyzer live browser QA — MUST COMPLETE BEFORE NEXT FEATURE**
-  - Real Anthropic vision call not yet QA'd in browser
-  - See Next Session Goal below for full QA checklist
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
+  - Note: code in app/main.py is already tightened to Vercel domain; CLAUDE.md docs are stale on this point
 - [ ] Add minimal GitHub Actions CI
   - Frontend: TypeScript + build check (tsc --noEmit && vite build)
   - Backend: import/startup check for FastAPI app
@@ -108,28 +112,16 @@
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Photo Rehab Analyzer QA + Deploy Verification**
+**Scope Deal Killer Summary (no implementation yet)**
 
-Goal: Verify the live loop — upload photo → get rehab estimate → apply mid rehab → run deal analysis
+Goal: Agree on scope, layout, and data sources for the Deal Killer Summary before writing any code.
 
-QA checklist:
-- [ ] Confirm frontend production/Vercel deploy succeeds (PR #42 merged)
-- [ ] Confirm backend health endpoint works: GET /api/health → {"status":"ok"}
-- [ ] Confirm PHOTO_REHAB_DEV_STUB is NOT set in Render production
-- [ ] Confirm ANTHROPIC_API_KEY is set in Render (without revealing value)
-- [ ] Confirm ANTHROPIC_MODEL is claude-sonnet-4-5
-- [ ] Upload 1-2 small real property photos
-- [ ] Confirm provider_status is live_success
-- [ ] Confirm rehab estimate displays (condition badge, cost totals, contingency)
-- [ ] Confirm missing_photo_warnings display
-- [ ] Confirm risk_flags display
-- [ ] Confirm disclaimer displays
-- [ ] Confirm "Use Mid as Rehab Budget" updates the rehab budget field
-- [ ] Confirm running analysis uses the applied rehab budget
-- [ ] Test both Draft/Resume flow and Legacy Manual Analyze flow
-- [ ] Test invalid upload cases: too many photos, file over 3MB, unsupported file type
+- What kills this specific deal? (asking price above MAO, rehab too high, ARV too sensitive, unknown major systems, stress test failure)
+- Where does it appear in the result screen?
+- Which existing backend fields power it? (max_safe_offer, net_profit, risk_flags, stress_tests, breakpoints)
+- Does it require any new backend fields or just frontend logic?
 
-Do not start the next feature until this QA checklist passes.
+No implementation is approved yet. Scope first, then get PM approval before writing code.
 
 ---
 
@@ -383,13 +375,17 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - Root `main.py` (backend) is an older v1 router setup — active app is `app/main.py`
 - `app/core/analysis_engine.py` exists alongside `app/analysis_engine.py` — confirm which is imported before editing either
 - `app/core/config.py` imports pydantic-settings but is dead code — not in active import chain
-- CORS is wide open (`*`) — needs tightening to Vercel domain before production hardening
+- CORS: `app/main.py` is already tightened to Vercel domain; CLAUDE.md docs say `*` but the code is correct — docs are stale
 - Zillow/Redfin block URL scraping (SOURCE_BLOCKED) — known limitation, not a bug
 - PDF generation must use in-memory bytes in production — disk writes will fail on Render
 - Render free tier cold starts — first request after inactivity may take 50+ seconds
 - No GitHub Actions CI — import/type errors are only caught at review time
 - RentCast quota may be exhausted — do not run live /api/enrich-address without explicit approval
-- **Photo Rehab Analyzer — real Anthropic call not yet manually QA'd in browser**
+- **Photo Rehab Analyzer — estimate variability observed across repeated calls on same image**
+  - Same photo produced Medium vs Heavy classifications across calls
+  - Mid estimate range observed ~$24K–$52K on the same image
+  - Root cause: non-deterministic LLM classification without temperature=0 enforcement
+  - Not a current blocker; flagged for future prompt/consistency tuning
 - **Photo Rehab Analyzer — API cost exists per photo analysis call (Anthropic charges per token)**
 - **Photo Rehab Analyzer — cold start + AI call may be slow on first request (50s cold start + AI processing)**
 - **Photo Rehab Analyzer — results are AI-assisted planning estimates, not contractor bids**
@@ -399,9 +395,9 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 
 ## 9. Feature Backlog
 
-**Do not start any of these until Photo Rehab Analyzer live QA passes.**
+**Photo Rehab Analyzer live QA is complete. Next feature requires PM scope approval before any code.**
 
-### Next Features To Add After Photo Rehab QA
+### Next Features To Add (in priority order)
 
 **Priority 1 — Deal Killer Summary**
 - Prominent top-of-results section in plain English.
@@ -418,8 +414,8 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 
 **Priority 4 — Lender / Investor Report Polish**
 - Make PDF/report feel lender-grade with better visual hierarchy.
-- Include photo rehab summary once live QA confirms it works.
-- Include deal killer summary and action plan later.
+- Include photo rehab summary (QA confirmed — ready to include).
+- Include deal killer summary and action plan once built.
 
 **Priority 5 — Comps / ARV Confidence Engine**
 - Data-agnostic comp analysis, ARV bands (low/mid/high), confidence scoring, outlier handling.
@@ -455,7 +451,7 @@ Real estate only for now.
 - No AIM build.
 - No marketplace build.
 - No learning brain build.
-- No new major feature until live Photo Rehab QA passes.
+- No new feature implementation without explicit PM scope approval.
 
 ---
 
@@ -578,3 +574,38 @@ All three Offer Gap callout states verified in production after backend PR #11 a
 - API cost per photo analysis call
 - Cold start + AI processing may be slow on first request
 - Results are planning estimates, not contractor bids
+
+---
+
+## Production QA — Photo Rehab Analyzer (completed 2026-06-04)
+
+**Result: PASS — core product loop validated end-to-end in production.**
+
+**Manual Analyze Legacy flow:**
+- 1 real property photo uploaded via https://flipforge-frontend.vercel.app
+- provider_status: live_success (confirmed — real Anthropic vision call)
+- Rehab estimate returned: overall condition, confidence score, low/mid/high totals, contingency %, missing photo warnings, risk flags, disclaimer
+- "Use Mid as Rehab Budget" applied mid value into rehab_budget field
+- Analyze Deal ran successfully using the applied rehab budget
+
+**Draft/Resume flow:**
+- URL draft flow opened
+- Photo Rehab Analyzer appeared in draft flow
+- 1 real property photo uploaded
+- provider_status: live_success
+- Mid rehab value applied into draft rehab_budget DataPoint field
+- Finalize & Analyze ran successfully afterward
+
+**Invalid upload checks:**
+- PDF file: blocked at file-picker level (browser MIME filter)
+- 12 photos: frontend validation triggered — "Maximum 8 photos. You selected 12."
+- Oversized file: not tested — no >3MB test file available (not a blocker)
+
+**Observation — estimate variability:**
+- Same photo produced different condition classifications across calls (Medium vs Heavy)
+- Mid estimate range ~$24K–$52K observed on the same image across calls
+- Non-deterministic LLM behavior without temperature=0 enforcement
+- Flagged for future tuning — not a current blocker
+
+**QA conclusion:** Core loop is production-ready. Feature is ready for demo.
+**Next step:** Scope Deal Killer Summary before any implementation.
