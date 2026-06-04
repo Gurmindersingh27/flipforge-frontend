@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AnalyzeResponse } from "./lib/types";
 import { generateNegotiationScript } from "./lib/api";
+import DealKillerSummary from "./components/DealKillerSummary";
 
 interface Props {
   result: AnalyzeResponse;
@@ -270,6 +271,12 @@ export default function AnalysisResult({ result, meta }: Props) {
 
       {/* Offer Gap callout — only renders when purchase_price is known via meta */}
       {offerGapBlock}
+
+      <DealKillerSummary
+        result={result}
+        purchasePrice={purchasePriceMeta}
+        photoRehabMid={typeof meta?.photo_rehab_mid === "number" ? meta.photo_rehab_mid : null}
+      />
 
       {/* 1. Verdict card */}
       <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
