@@ -29,6 +29,7 @@
 - Repair Budget Builder available in all three flows.
 - Offer Gap callout, verdict rationale, and stress tests render in all flows.
 - Verdict and narrative agree (hard-fail fix from backend PR #11).
+- Deal Killer Summary v1 merged (frontend PR #45) — awaiting visual QA in production.
 
 ### Done
 - [x] Backend Day 1 complete — DraftDeal, DataPoint/Confidence models built
@@ -96,6 +97,17 @@
   - provider_status handled: live_success (normal), dev_stub (amber warning), ai_not_configured (red warning), ai_error (red warning)
   - npm run build passes cleanly. No new dependencies.
 - [x] Photo Rehab Analyzer live browser QA — COMPLETE (2026-06-04)
+- [x] Deal Killer Summary v1 — frontend PR #45 (merged, commits c213c1b + b96c13f)
+  - New component: src/components/DealKillerSummary.tsx
+  - Renders in src/AnalysisResult.tsx between Offer Gap callout and Verdict card
+  - Up to 3 plain-English bullets — priority: overpay, negative profit, thin margin, stress test downgrade, risk flags, low confidence, photo rehab uncertainty
+  - Title by verdict: PASS → "What Kills This Deal" / CONDITIONAL → "What Makes This Risky" / BUY → "What Could Still Go Wrong"
+  - Returns null on clean BUY with no qualifying issues
+  - Uses existing AnalyzeResponse fields only: overall_verdict, max_safe_offer, net_profit, profit_pct, confidence_score, risk_flags, typed_flags, stress_tests, purchase_price via existing meta
+  - No backend changes. No schema changes. No App.tsx changes. No analysis_engine.py changes. No RentCast or Anthropic calls.
+  - Photo rehab mid threading deferred: PhotoRehabAnalysisResponse state lives inside PhotoRehabAnalyzer.tsx and is not lifted to App.tsx — Priority 7 bullet will not fire until state lift is approved
+  - Build passed cleanly (110 modules).
+  - Visual QA not yet done.
   - Manual Analyze Legacy flow: 1 photo uploaded, live_success, estimate displayed, mid applied, Analyze Deal ran successfully
   - Draft/Resume flow: URL draft opened, photo uploaded, live_success, mid applied into draft rehab_budget, Finalize & Analyze ran successfully
   - Invalid upload: PDF blocked at file-picker, 12 photos triggered frontend validation ("Maximum 8 photos. You selected 12.")
@@ -112,16 +124,12 @@
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Scope Deal Killer Summary (no implementation yet)**
+**Deal Killer Summary visual QA in production/preview**
 
-Goal: Agree on scope, layout, and data sources for the Deal Killer Summary before writing any code.
-
-- What kills this specific deal? (asking price above MAO, rehab too high, ARV too sensitive, unknown major systems, stress test failure)
-- Where does it appear in the result screen?
-- Which existing backend fields power it? (max_safe_offer, net_profit, risk_flags, stress_tests, breakpoints)
-- Does it require any new backend fields or just frontend logic?
-
-No implementation is approved yet. Scope first, then get PM approval before writing code.
+- Test PASS, CONDITIONAL, and BUY verdict cases
+- Check spacing and mobile layout
+- Confirm bullets are accurate and readable for each verdict path
+- Only after QA passes: mark Deal Killer Summary as visually confirmed and update docs
 
 ---
 
@@ -275,6 +283,7 @@ src/
     ShieldHeader.tsx             ← Header component
     RepairBudgetBuilder.tsx      ← Manual repair budget estimator (PR #39+#41, all three flows)
     PhotoRehabAnalyzer.tsx       ← Photo rehab analyzer (PR #42, all three flows)
+    DealKillerSummary.tsx        ← Deal Killer Summary (PR #45, frontend-only)
   lib/
     api.ts                       ← ALL fetch calls to backend
     types.ts                     ← ALL TypeScript types (canonical contract)
@@ -345,6 +354,8 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+b96c13f  chore: replace em dashes with ASCII hyphens in comments (PR #45)
+c213c1b  feat: add Deal Killer Summary v1 to result screen (PR #45)
 370f5f2  feat: add photo rehab analyzer frontend (PR #42)
 cb3444d  docs: session closeout 2026-05-11 — correct known-issues and capture QA results
 b2d2307  docs: update PROJECT_STATE and CLAUDE.md after PR #41 merge
@@ -399,10 +410,11 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 
 ### Next Features To Add (in priority order)
 
-**Priority 1 — Deal Killer Summary**
-- Prominent top-of-results section in plain English.
-- Explains what kills this specific deal (asking price above MAO, rehab too high, ARV too sensitive, unknown major systems, stress test failure).
-- Makes the result feel like an investor memo, not a dashboard.
+**Priority 1 — Deal Killer Summary** *(merged PR #45 — awaiting visual QA)*
+- Shipped frontend-only in src/components/DealKillerSummary.tsx.
+- Renders between Offer Gap callout and Verdict card.
+- Visual QA (PASS / CONDITIONAL / BUY cases, spacing, mobile) is the next session goal before marking complete.
+- Photo rehab mid threading (Priority 7 bullet) deferred — requires state lift from PhotoRehabAnalyzer into App.tsx.
 
 **Priority 2 — Investor Action Plan**
 - After each analysis, show next steps tailored to the result.
@@ -609,3 +621,19 @@ All three Offer Gap callout states verified in production after backend PR #11 a
 
 **QA conclusion:** Core loop is production-ready. Feature is ready for demo.
 **Next step:** Scope Deal Killer Summary before any implementation.
+
+---
+
+## Session 2026-06-04 — Deal Killer Summary v1
+
+**Frontend PR:** #45 (merged, commits c213c1b + b96c13f)
+
+- New component: src/components/DealKillerSummary.tsx (frontend-only)
+- Updated: src/AnalysisResult.tsx — import added, component placed between Offer Gap callout and Verdict card
+- Up to 3 plain-English kill-reason bullets, title adapts by verdict
+- Uses existing AnalyzeResponse fields only — no new API, no schema change, no backend change, no App.tsx change
+- Fields used: overall_verdict, max_safe_offer, net_profit, profit_pct, confidence_score, risk_flags, typed_flags, stress_tests, purchase_price (via existing meta)
+- Priority 7 (photo rehab uncertainty) wired but deferred: PhotoRehabAnalysisResponse state is internal to PhotoRehabAnalyzer.tsx and not available in App.tsx without a state lift
+- Build: passed cleanly (110 modules, no errors)
+- Unicode cleanup: 7 em dashes in comments replaced with ASCII hyphens (commit b96c13f) to clear GitHub Unicode warning
+- Visual QA: NOT YET DONE — next session goal
