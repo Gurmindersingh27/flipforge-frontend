@@ -15,7 +15,7 @@ function verdictRank(v: Verdict | string): number {
 export default function DealKillerSummary({ result, purchasePrice, photoRehabMid }: Props) {
   const bullets: string[] = [];
 
-  // Priority 1 — purchase price above max safe offer
+  // Priority 1 - purchase price above max safe offer
   if (
     purchasePrice !== null &&
     purchasePrice > 0 &&
@@ -29,19 +29,19 @@ export default function DealKillerSummary({ result, purchasePrice, photoRehabMid
     );
   }
 
-  // Priority 2 — negative net profit
+  // Priority 2 - negative net profit
   if (bullets.length < 3 && result.net_profit <= 0) {
     const loss = Math.abs(result.net_profit).toLocaleString();
     bullets.push(`This deal loses money. Net profit is -$${loss} at current assumptions.`);
   }
 
-  // Priority 3 — thin profit margin (below 15%)
+  // Priority 3 - thin profit margin (below 15%)
   if (bullets.length < 3 && result.net_profit > 0 && result.profit_pct < 0.15) {
     const pct = (result.profit_pct * 100).toFixed(1);
     bullets.push(`Profit margin is thin at ${pct}%. Below 15% leaves no room for surprises.`);
   }
 
-  // Priority 4 — stress test downgrade
+  // Priority 4 - stress test downgrade
   if (bullets.length < 3 && result.stress_tests?.length > 0) {
     const baseVerdict = result.stress_tests[0].verdict;
     const baseRank = verdictRank(baseVerdict);
@@ -55,7 +55,7 @@ export default function DealKillerSummary({ result, purchasePrice, photoRehabMid
     }
   }
 
-  // Priority 5 — critical or moderate risk flags
+  // Priority 5 - critical or moderate risk flags
   if (bullets.length < 3) {
     const critOrMod = result.typed_flags?.find(
       (f) => f.severity === "critical" || f.severity === "moderate"
@@ -67,14 +67,14 @@ export default function DealKillerSummary({ result, purchasePrice, photoRehabMid
     }
   }
 
-  // Priority 6 — low confidence
+  // Priority 6 - low confidence
   if (bullets.length < 3 && result.confidence_score < 60) {
     bullets.push(
       `Confidence is low at ${result.confidence_score}/100. Key assumptions are unverified.`
     );
   }
 
-  // Priority 7 — photo rehab uncertainty
+  // Priority 7 - photo rehab uncertainty
   if (bullets.length < 3 && photoRehabMid != null && photoRehabMid > 0) {
     const mid = photoRehabMid.toLocaleString();
     bullets.push(
