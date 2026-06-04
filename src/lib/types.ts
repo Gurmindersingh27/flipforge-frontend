@@ -229,3 +229,59 @@ export interface EnrichAddressResponse {
   provider_status?: ProviderStatus;
   provider_error?: string | null;
 }
+
+// =========================================================
+// Photo Rehab Analyzer
+// =========================================================
+
+export type PhotoRehabCondition = "light" | "medium" | "heavy" | "unknown";
+export type PhotoRehabProviderStatus = "live_success" | "ai_not_configured" | "ai_error" | "dev_stub";
+
+export interface RoomFinding {
+  area_name: string;
+  detected_condition: string;
+  visible_issues: string[];
+  confidence: string;
+  notes?: string | null;
+}
+
+export interface RehabItem {
+  category: string;
+  severity: string;
+  low: number;
+  mid: number;
+  high: number;
+  reasoning: string;
+  confidence: string;
+}
+
+export interface PhotoRehabRiskFlag {
+  label: string;
+  severity: string;
+  explanation: string;
+}
+
+export interface PhotoRehabTotals {
+  low: number;
+  mid: number;
+  high: number;
+  contingency_pct: number;
+  subtotal_low: number;
+  subtotal_mid: number;
+  subtotal_high: number;
+}
+
+export interface PhotoRehabAnalysisResponse {
+  overall_condition: PhotoRehabCondition;
+  confidence_score: number;
+  summary: string;
+  rooms: RoomFinding[];
+  rehab_items: RehabItem[];
+  totals: PhotoRehabTotals;
+  risk_flags: PhotoRehabRiskFlag[];
+  missing_photo_warnings: string[];
+  notes: string[];
+  photos_analyzed: number;
+  disclaimer: string;
+  provider_status: PhotoRehabProviderStatus;
+}

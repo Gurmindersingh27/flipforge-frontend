@@ -6,6 +6,7 @@ import type {
   EnrichAddressResponse,
   NegotiationScriptRequest,
   NegotiationScriptResponse,
+  PhotoRehabAnalysisResponse,
   SaveDealRequest,
   SavedDeal,
 } from "./types";
@@ -219,6 +220,44 @@ export async function getDeal(id: number, token: string): Promise<SavedDeal> {
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Get deal error ${res.status}: ${text || "(no body)"}`);
+  }
+
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Address enrichment — RentCast passthrough
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Photo Rehab Analyzer — multipart/form-data (no manual Content-Type)
+// ---------------------------------------------------------------------------
+
+export async function analyzePhotosForRehab(params: {
+  photos: File[];
+  sqft?: number;
+  region?: string;
+  property_type?: string;
+  user_notes?: string;
+}): Promise<PhotoRehabAnalysisResponse> {
+  const formData = new FormData();
+  for (const photo of params.photos) {
+    formData.append("photos", photo);
+  }
+  if (params.sqft != null) formData.append("sqft", String(params.sqft));
+  if (params.region) formData.append("region", params.region);
+  if (params.property_type) formData.append("property_type", params.property_type);
+  if (params.user_notes) formData.append("user_notes", params.user_notes);
+
+  const res = await fetchWithTimeout(
+    `${API_BASE_URL}/api/photo-rehab-analysis`,
+    { method: "POST", body: formData },
+    120_000,
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Photo rehab error ${res.status}: ${text || "(no body)"}`);
   }
 
   return res.json();
