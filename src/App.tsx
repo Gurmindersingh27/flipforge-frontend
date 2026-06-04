@@ -6,6 +6,7 @@ import ShieldHeader from "./components/ShieldHeader";
 import DealsPage from "./components/DealsPage";
 import DealPage from "./components/DealPage";
 import RepairBudgetBuilder from "./components/RepairBudgetBuilder";
+import PhotoRehabAnalyzer from "./components/PhotoRehabAnalyzer";
 import { analyzeDeal, draftFromUrl, enrichAddress, finalizeAndAnalyze, saveDeal } from "./lib/api";
 import type {
   AnalyzeRequest,
@@ -836,6 +837,8 @@ function AnalyzerPage() {
 
               <RepairBudgetBuilder onApply={(v) => setDraftDpNumber("rehab_budget", v)} />
 
+              <PhotoRehabAnalyzer onApply={(v) => setDraftDpNumber("rehab_budget", v)} />
+
               {/* Assumptions — editable in draft flow */}
               <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4">
                 <div className="text-xs uppercase tracking-wide text-white/60">
@@ -1015,6 +1018,8 @@ function AnalyzerPage() {
           </div>
 
           <RepairBudgetBuilder onApply={(mid) => setRehabBudget(mid)} />
+
+          <PhotoRehabAnalyzer onApply={(mid) => setRehabBudget(mid)} />
 
           {FinancingAssumptions}
 
