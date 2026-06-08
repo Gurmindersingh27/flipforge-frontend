@@ -138,11 +138,16 @@
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Next feature — requires PM scope approval before any code**
+**Verdict Credibility Badge Modifier v1 — scope locked, implementation pending**
 
-- Investor Action Plan v1 visual QA is complete for tested cases.
-- Known copy polish (BUY branch wording when overpay or low confidence) is logged as a future task — do not fix without explicit scope approval.
-- Do not start any new feature until PM approves scope in next session.
+- Trigger: overall_verdict === "BUY" AND purchasePrice > max_safe_offer.
+- Do NOT include confidence_score in v1 trigger.
+- Keep backend BUY verdict unchanged — frontend-only trust patch.
+- UI: add visible qualifier "NEGOTIATE FIRST" adjacent to the BUY verdict badge.
+- Supporting copy: "Price is above Max Safe Offer. Treat this as a negotiation deal, not a clean buy."
+- Likely file: src/AnalysisResult.tsx only.
+- No backend. No schema. No analysis_engine.py. No refactor.
+- Plan + exact file diff required before any code. Wait for PM approval before executing.
 
 ---
 
@@ -447,35 +452,43 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - Visual QA: BUY/low-confidence+overpay, PASS/overpay, BUY/clean confirmed in production. CONDITIONAL not reproduced because engine resolved tested inputs to BUY/PASS — not a component failure.
 - Known copy polish: BUY branch "Proceed" wording too optimistic when overpay or low confidence present. Logged for future fix.
 
-**Priority 3 — Copyable Investor Summary**
+**Priority 3 — Verdict Credibility Badge Modifier v1** *(next session — scope locked)*
+- Frontend-only trust patch for the BUY verdict when purchase exceeds Max Safe Offer.
+- Trigger: overall_verdict === "BUY" AND purchasePrice > max_safe_offer.
+- Do not include confidence_score in v1 trigger.
+- Keep backend verdict unchanged — add visible qualifier "NEGOTIATE FIRST" to the BUY badge.
+- Supporting copy: "Price is above Max Safe Offer. Treat this as a negotiation deal, not a clean buy."
+- Likely src/AnalysisResult.tsx only. No backend. No schema. No analysis_engine.py. No refactor.
+
+**Priority 4 — Copyable Investor Summary**
 - One-click copy of property basics, rehab estimate, max safe offer, verdict, deal killers, risk warnings, next action.
 - Useful for texting lenders, partners, agents, or investors.
 
-**Priority 4 — Lender / Investor Report Polish**
+**Priority 5 — Lender / Investor Report Polish**
 - Make PDF/report feel lender-grade with better visual hierarchy.
 - Include photo rehab summary (QA confirmed — ready to include).
 - Include deal killer summary and action plan once built.
 
-**Priority 5 — Comps / ARV Confidence Engine**
+**Priority 6 — Comps / ARV Confidence Engine**
 - Data-agnostic comp analysis, ARV bands (low/mid/high), confidence scoring, outlier handling.
 - MLS/public data upgrades later.
 
-**Priority 6 — Title / Lien / Auction Risk Engine**
+**Priority 7 — Title / Lien / Auction Risk Engine**
 - Tax delinquency, HOA/municipal liens, judgments/mechanic liens, preforeclosure, scheduled auction, probate/estate, code violations, closing delay risk, title-health badge.
 
-**Priority 7 — Deal Alert Engine**
+**Priority 8 — Deal Alert Engine**
 - Scan listings against buy box. Alert users to possible deals. Use underwriting/risk gates. Later premium feature.
 
-**Priority 8 — Saved Deals / Deal Memory**
+**Priority 9 — Saved Deals / Deal Memory**
 - Better saved deal history. Track photo rehab results. Track user decisions. Later feeds Learning Brain.
 
-**Priority 9 — Contractor Marketplace** *(later, not now)*
+**Priority 10 — Contractor Marketplace** *(later, not now)*
 - Contractor bidding from generated rehab scope. License/insurance profiles. Bid comparison. Marketplace revenue.
 
-**Priority 10 — Learning Brain** *(later, not now)*
+**Priority 11 — Learning Brain** *(later, not now)*
 - Learn from analyzed, bought, sold, rented, failed deals. Calibrate rehab, ARV, title delays, contractor accuracy.
 
-**Priority 11 — Social / Investor Profiles** *(later, not now)*
+**Priority 12 — Social / Investor Profiles** *(later, not now)*
 - Profiles, track record, reputation, connections.
 
 **Parked: AIM — Asset Intelligence Modules**
@@ -741,3 +754,10 @@ All three Offer Gap callout states verified in production after backend PR #11 a
 - BUY/clean: no overpay bullet, proceed bullet, access bullet, inspection bullet — correct.
 - CONDITIONAL: not reproduced because engine resolved tested inputs to BUY/PASS — not a component failure.
 - Known copy issue: BUY branch "Proceed" wording reads too optimistic when purchasePrice > max_safe_offer or confidence_score < 60. Logged for future fix.
+
+---
+
+## Operating Rules — All Sessions
+
+- When approval is requested, stop. Do not continue, commit, push, open a PR, merge, or update docs until explicit approval is given in the next message.
+- Approval for one action does not carry forward to later actions.
