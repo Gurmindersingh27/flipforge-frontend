@@ -30,7 +30,7 @@
 - Offer Gap callout, verdict rationale, and stress tests render in all flows.
 - Verdict and narrative agree (hard-fail fix from backend PR #11).
 - Deal Killer Summary v1 merged (frontend PR #45) — visual QA complete (2026-06-08).
-- Investor Action Plan v1 merged (frontend PR #47) — deployed to production. Code-path QA passed. Browser visual QA pending.
+- Investor Action Plan v1 merged (frontend PR #47) — deployed to production. Code-path QA passed. Browser visual QA passed for tested cases (2026-06-08) with one known copy polish item.
 
 ### Done
 - [x] Backend Day 1 complete — DraftDeal, DataPoint/Confidence models built
@@ -124,8 +124,9 @@
   - Both always-bullets (major systems, inspection) cannot be dropped — arithmetic guarantee: max array length is 5, guards always satisfied
   - No backend changes. No schema changes. No types.ts changes. No api.ts changes. No App.tsx changes. No new dependencies.
   - Build: 111 modules, 0 errors.
-  - Code-path QA: PASSED (see session entry below).
-  - Browser visual QA: PENDING — Claude Code container cannot open production UI. Manual browser QA required.
+  - Code-path QA: PASSED.
+  - Browser visual QA: PASSED for tested cases (2026-06-08) — BUY/low-confidence+overpay, PASS/overpay, BUY/clean all confirmed in production. CONDITIONAL not reproduced because engine resolved tested inputs to BUY/PASS — not a component failure.
+  - Known copy polish: BUY branch "Proceed" reads too optimistic when purchasePrice > max_safe_offer or confidence_score < 60. Future task: soften to verify-and-negotiate framing in those conditions.
 
 ### Not Done / Blocked
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
@@ -137,13 +138,11 @@
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Investor Action Plan v1 — browser visual QA**
+**Next feature — requires PM scope approval before any code**
 
-- Open https://flipforge-frontend.vercel.app in a real browser.
-- Test: PASS/overpay, BUY/clean, BUY/low-confidence+overpay (purchase=140k/arv=200k/rehab=25k/rent=1800/holding=6/interest=10/ltc=80).
-- Verify: correct bullets fire, both always-bullets present, numbered list renders cleanly.
-- CONDITIONAL: attempt to reproduce; if engine resolves to BUY/PASS, state honestly — not a component failure.
-- After QA, update this file and mark visual QA complete or note limitations.
+- Investor Action Plan v1 visual QA is complete for tested cases.
+- Known copy polish (BUY branch wording when overpay or low confidence) is logged as a future task — do not fix without explicit scope approval.
+- Do not start any new feature until PM approves scope in next session.
 
 ---
 
@@ -417,6 +416,10 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - **Photo Rehab Analyzer — cold start + AI call may be slow on first request (50s cold start + AI processing)**
 - **Photo Rehab Analyzer — results are AI-assisted planning estimates, not contractor bids**
 - **Photo Rehab Analyzer — unknown/invisible systems (roof, HVAC, electrical, plumbing) generate warnings, not pricing**
+- **Investor Action Plan — BUY branch copy polish needed:**
+  - When overall_verdict is BUY but purchasePrice > max_safe_offer OR confidence_score < 60, the BUY action bullet says "Proceed — but confirm rehab scope, ARV, and inspection findings before committing funds."
+  - "Proceed" reads too optimistic in these conditions. Future fix: detect overpay-or-low-confidence within the BUY branch and use softer verify-and-negotiate framing.
+  - Do not fix without explicit scope approval.
 - **Verdict credibility gap — BUY via BRRRR with poor flip metrics:**
   - When best_strategy is BRRRR, overall_verdict can show BUY even when purchase_price > max_safe_offer, confidence is low, and flip margins are thin.
   - Example payload: purchase_price=140000, arv=200000, rehab_budget=25000, est_monthly_rent=1800, holding_months=6, interest_rate=10, ltc=80.
@@ -438,10 +441,11 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - Visual QA complete: PASS and BUY verdict cases confirmed in production. CONDITIONAL title not reproduced during QA due to test-data economics, not a component failure.
 - Photo rehab mid threading (Priority 7 bullet) deferred — requires state lift from PhotoRehabAnalyzer into App.tsx.
 
-**Priority 2 — Investor Action Plan** *(merged PR #47 — browser visual QA pending)*
+**Priority 2 — Investor Action Plan** *(complete — PR #47, visual QA passed for tested cases 2026-06-08)*
 - Shipped frontend-only in src/components/InvestorActionPlan.tsx.
 - Renders immediately after DealKillerSummary, before Verdict card.
-- Code-path QA passed. Browser visual QA required before marking fully verified.
+- Visual QA: BUY/low-confidence+overpay, PASS/overpay, BUY/clean confirmed in production. CONDITIONAL not reproduced because engine resolved tested inputs to BUY/PASS — not a component failure.
+- Known copy polish: BUY branch "Proceed" wording too optimistic when overpay or low confidence present. Logged for future fix.
 
 **Priority 3 — Copyable Investor Summary**
 - One-click copy of property basics, rehab estimate, max safe offer, verdict, deal killers, risk warnings, next action.
@@ -731,7 +735,9 @@ All three Offer Gap callout states verified in production after backend PR #11 a
 - Always-bullets arithmetic: P1 adds at most 1, P2 always adds 1 — array length at most 2 before P4/P5 guards, guaranteeing both fire. Confirmed.
 - Backend files changed: none. Confirmed via `git diff --name-only HEAD~1 HEAD`.
 
-**Browser visual QA — PENDING:**
-- Claude Code container cannot open production UI.
-- Manual browser QA required at https://flipforge-frontend.vercel.app.
-- QA cases to verify: PASS/overpay, BUY/clean, BUY/low-confidence+overpay (purchase=140k/arv=200k/rehab=25k/rent=1800/holding=6/interest=10/ltc=80), CONDITIONAL if engine produces it.
+**Browser visual QA — PASSED for tested cases (2026-06-08):**
+- BUY/low-confidence+overpay (purchase=140k/arv=200k/rehab=25k/rent=1800/holding=6/interest=10/ltc=80): all 5 bullets rendered correctly — overpay delta, BUY guidance, confidence warning, access bullet, inspection bullet.
+- PASS/overpay: overpay bullet, walk bullet, confidence warning, access bullet, inspection bullet all rendered.
+- BUY/clean: no overpay bullet, proceed bullet, access bullet, inspection bullet — correct.
+- CONDITIONAL: not reproduced because engine resolved tested inputs to BUY/PASS — not a component failure.
+- Known copy issue: BUY branch "Proceed" wording reads too optimistic when purchasePrice > max_safe_offer or confidence_score < 60. Logged for future fix.
