@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { AnalyzeResponse } from "./lib/types";
 import { generateNegotiationScript } from "./lib/api";
 import DealKillerSummary from "./components/DealKillerSummary";
+import InvestorActionPlan from "./components/InvestorActionPlan";
 
 interface Props {
   result: AnalyzeResponse;
@@ -277,6 +278,8 @@ export default function AnalysisResult({ result, meta }: Props) {
         purchasePrice={purchasePriceMeta}
         photoRehabMid={typeof meta?.photo_rehab_mid === "number" ? meta.photo_rehab_mid : null}
       />
+
+      <InvestorActionPlan result={result} purchasePrice={purchasePriceMeta} />
 
       {/* 1. Verdict card */}
       <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
