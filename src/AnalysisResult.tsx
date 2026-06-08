@@ -174,6 +174,13 @@ export default function AnalysisResult({ result, meta }: Props) {
       ? buildOfferGapCallout(purchasePriceMeta, result.max_safe_offer)
       : null;
 
+  const negotiateFirstDelta =
+    (result as any)?.overall_verdict === "BUY" &&
+    purchasePriceMeta !== null &&
+    purchasePriceMeta > result.max_safe_offer
+      ? `$${(purchasePriceMeta - result.max_safe_offer).toLocaleString()}`
+      : null;
+
   async function onGenerateScript() {
     setScriptLoading(true);
     setScriptError(null);
@@ -315,6 +322,18 @@ export default function AnalysisResult({ result, meta }: Props) {
             </div>
           )}
         </div>
+
+        {negotiateFirstDelta !== null && (
+          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <div className="text-[10px] uppercase tracking-widest text-amber-300/70 mb-1">
+              NEGOTIATE FIRST
+            </div>
+            <p className="text-sm text-amber-200 leading-relaxed">
+              Price is {negotiateFirstDelta} above Max Safe Offer. Treat this as a
+              negotiation deal, not a clean buy.
+            </p>
+          </div>
+        )}
       </section>
 
       {/* 3. Risk Flags card */}
