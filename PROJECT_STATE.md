@@ -30,6 +30,7 @@
 - Offer Gap callout, verdict rationale, and stress tests render in all flows.
 - Verdict and narrative agree (hard-fail fix from backend PR #11).
 - Deal Killer Summary v1 merged (frontend PR #45) — visual QA complete (2026-06-08).
+- Investor Action Plan v1 merged (frontend PR #47) — deployed to production. Code-path QA passed. Browser visual QA pending.
 
 ### Done
 - [x] Backend Day 1 complete — DraftDeal, DataPoint/Confidence models built
@@ -113,6 +114,18 @@
   - Invalid upload: PDF blocked at file-picker, 12 photos triggered frontend validation ("Maximum 8 photos. You selected 12.")
   - Oversized file not tested (no >3MB test file available — not a blocker)
   - Core loop validated: upload photo → estimate rehab → apply mid → run underwriting
+- [x] Investor Action Plan v1 — frontend PR #47 (merged, commit 0338fcd)
+  - New component: src/components/InvestorActionPlan.tsx
+  - Renders in src/AnalysisResult.tsx immediately after DealKillerSummary, before Verdict card
+  - 3-5 prioritized action bullets: overpay delta (conditional), verdict action (always), low-confidence warning (conditional), major systems access (always), do not waive inspection (always)
+  - purchasePrice prop threaded via same purchasePriceMeta path as DealKillerSummary
+  - PASS bullet uses result.max_safe_offer directly — fires even when purchasePrice is null
+  - Overpay bullet gated only by purchasePrice !== null AND purchasePrice > max_safe_offer
+  - Both always-bullets (major systems, inspection) cannot be dropped — arithmetic guarantee: max array length is 5, guards always satisfied
+  - No backend changes. No schema changes. No types.ts changes. No api.ts changes. No App.tsx changes. No new dependencies.
+  - Build: 111 modules, 0 errors.
+  - Code-path QA: PASSED (see session entry below).
+  - Browser visual QA: PENDING — Claude Code container cannot open production UI. Manual browser QA required.
 
 ### Not Done / Blocked
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
@@ -124,9 +137,13 @@
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Investor Action Plan — scope and implement**
+**Investor Action Plan v1 — browser visual QA**
 
-- Do not start until PM explicitly approves scope in next session.
+- Open https://flipforge-frontend.vercel.app in a real browser.
+- Test: PASS/overpay, BUY/clean, BUY/low-confidence+overpay (purchase=140k/arv=200k/rehab=25k/rent=1800/holding=6/interest=10/ltc=80).
+- Verify: correct bullets fire, both always-bullets present, numbered list renders cleanly.
+- CONDITIONAL: attempt to reproduce; if engine resolves to BUY/PASS, state honestly — not a component failure.
+- After QA, update this file and mark visual QA complete or note limitations.
 
 ---
 
@@ -281,6 +298,7 @@ src/
     RepairBudgetBuilder.tsx      ← Manual repair budget estimator (PR #39+#41, all three flows)
     PhotoRehabAnalyzer.tsx       ← Photo rehab analyzer (PR #42, all three flows)
     DealKillerSummary.tsx        ← Deal Killer Summary (PR #45, frontend-only)
+    InvestorActionPlan.tsx       ← Investor Action Plan (PR #47, frontend-only)
   lib/
     api.ts                       ← ALL fetch calls to backend
     types.ts                     ← ALL TypeScript types (canonical contract)
@@ -351,6 +369,7 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+0338fcd  feat: add Investor Action Plan v1 to result screen (PR #47)
 b96c13f  chore: replace em dashes with ASCII hyphens in comments (PR #45)
 c213c1b  feat: add Deal Killer Summary v1 to result screen (PR #45)
 370f5f2  feat: add photo rehab analyzer frontend (PR #42)
@@ -419,9 +438,10 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - Visual QA complete: PASS and BUY verdict cases confirmed in production. CONDITIONAL title not reproduced during QA due to test-data economics, not a component failure.
 - Photo rehab mid threading (Priority 7 bullet) deferred — requires state lift from PhotoRehabAnalyzer into App.tsx.
 
-**Priority 2 — Investor Action Plan**
-- After each analysis, show next steps tailored to the result.
-- Examples: offer no more than $X, verify roof/HVAC/electrical/plumbing, request access to crawlspace/attic/mechanicals, ask seller/agent specific questions, do not waive inspection, use negotiation script.
+**Priority 2 — Investor Action Plan** *(merged PR #47 — browser visual QA pending)*
+- Shipped frontend-only in src/components/InvestorActionPlan.tsx.
+- Renders immediately after DealKillerSummary, before Verdict card.
+- Code-path QA passed. Browser visual QA required before marking fully verified.
 
 **Priority 3 — Copyable Investor Summary**
 - One-click copy of property basics, rehab estimate, max safe offer, verdict, deal killers, risk warnings, next action.
@@ -675,3 +695,43 @@ All three Offer Gap callout states verified in production after backend PR #11 a
 - Do not fix now.
 
 **QA conclusion:** Deal Killer Summary v1 is visually confirmed. Ready to scope Investor Action Plan.
+
+---
+
+## Session 2026-06-08 — Investor Action Plan v1
+
+**Frontend PR:** #47 (merged, commit 0338fcd)
+**Vercel production deployment:** dpl_3sXw5d2tJgcVE2QhhCAXxbDDM4YX — state: READY, target: production, SHA: 009e311d
+
+**What was added:**
+- New component: src/components/InvestorActionPlan.tsx (67 lines)
+- Updated: src/AnalysisResult.tsx (+1 import, +1 JSX line — no other changes)
+
+**What was NOT changed:**
+- src/lib/types.ts, src/lib/api.ts, src/App.tsx — untouched
+- All backend files — untouched
+- analysis_engine.py — untouched
+- No schema changes. No new dependencies.
+
+**Component logic:**
+- P1 (conditional): purchasePrice !== null AND purchasePrice > max_safe_offer — overpay delta bullet
+- P2 (always, one branch): PASS / CONDITIONAL / BUY verdict action. PASS and BUY branches use result.max_safe_offer directly — not purchasePrice.
+- P3 (conditional): confidence_score < 60 — validation warning
+- P4 (always): major systems access request
+- P5 (always): do not waive inspection
+- Max 5 bullets. Both always-bullets cannot be dropped: after P1+P2 array length is at most 2, so P4 and P5 guards (< 5) are always satisfied.
+
+**Build:** npm run build — 111 modules, 0 TypeScript errors.
+
+**Code-path QA — PASSED (2026-06-08):**
+- InvestorActionPlan imported at line 5, rendered at line 282 of AnalysisResult.tsx — immediately after DealKillerSummary (line 276), before Verdict card (line 284). Confirmed.
+- purchasePrice prop = purchasePriceMeta (same variable, same derivation as DealKillerSummary). Confirmed.
+- PASS bullet text (line 24): uses `mao` = `result.max_safe_offer` — no reference to purchasePrice. Confirmed.
+- Overpay guard (line 14): `purchasePrice !== null && purchasePrice > 0 && mao > 0 && purchasePrice > mao`. Confirmed.
+- Always-bullets arithmetic: P1 adds at most 1, P2 always adds 1 — array length at most 2 before P4/P5 guards, guaranteeing both fire. Confirmed.
+- Backend files changed: none. Confirmed via `git diff --name-only HEAD~1 HEAD`.
+
+**Browser visual QA — PENDING:**
+- Claude Code container cannot open production UI.
+- Manual browser QA required at https://flipforge-frontend.vercel.app.
+- QA cases to verify: PASS/overpay, BUY/clean, BUY/low-confidence+overpay (purchase=140k/arv=200k/rehab=25k/rent=1800/holding=6/interest=10/ltc=80), CONDITIONAL if engine produces it.
