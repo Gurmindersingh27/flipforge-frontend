@@ -30,6 +30,7 @@
 - Offer Gap callout, verdict rationale, and stress tests render in all flows.
 - Verdict and narrative agree (hard-fail fix from backend PR #11).
 - Deal Killer Summary v1 merged (frontend PR #45) — visual QA complete (2026-06-08).
+- Verdict Credibility Badge Modifier v1 complete (PR #48) — NEGOTIATE FIRST qualifier renders inline inside Verdict card when overall_verdict is BUY and purchasePrice > max_safe_offer.
 
 ### Done
 - [x] Backend Day 1 complete — DraftDeal, DataPoint/Confidence models built
@@ -113,6 +114,15 @@
   - Invalid upload: PDF blocked at file-picker, 12 photos triggered frontend validation ("Maximum 8 photos. You selected 12.")
   - Oversized file not tested (no >3MB test file available — not a blocker)
   - Core loop validated: upload photo → estimate rehab → apply mid → run underwriting
+- [x] Verdict Credibility Badge Modifier v1 — src/AnalysisResult.tsx only (PR #48, frontend-only)
+  - Inline modifier inside existing Verdict card — no new component
+  - Trigger: overall_verdict === "BUY" && purchasePrice > max_safe_offer
+  - Label: NEGOTIATE FIRST (amber)
+  - Copy: "Price is $X above Max Safe Offer. Treat this as a negotiation deal, not a clean buy."
+  - Dollar delta computed from purchasePriceMeta and result.max_safe_offer — no new types, no new API
+  - No backend changes. No schema changes. No api.ts changes. No types.ts changes.
+  - No analysis_engine.py changes. No new dependencies. No new component.
+  - Build passed cleanly (111 modules). Production QA passed (2026-06-08).
 
 ### Not Done / Blocked
 - [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
@@ -124,9 +134,14 @@
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Investor Action Plan — scope and implement**
+**Investor Memo Results Layout v1 — scope only**
 
-- Do not start until PM explicitly approves scope in next session.
+- Rework the results screen hierarchy so the output feels like an investor underwriting memo, not a stack of cards.
+- Existing data only. Frontend-first/product-scope session only.
+- Do not code until PM approves exact scope.
+- Do not add backend fields. Do not touch schemas. Do not touch analysis_engine.py.
+- Do not add comps viewer yet. Do not add another warning card.
+- Goal is to consolidate and reorder existing result sections around the decision: status, max safe offer, offer gap, confidence, risk, and next action.
 
 ---
 
@@ -351,6 +366,7 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+738ee37  Add negotiate-first verdict modifier (PR #48)
 b96c13f  chore: replace em dashes with ASCII hyphens in comments (PR #45)
 c213c1b  feat: add Deal Killer Summary v1 to result screen (PR #45)
 370f5f2  feat: add photo rehab analyzer frontend (PR #42)
@@ -398,12 +414,13 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - **Photo Rehab Analyzer — cold start + AI call may be slow on first request (50s cold start + AI processing)**
 - **Photo Rehab Analyzer — results are AI-assisted planning estimates, not contractor bids**
 - **Photo Rehab Analyzer — unknown/invisible systems (roof, HVAC, electrical, plumbing) generate warnings, not pricing**
-- **Verdict credibility gap — BUY via BRRRR with poor flip metrics:**
+- **Verdict credibility gap — BUY via BRRRR with poor flip metrics (visually addressed by PR #48):**
   - When best_strategy is BRRRR, overall_verdict can show BUY even when purchase_price > max_safe_offer, confidence is low, and flip margins are thin.
   - Example payload: purchase_price=140000, arv=200000, rehab_budget=25000, est_monthly_rent=1800, holding_months=6, interest_rate=10, ltc=80.
-  - Observed UI: BUY / BRRRR / confidence 40/100 / net_profit $7,375 / profit_pct 3.8% / max_safe_offer $126,900 / "Purchase is $13,100 over Max Safe Offer."
-  - Future fix: verdict consistency review — decide whether BUY should be suppressed or visually downgraded when purchase exceeds max safe offer, even if BRRRR is the best strategy.
-  - Do not fix now. Do not touch analysis_engine.py.
+  - Observed UI: BUY / BRRRR / confidence 40/100 / net_profit $7,375 / profit_pct 3.8% / max_safe_offer $126,900 / purchase $13,100 over Max Safe Offer.
+  - PR #48 visually addressed the BUY + over-Max-Safe-Offer trust issue: NEGOTIATE FIRST qualifier now renders in the Verdict card when this condition is met.
+  - Backend verdict logic is unchanged. Engine-level behavior remains intentionally untouched.
+  - Do not touch analysis_engine.py.
 
 ---
 
@@ -419,9 +436,10 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - Visual QA complete: PASS and BUY verdict cases confirmed in production. CONDITIONAL title not reproduced during QA due to test-data economics, not a component failure.
 - Photo rehab mid threading (Priority 7 bullet) deferred — requires state lift from PhotoRehabAnalyzer into App.tsx.
 
-**Priority 2 — Investor Action Plan**
-- After each analysis, show next steps tailored to the result.
-- Examples: offer no more than $X, verify roof/HVAC/electrical/plumbing, request access to crawlspace/attic/mechanicals, ask seller/agent specific questions, do not waive inspection, use negotiation script.
+**Priority 2 — Investor Action Plan** *(complete — PR #47, visual QA passed 2026-06-08)*
+- Shipped frontend-only in src/components/InvestorActionPlan.tsx.
+- Renders immediately after DealKillerSummary and before Verdict card.
+- Visual QA complete: BUY/low-confidence+overpay, PASS/overpay, BUY/clean all confirmed in production.
 
 **Priority 3 — Copyable Investor Summary**
 - One-click copy of property basics, rehab estimate, max safe offer, verdict, deal killers, risk warnings, next action.
@@ -675,3 +693,26 @@ All three Offer Gap callout states verified in production after backend PR #11 a
 - Do not fix now.
 
 **QA conclusion:** Deal Killer Summary v1 is visually confirmed. Ready to scope Investor Action Plan.
+
+---
+
+## Session 2026-06-08 — Verdict Credibility Badge Modifier v1
+
+**Frontend PR:** #48 (merged, commit 738ee37)
+
+- Updated: src/AnalysisResult.tsx — inline modifier added inside existing Verdict card section
+- No new component. Modifier is 19 lines added to AnalysisResult.tsx only.
+- Trigger: overall_verdict === "BUY" && purchasePrice > max_safe_offer
+- Renders amber NEGOTIATE FIRST label + dollar-delta copy inside Verdict card, below badge row
+- Clean BUY (price <= max_safe_offer): no modifier rendered — unchanged
+- CONDITIONAL or PASS: modifier never fires — unchanged
+- Vercel production deployment dpl_3gXd9XyKuJg2XwEpNoAxjaoUEBzB — state: READY
+- No backend changes. No schema changes. No api.ts changes. No types.ts changes.
+- No analysis_engine.py changes. No new dependencies.
+- Build passed cleanly (111 modules, no errors).
+- Production QA passed (2026-06-08):
+  - Test payload: purchase_price=140000, arv=200000, rehab_budget=25000, rent=1800, holding=6, interest=10, ltc=80
+  - Verdict returned: BUY, max_safe_offer $126,900, purchase $13,100 over
+  - NEGOTIATE FIRST modifier rendered with copy: "Price is $13,100 above Max Safe Offer. Treat this as a negotiation deal, not a clean buy."
+  - All existing sections (Overpay Risk, Deal Killer Summary, Investor Action Plan, Risk Flags, Why This Verdict, Integrity Gate) still render correctly
+  - No layout issues observed
