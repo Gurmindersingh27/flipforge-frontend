@@ -6,6 +6,8 @@ import DealsPage from "./components/DealsPage";
 import DealPage from "./components/DealPage";
 import RepairBudgetBuilder from "./components/RepairBudgetBuilder";
 import PhotoRehabAnalyzer from "./components/PhotoRehabAnalyzer";
+import WorkflowRail from "./components/WorkflowRail";
+import InvestorMemoPreview from "./components/InvestorMemoPreview";
 import { analyzeDeal, draftFromUrl, enrichAddress, finalizeAndAnalyze, saveDeal } from "./lib/api";
 import type {
   AnalyzeRequest,
@@ -553,15 +555,23 @@ function AnalyzerPage() {
   return (
     <div className="min-h-screen bg-[#0f1115] text-slate-100">
       {/* Nav bar */}
-      <div className="border-b border-white/10 bg-white/[0.04] px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <span className="text-sm font-semibold text-white">FlipForge</span>
+      <div className="border-b border-white/10 bg-black/40 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-5">
+          <span className="text-sm font-bold tracking-wide text-white">
+            Flip<span className="text-amber-400">Forge</span>
+          </span>
           <SignedIn>
             <Link
-              to="/deals"
-              className="text-xs text-white/60 hover:text-white transition-colors"
+              to="/"
+              className="text-xs font-semibold text-white/70 hover:text-amber-300 transition-colors"
             >
-              My Deals
+              Analyze
+            </Link>
+            <Link
+              to="/deals"
+              className="text-xs font-semibold text-white/70 hover:text-amber-300 transition-colors"
+            >
+              Saved Deals
             </Link>
           </SignedIn>
         </div>
@@ -582,9 +592,51 @@ function AnalyzerPage() {
       <SignedIn>
       <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
         {/* =========================
-            Address / URL → DraftDeal
+            Hero — static promise + sample memo preview.
+            Hidden once a real result exists so it never implies live data.
+           ========================= */}
+        {!result && (
+          <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6 md:p-8">
+            <div className="grid gap-6 md:grid-cols-2 md:items-center">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+                  Risk-first deal underwriting
+                </div>
+                <h1 className="mt-3 font-serif-display text-3xl font-bold leading-tight text-white md:text-4xl">
+                  Upload the house.
+                  <br />
+                  Know the rehab.
+                  <br />
+                  <span className="text-amber-400">Know the offer.</span>
+                </h1>
+                <p className="mt-4 max-w-md text-sm text-white/60">
+                  FlipForge stress-tests the deal and hands you the max safe
+                  offer before you chase the property — not a cashflow
+                  calculator, a where-does-this-break engine.
+                </p>
+              </div>
+              <InvestorMemoPreview />
+            </div>
+          </section>
+        )}
+
+        {/* Visual workflow rail — presentational only, not a stepper. */}
+        <WorkflowRail />
+
+        {/* =========================
+            Property — Address / URL → DraftDeal
            ========================= */}
         <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
+
+          {/* Step label — presentational only */}
+          <div className="mb-3 flex items-center gap-2">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+              1
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+              Property
+            </span>
+          </div>
 
           {/* 3h — Card header: tabs when not resumed, plain label when resumed */}
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -705,6 +757,59 @@ function AnalyzerPage() {
 
           {draft && (
             <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
+              {/* =========================
+                  Step 2 — Photos / Rehab (promoted core product cards)
+                 ========================= */}
+              <div className="mb-4 flex items-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+                  2
+                </span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+                  Photos / Rehab
+                </span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-4">
+                  <div className="text-sm font-bold text-white">
+                    Photo Rehab Analyzer
+                  </div>
+                  <div className="mt-1 text-xs text-white/55">
+                    Upload property photos. AI estimates visible condition and a
+                    rehab cost range.
+                  </div>
+                  <PhotoRehabAnalyzer
+                    onApply={(v) => setDraftDpNumber("rehab_budget", v)}
+                  />
+                </div>
+                <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-4">
+                  <div className="text-sm font-bold text-white">
+                    Repair Budget Builder
+                  </div>
+                  <div className="mt-1 text-xs text-white/55">
+                    Build a line-item rehab estimate by hand across nine
+                    categories.
+                  </div>
+                  <RepairBudgetBuilder
+                    onApply={(v) => setDraftDpNumber("rehab_budget", v)}
+                  />
+                </div>
+              </div>
+
+              {/* =========================
+                  Step 3 — Deal Assumptions (Deal Numbers / Financing & Holding / Investor Criteria)
+                 ========================= */}
+              <div className="mt-6 mb-4 flex items-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+                  3
+                </span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+                  Deal Assumptions
+                </span>
+              </div>
+
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
+                Deal Numbers
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">
@@ -834,15 +939,11 @@ function AnalyzerPage() {
                 </div>
               </div>
 
-              <RepairBudgetBuilder onApply={(v) => setDraftDpNumber("rehab_budget", v)} />
-
-              <PhotoRehabAnalyzer onApply={(v) => setDraftDpNumber("rehab_budget", v)} />
-
-              {/* Assumptions — editable in draft flow */}
-              <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                <div className="text-xs uppercase tracking-wide text-white/60">
-                  Assumptions
-                </div>
+              {/* Financing & Holding — editable in draft flow */}
+              <div className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
+                Financing &amp; Holding
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
@@ -902,6 +1003,29 @@ function AnalyzerPage() {
                 </div>
               </div>
 
+              {/* Investor Criteria — read-only, presentational only. No editable state. */}
+              <div className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
+                Investor Criteria
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-white">
+                      Required Profit Margin
+                    </div>
+                    <div className="mt-1 text-xs text-white/55">
+                      Minimum margin the underwriting engine holds this deal to.
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-serif-display text-2xl font-bold text-amber-300">
+                      {Math.round((draft.required_profit_margin_pct ?? 0) * 100)}%
+                    </div>
+                    <div className="text-xs text-white/45">read-only</div>
+                  </div>
+                </div>
+              </div>
+
               {/* Extraction notes / signals */}
               {((draft.notes?.length ?? 0) > 0 ||
                 (draft.signals?.length ?? 0) > 0) && (
@@ -926,6 +1050,16 @@ function AnalyzerPage() {
                 <div className="mt-3 text-sm text-red-400">{analyzeError}</div>
               )}
 
+              {/* Step 4 — Analyze */}
+              <div className="mt-6 mb-3 flex items-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+                  4
+                </span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+                  Analyze
+                </span>
+              </div>
+
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
@@ -933,7 +1067,7 @@ function AnalyzerPage() {
                   disabled={!canFinalize || analyzeLoading}
                   className="rounded-xl px-4 py-2 text-sm font-semibold bg-[#E8C547] text-slate-900 shadow-sm shadow-[#E8C547]/20 hover:bg-[#d4b33e] active:scale-95 transition-all duration-150 disabled:bg-[#E8C547]/35 disabled:text-[#F6E27A]/70 disabled:border disabled:border-[#E8C547]/30 disabled:shadow-none disabled:cursor-not-allowed"
                 >
-                  {analyzeLoading ? "Analyzing…" : "Finalize & Analyze"}
+                  {analyzeLoading ? "Generating Investor Memo…" : "Generate Investor Memo"}
                 </button>
 
                 {!canFinalize && (
@@ -953,7 +1087,7 @@ function AnalyzerPage() {
             onClick={() => setShowLegacy((v) => !v)}
             className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors"
           >
-            {showLegacy ? "Hide legacy analyzer ↑" : "Show legacy analyzer ↓"}
+            {showLegacy ? "Hide manual entry ↑" : "Analyze without address lookup ↓"}
           </button>
         </div>
 
@@ -962,8 +1096,9 @@ function AnalyzerPage() {
            ========================= */}
         {showLegacy && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
-          <div className="text-sm font-semibold text-white">
-            Manual Analyze (Legacy)
+          <div className="text-sm font-semibold text-white">Manual Entry</div>
+          <div className="mt-1 text-xs text-white/55">
+            Analyze without address lookup — enter the numbers directly.
           </div>
 
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1029,7 +1164,7 @@ function AnalyzerPage() {
               disabled={loading}
               className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
             >
-              {loading ? "Analyzing…" : "Analyze Deal"}
+              {loading ? "Generating Investor Memo…" : "Generate Investor Memo"}
             </button>
 
             {error && <div className="text-sm text-red-400">{error}</div>}
@@ -1100,9 +1235,15 @@ function AnalyzerPage() {
       <SignedOut>
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
           <div className="text-center">
-            <div className="text-xl font-semibold text-white">Welcome to FlipForge</div>
-            <div className="mt-2 text-sm text-white/60">
-              Sign in or create an account to analyze deals.
+            <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+              Risk-first deal underwriting
+            </div>
+            <div className="mt-3 font-serif-display text-2xl font-bold text-white">
+              Upload the house. Know the rehab.{" "}
+              <span className="text-amber-400">Know the offer.</span>
+            </div>
+            <div className="mt-3 text-sm text-white/60">
+              Sign in or create an account to generate your first Investor Memo.
             </div>
           </div>
           <div className="flex items-center gap-3">
