@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { useAuth, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import AnalysisResult from "./AnalysisResult";
-import ShieldHeader from "./components/ShieldHeader";
 import DealsPage from "./components/DealsPage";
 import DealPage from "./components/DealPage";
 import RepairBudgetBuilder from "./components/RepairBudgetBuilder";
@@ -1049,9 +1048,6 @@ function AnalyzerPage() {
            ========================= */}
         {result && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
-            {/* ✅ moved ShieldHeader here so it doesn't sit above inputs */}
-            <ShieldHeader result={result} />
-
             <div className="mt-4">
               <div className="text-[11px] uppercase tracking-widest text-white/60">Results</div>
               <div className="mt-3">

@@ -22,10 +22,8 @@ export default function DealKillerSummary({ result, purchasePrice, photoRehabMid
     result.max_safe_offer > 0 &&
     purchasePrice > result.max_safe_offer
   ) {
-    const gap = (purchasePrice - result.max_safe_offer).toLocaleString();
-    const mao = result.max_safe_offer.toLocaleString();
     bullets.push(
-      `You are $${gap} over the max safe offer of $${mao}. Your offer needs to drop to $${mao} or lower for the numbers to work.`
+      "Purchase price is above the max safe offer — the deal does not pencil at the current price. See Offer Safety for the gap."
     );
   }
 

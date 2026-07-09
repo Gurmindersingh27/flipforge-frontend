@@ -12,9 +12,8 @@ export default function InvestorActionPlan({ result, purchasePrice }: Props) {
 
   // Priority 1 - overpay delta (only when purchasePrice is known and exceeds MAO)
   if (purchasePrice !== null && purchasePrice > 0 && mao > 0 && purchasePrice > mao) {
-    const delta = (purchasePrice - mao).toLocaleString();
     actions.push(
-      `Do not offer above $${mao.toLocaleString()}. You are $${delta} over the max safe offer — negotiate down or walk.`
+      `Do not offer above $${mao.toLocaleString()} — negotiate down or walk.`
     );
   }
 
