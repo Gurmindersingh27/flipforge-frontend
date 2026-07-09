@@ -432,9 +432,9 @@ function AnalyzerPage() {
   }
 
   const FinancingAssumptions = (
-    <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4">
-      <div className="text-xs uppercase tracking-wide text-white/60">
-        Financing assumptions (optional)
+    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+      <div className="text-xs text-white/50">
+        Optional — used to estimate carry. Pre-filled with common defaults.
       </div>
 
       <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -765,7 +765,7 @@ function AnalyzerPage() {
                   2
                 </span>
                 <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
-                  Photos / Rehab
+                  Photos / Rehab Intelligence
                 </span>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
@@ -1050,13 +1050,13 @@ function AnalyzerPage() {
                 <div className="mt-3 text-sm text-red-400">{analyzeError}</div>
               )}
 
-              {/* Step 4 — Analyze */}
+              {/* Step 4 — Generate Investor Memo */}
               <div className="mt-6 mb-3 flex items-center gap-2">
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
                   4
                 </span>
                 <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
-                  Analyze
+                  Generate Investor Memo
                 </span>
               </div>
 
@@ -1101,7 +1101,55 @@ function AnalyzerPage() {
             Analyze without address lookup — enter the numbers directly.
           </div>
 
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* =========================
+              Step 2 — Photos / Rehab Intelligence (promoted core product cards)
+             ========================= */}
+          <div className="mt-5 mb-4 flex items-center gap-2">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+              2
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+              Photos / Rehab Intelligence
+            </span>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-4">
+              <div className="text-sm font-bold text-white">
+                Photo Rehab Analyzer
+              </div>
+              <div className="mt-1 text-xs text-white/55">
+                Upload property photos. AI estimates visible condition and a
+                rehab cost range.
+              </div>
+              <PhotoRehabAnalyzer onApply={(mid) => setRehabBudget(mid)} />
+            </div>
+            <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-4">
+              <div className="text-sm font-bold text-white">
+                Repair Budget Builder
+              </div>
+              <div className="mt-1 text-xs text-white/55">
+                Build a line-item rehab estimate by hand across nine categories.
+              </div>
+              <RepairBudgetBuilder onApply={(mid) => setRehabBudget(mid)} />
+            </div>
+          </div>
+
+          {/* =========================
+              Step 3 — Deal Assumptions
+             ========================= */}
+          <div className="mt-6 mb-4 flex items-center gap-2">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+              3
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+              Deal Assumptions
+            </span>
+          </div>
+
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
+            Deal Numbers
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-slate-400 mb-1">
                 Purchase Price
@@ -1151,18 +1199,41 @@ function AnalyzerPage() {
             </div>
           </div>
 
-          <RepairBudgetBuilder onApply={(mid) => setRehabBudget(mid)} />
-
-          <PhotoRehabAnalyzer onApply={(mid) => setRehabBudget(mid)} />
-
+          {/* Financing & Holding */}
+          <div className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
+            Financing &amp; Holding
+          </div>
           {FinancingAssumptions}
+
+          {/* Investor Criteria — presentational only. No value in manual state; no fake numbers. */}
+          <div className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
+            Investor Criteria
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="text-sm font-semibold text-white">
+              Underwriting Criteria
+            </div>
+            <div className="mt-1 text-xs text-white/55">
+              Default underwriting criteria applied by FlipForge.
+            </div>
+          </div>
+
+          {/* Step 4 — Generate Investor Memo */}
+          <div className="mt-6 mb-3 flex items-center gap-2">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+              4
+            </span>
+            <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+              Generate Investor Memo
+            </span>
+          </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={onAnalyze}
               disabled={loading}
-              className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
+              className="rounded-xl px-5 py-2.5 text-sm font-bold bg-amber-400 text-slate-900 shadow-sm hover:bg-amber-500 active:scale-95 transition-all duration-150 disabled:bg-amber-400/30 disabled:text-amber-100/60 disabled:shadow-none disabled:cursor-not-allowed"
             >
               {loading ? "Generating Investor Memo…" : "Generate Investor Memo"}
             </button>
@@ -1182,9 +1253,16 @@ function AnalyzerPage() {
             Results
            ========================= */}
         {result && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
+          <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-3">
             <div className="mt-4">
-              <div className="text-[11px] uppercase tracking-widest text-white/60">Results</div>
+              <div className="flex items-center gap-2 px-3">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+                  5
+                </span>
+                <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+                  Investor Memo
+                </span>
+              </div>
               <div className="mt-3">
                 <AnalysisResult result={result} meta={pdfMeta} />
               </div>

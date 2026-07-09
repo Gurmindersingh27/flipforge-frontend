@@ -11,10 +11,10 @@ type RailStep = {
 
 const STEPS: RailStep[] = [
   { label: "Property", hint: "Address or listing URL" },
-  { label: "Photos / Rehab", hint: "Estimate visible scope" },
+  { label: "Photos / Rehab Intelligence", hint: "Estimate visible scope" },
   { label: "Deal Assumptions", hint: "Numbers, financing, criteria" },
-  { label: "Analyze", hint: "Run the underwriting" },
-  { label: "Investor Memo", hint: "Verdict, offer, risk" },
+  { label: "Generate Investor Memo", hint: "Run the underwriting" },
+  { label: "Investor Memo Results", hint: "Verdict, offer, risk" },
 ];
 
 export default function WorkflowRail({ className = "" }: { className?: string }) {
