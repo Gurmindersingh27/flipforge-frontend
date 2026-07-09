@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { AnalyzeResponse } from "./lib/types";
+import type { AnalyzeResponse, Strategy, Verdict } from "./lib/types";
 import { generateNegotiationScript } from "./lib/api";
 import DealKillerSummary from "./components/DealKillerSummary";
 import InvestorActionPlan from "./components/InvestorActionPlan";
@@ -60,12 +60,74 @@ function riskFlagBadgeClass(severity?: string) {
   return `${base} border-white/10 text-white/60 bg-white/5`;
 }
 
+function stressChipClass(verdict?: string) {
+  const base =
+    "inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border";
+  if (verdict === "BUY")
+    return `${base} border-emerald-500/40 text-emerald-200 bg-emerald-500/10`;
+  if (verdict === "CONDITIONAL")
+    return `${base} border-amber-500/40 text-amber-200 bg-amber-500/10`;
+  if (verdict === "PASS")
+    return `${base} border-red-500/40 text-red-200 bg-red-500/10`;
+  return `${base} border-white/10 text-white/60 bg-white/5`;
+}
+
 function verdictRank(v: string): number {
   if (v === "BUY") return 2;
   if (v === "CONDITIONAL") return 1;
   return 0;
 }
 
+function fmtMoney(n: number) {
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function fmtPctDecimalToPct(n: number) {
+  if (!Number.isFinite(n)) return "—";
+  return `${(n * 100).toFixed(1)}%`;
+}
+
+// safe clipboard helper (with fallback)
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function strategyName(s: Strategy) {
+  if (s === "flip") return "Flip";
+  if (s === "brrrr") return "BRRRR";
+  return "Wholesale";
+}
+
+function pickStrategyVerdict(r: AnalyzeResponse): Verdict {
+  if (r.best_strategy === "flip") return r.flip_verdict;
+  if (r.best_strategy === "brrrr") return r.brrrr_verdict;
+  return r.wholesale_verdict;
+}
+
+// Main overpay explanation — dollar math for the gap lives here (Offer Safety block).
 function buildOfferGapCallout(purchasePrice: number, mao: number) {
   if (purchasePrice <= 0 || mao <= 0) return null;
   const gap = purchasePrice - mao;
@@ -74,7 +136,7 @@ function buildOfferGapCallout(purchasePrice: number, mao: number) {
 
   if (gap > 0) {
     return (
-      <section className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
+      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-5">
         <div className="text-[10px] uppercase tracking-widest text-red-300/70 mb-1.5">
           Overpay Risk
         </div>
@@ -85,13 +147,13 @@ function buildOfferGapCallout(purchasePrice: number, mao: number) {
             ? "At this price, the deal has limited room for ARV or rehab misses."
             : "This deal may still work, but leaves little margin for error."}
         </p>
-      </section>
+      </div>
     );
   }
 
   if (absGap <= 5000) {
     return (
-      <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
         <div className="text-[10px] uppercase tracking-widest text-amber-300/70 mb-1.5">
           Offer Gap
         </div>
@@ -100,12 +162,12 @@ function buildOfferGapCallout(purchasePrice: number, mao: number) {
           Max Safe Offer. This deal may work, but only if ARV and rehab
           assumptions hold.
         </p>
-      </section>
+      </div>
     );
   }
 
   return (
-    <section className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5">
       <div className="text-[10px] uppercase tracking-widest text-emerald-300/70 mb-1.5">
         Offer Cushion
       </div>
@@ -113,7 +175,7 @@ function buildOfferGapCallout(purchasePrice: number, mao: number) {
         You are <span className="font-semibold">{fmtGap} under</span> the Max
         Safe Offer. The offer has some cushion before the deal breaks.
       </p>
-    </section>
+    </div>
   );
 }
 
@@ -141,6 +203,10 @@ export default function AnalysisResult({ result, meta }: Props) {
   const [scriptLoading, setScriptLoading] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
 
+  // Copy action feedback (ported from ShieldHeader)
+  const [offerCopied, setOfferCopied] = useState(false);
+  const [summaryCopied, setSummaryCopied] = useState(false);
+
   // Build verdict rationale bullets from backend notes (primary) + stress context.
   // result.notes is populated by build_notes() in analysis_engine.py — human-readable.
   const whyBullets: string[] = [];
@@ -164,7 +230,7 @@ export default function AnalysisResult({ result, meta }: Props) {
     );
   }
 
-  // Offer Gap callout — only renders when purchase_price is passed via meta.
+  // Offer Safety inputs — purchase price arrives via meta and may be absent (legacy flow).
   const purchasePriceMeta =
     typeof meta?.purchase_price === "number" && meta.purchase_price > 0
       ? meta.purchase_price
@@ -175,11 +241,83 @@ export default function AnalysisResult({ result, meta }: Props) {
       : null;
 
   const negotiateFirstDelta =
-    (result as any)?.overall_verdict === "BUY" &&
+    result.overall_verdict === "BUY" &&
     purchasePriceMeta !== null &&
     purchasePriceMeta > result.max_safe_offer
       ? `$${(purchasePriceMeta - result.max_safe_offer).toLocaleString()}`
       : null;
+
+  const verdict = result.overall_verdict;
+  const bestStrategy: Strategy = result.best_strategy ?? "flip";
+  const strategyVerdict = pickStrategyVerdict(result);
+  const confidence = Math.max(
+    0,
+    Math.min(100, Number(result.confidence_score ?? 0))
+  );
+
+  // One-line decision summary: backend verdict_reason first, then notes, then fallback.
+  const decisionSummary =
+    (typeof result.verdict_reason === "string" && result.verdict_reason.trim()) ||
+    result.notes?.[0] ||
+    (verdict === "BUY"
+      ? "Deal pencils at current assumptions."
+      : verdict === "CONDITIONAL"
+      ? "Deal may work, but key assumptions must be verified first."
+      : "Deal does not pencil at current terms.");
+
+  // ARV and LTC arrive via meta. LTC is a user-entered financing assumption,
+  // NOT engine output — it must always be labeled as assumed.
+  const arvMeta =
+    typeof meta?.arv === "number" && meta.arv > 0 ? meta.arv : null;
+  const ltcMeta =
+    typeof meta?.ltc_pct === "number" && meta.ltc_pct > 0 ? meta.ltc_pct : null;
+
+  const offerGapValue =
+    purchasePriceMeta !== null ? purchasePriceMeta - result.max_safe_offer : null;
+  const marginOfSafetyPct =
+    purchasePriceMeta !== null && result.max_safe_offer > 0
+      ? ((result.max_safe_offer - purchasePriceMeta) / result.max_safe_offer) * 100
+      : null;
+
+  const offer = Number(result.max_safe_offer ?? 0);
+  const offerText = fmtMoney(offer);
+  const profit = Number(result.net_profit ?? result.gross_profit ?? 0);
+  // Match the Risk Flags card: prefer typed_flags, fall back to legacy risk_flags.
+  const riskCount =
+    (result.typed_flags?.length ?? 0) > 0
+      ? result.typed_flags.length
+      : result.risk_flags?.length ?? 0;
+
+  async function onCopyOffer() {
+    const ok = await copyToClipboard(String(Math.round(offer)));
+    if (ok) {
+      setOfferCopied(true);
+      window.setTimeout(() => setOfferCopied(false), 1200);
+    } else {
+      setOfferCopied(false);
+    }
+  }
+
+  async function onCopySummary() {
+    const summary = [
+      `${verdict}`,
+      `Offer ${offerText}`,
+      `Net ${fmtMoney(profit)}`,
+      `Profit ${fmtPctDecimalToPct(Number(result.profit_pct ?? 0))}`,
+      `ROI ${fmtPctDecimalToPct(Number(result.annualized_roi ?? 0))}`,
+      `Flags ${riskCount}`,
+      `Strategy ${bestStrategy}`,
+      `Conf ${confidence}/100`,
+    ].join(" | ");
+
+    const ok = await copyToClipboard(summary);
+    if (ok) {
+      setSummaryCopied(true);
+      window.setTimeout(() => setSummaryCopied(false), 1200);
+    } else {
+      setSummaryCopied(false);
+    }
+  }
 
   async function onGenerateScript() {
     setScriptLoading(true);
@@ -226,78 +364,164 @@ export default function AnalysisResult({ result, meta }: Props) {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-6 text-left">
-      {/* 2. Key numbers card */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-5">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div className="mb-4">
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">
-              Max Safe Offer
-            </div>
-            <div className="font-jetbrains text-5xl font-bold text-[#E8C547] leading-none pb-1">
-              ${result.max_safe_offer.toLocaleString()}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
-              Confidence
-            </div>
-            <div className="font-jetbrains text-lg font-medium text-white/70 leading-none">
-              {result.confidence_score}
-              <span className="text-sm font-normal text-white/40"> / 100</span>
-            </div>
-          </div>
+      {/* ============ 1. Decision Header ============ */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-4">
+        <div className="text-[11px] uppercase tracking-widest text-white/60">
+          Decision
         </div>
 
-        <div className="grid grid-cols-3 gap-3 border-t border-white/[0.06] pt-4">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
-              Net Profit
-            </div>
-            <div className="font-jetbrains text-lg font-medium text-white/70">
-              {result.net_profit < 0 ? "-" : ""}$
-              {Math.abs(result.net_profit).toLocaleString()}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
-              Profit %
-            </div>
-            <div className="font-jetbrains text-lg font-medium text-white/70">
-              {(result.profit_pct * 100).toFixed(1)}%
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
-              ROI
-            </div>
-            <div className="font-jetbrains text-lg font-medium text-white/70">
-              {(result.annualized_roi * 100).toFixed(1)}%
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <span className={verdictBadgeClass(verdict)}>{verdict}</span>
+
+          {negotiateFirstDelta !== null && (
+            <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border border-amber-500/40 text-amber-200 bg-amber-500/10">
+              NEGOTIATE FIRST • {negotiateFirstDelta} over MAO
+            </span>
+          )}
+
+          <span className="text-xs text-white/80">
+            Best strategy:{" "}
+            <span className="font-semibold text-white">
+              {strategyName(bestStrategy)}
+            </span>{" "}
+            <span className="text-white/50">({strategyVerdict})</span>
+          </span>
+
+          <span className="text-xs text-white/80">
+            Confidence:{" "}
+            <span className="font-semibold text-white">{confidence}</span>/100
+          </span>
+        </div>
+
+        <p className="text-sm text-white/85 leading-relaxed">{decisionSummary}</p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onCopyOffer}
+            className="rounded-full border border-white/[0.15] bg-white/[0.08] text-white px-3 py-1 text-xs font-semibold hover:bg-white/[0.12]"
+            title="Copy max safe offer number to clipboard"
+          >
+            {offerCopied ? "Copied ✓" : `Copy Offer ${offerText}`}
+          </button>
+
+          <button
+            type="button"
+            onClick={onCopySummary}
+            className="rounded-full border border-white/[0.15] bg-white/[0.08] text-white px-3 py-1 text-xs font-semibold hover:bg-white/[0.12]"
+            title="Copy a one-line deal summary"
+          >
+            {summaryCopied ? "Summary Copied ✓" : "Copy Summary"}
+          </button>
         </div>
       </section>
 
-      {/* Offer Gap callout — only renders when purchase_price is known via meta */}
-      {offerGapBlock}
-
-      <DealKillerSummary
-        result={result}
-        purchasePrice={purchasePriceMeta}
-        photoRehabMid={typeof meta?.photo_rehab_mid === "number" ? meta.photo_rehab_mid : null}
-      />
-
-      <InvestorActionPlan result={result} purchasePrice={purchasePriceMeta} />
-
-      {/* 1. Verdict card */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
-        <div className="text-[11px] uppercase tracking-widest text-white/60 mb-3">
-          Verdict
+      {/* ============ 2. Offer Safety ============ */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-5">
+        <div className="text-[11px] uppercase tracking-widest text-white/60">
+          Offer Safety
         </div>
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <span className={verdictBadgeClass((result as any)?.overall_verdict)}>
-            {(result as any)?.overall_verdict}
-          </span>
 
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">
+            Max Safe Offer
+          </div>
+          <div className="font-jetbrains text-5xl font-bold text-[#E8C547] leading-none pb-1">
+            ${result.max_safe_offer.toLocaleString()}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-4 border-t border-white/[0.06] pt-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Purchase Price
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {purchasePriceMeta !== null
+                ? `$${purchasePriceMeta.toLocaleString()}`
+                : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Offer Gap
+            </div>
+            <div
+              className={`font-jetbrains text-lg font-medium ${
+                offerGapValue === null
+                  ? "text-white/70"
+                  : offerGapValue > 0
+                  ? "text-red-300"
+                  : "text-emerald-300"
+              }`}
+            >
+              {offerGapValue === null
+                ? "—"
+                : offerGapValue > 0
+                ? `$${offerGapValue.toLocaleString()} over`
+                : `$${Math.abs(offerGapValue).toLocaleString()} under`}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Total Project Cost
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              ${result.total_project_cost.toLocaleString()}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              LTC (assumed)
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {ltcMeta !== null ? `${ltcMeta}%` : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Margin of Safety
+            </div>
+            <div
+              className={`font-jetbrains text-lg font-medium ${
+                marginOfSafetyPct === null
+                  ? "text-white/70"
+                  : marginOfSafetyPct < 0
+                  ? "text-red-300"
+                  : "text-emerald-300"
+              }`}
+            >
+              {marginOfSafetyPct === null
+                ? "—"
+                : `${marginOfSafetyPct.toFixed(1)}%`}
+            </div>
+          </div>
+        </div>
+
+        {ltcMeta !== null && (
+          <div className="text-xs text-white/50">
+            LTC is a financing assumption you entered — not computed by
+            underwriting.
+          </div>
+        )}
+
+        {purchasePriceMeta === null && (
+          <div className="text-xs text-white/50">
+            Purchase price not provided — gap analysis unavailable.
+          </div>
+        )}
+
+        {/* Main overpay explanation — Overpay Risk / Offer Gap / Offer Cushion */}
+        {offerGapBlock}
+      </section>
+
+      {/* ============ 3. Downside & Stress ============ */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-4">
+        <div className="text-[11px] uppercase tracking-widest text-white/60">
+          Downside &amp; Stress
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           {rehab && (
             <div className="flex items-center gap-2">
               <span className="text-[11px] uppercase tracking-widest text-white/60">
@@ -323,20 +547,112 @@ export default function AnalysisResult({ result, meta }: Props) {
           )}
         </div>
 
-        {negotiateFirstDelta !== null && (
-          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-widest text-amber-300/70 mb-1">
-              NEGOTIATE FIRST
+        {(result.stress_tests?.length ?? 0) > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">
+              Stress Tests
             </div>
-            <p className="text-sm text-amber-200 leading-relaxed">
-              Price is {negotiateFirstDelta} above Max Safe Offer. Treat this as a
-              negotiation deal, not a clean buy.
-            </p>
+            <div className="flex flex-wrap gap-2">
+              {result.stress_tests.map((s, i) => (
+                <span key={i} className={stressChipClass(s.verdict)}>
+                  {s.name}: {s.verdict}
+                </span>
+              ))}
+            </div>
           </div>
         )}
       </section>
 
-      {/* 3. Risk Flags card */}
+      <DealKillerSummary
+        result={result}
+        purchasePrice={purchasePriceMeta}
+        photoRehabMid={typeof meta?.photo_rehab_mid === "number" ? meta.photo_rehab_mid : null}
+      />
+
+      {/* ============ 4. Borrower / Investor Action ============ */}
+      <InvestorActionPlan result={result} purchasePrice={purchasePriceMeta} />
+
+      {/* ============ 5. Supporting Detail ============ */}
+      <div className="text-[11px] uppercase tracking-widest text-white/40 pt-2">
+        Supporting Detail
+      </div>
+
+      {/* Metrics grid */}
+      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Net Profit
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {result.net_profit < 0 ? "-" : ""}$
+              {Math.abs(result.net_profit).toLocaleString()}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Profit %
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {(result.profit_pct * 100).toFixed(1)}%
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              ROI
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {(result.annualized_roi * 100).toFixed(1)}%
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              ARV
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {arvMeta !== null ? `$${arvMeta.toLocaleString()}` : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Flip Score
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {result.flip_score}
+              <span className="text-xs font-normal text-white/40">
+                {" "}
+                ({result.flip_verdict})
+              </span>
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              BRRRR Score
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {result.brrrr_score}
+              <span className="text-xs font-normal text-white/40">
+                {" "}
+                ({result.brrrr_verdict})
+              </span>
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
+              Wholesale Score
+            </div>
+            <div className="font-jetbrains text-lg font-medium text-white/70">
+              {result.wholesale_score}
+              <span className="text-xs font-normal text-white/40">
+                {" "}
+                ({result.wholesale_verdict})
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Risk Flags card */}
       {((result.typed_flags?.length ?? 0) > 0 ||
         (result.risk_flags?.length ?? 0) > 0) && (
         <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
@@ -359,7 +675,7 @@ export default function AnalysisResult({ result, meta }: Props) {
         </section>
       )}
 
-      {/* 4. Narrative card — Why this verdict (notes + stress context) */}
+      {/* Narrative card — Why this verdict (notes + stress context) */}
       <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
         <h3 className="font-serif-display text-base font-semibold text-white mb-2">
           Why this verdict
@@ -371,7 +687,7 @@ export default function AnalysisResult({ result, meta }: Props) {
         </ul>
       </section>
 
-      {/* 5. Actions card — Integrity Gate copy + grouped buttons */}
+      {/* Actions card — Integrity Gate copy + grouped buttons */}
       <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-4">
         <div>
           <div className="text-sm font-semibold text-white">Integrity Gate</div>
