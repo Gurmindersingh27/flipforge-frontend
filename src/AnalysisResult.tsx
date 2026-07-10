@@ -365,8 +365,8 @@ export default function AnalysisResult({ result, meta }: Props) {
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-6 text-left">
       {/* ============ 1. Decision Header ============ */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-4">
-        <div className="text-[11px] uppercase tracking-widest text-white/60">
+      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6 space-y-4">
+        <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
           Decision
         </div>
 
@@ -417,17 +417,20 @@ export default function AnalysisResult({ result, meta }: Props) {
       </section>
 
       {/* ============ 2. Offer Safety ============ */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-5">
-        <div className="text-[11px] uppercase tracking-widest text-white/60">
+      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6 space-y-5">
+        <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
           Offer Safety
         </div>
 
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 p-4">
+          <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80 mb-2">
             Max Safe Offer
           </div>
-          <div className="font-jetbrains text-5xl font-bold text-[#E8C547] leading-none pb-1">
+          <div className="font-jetbrains text-5xl font-bold text-amber-300 leading-none pb-1">
             ${result.max_safe_offer.toLocaleString()}
+          </div>
+          <div className="mt-2 text-xs text-white/50">
+            Your ceiling before the deal breaks.
           </div>
         </div>
 
@@ -516,8 +519,8 @@ export default function AnalysisResult({ result, meta }: Props) {
       </section>
 
       {/* ============ 3. Downside & Stress ============ */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-4">
-        <div className="text-[11px] uppercase tracking-widest text-white/60">
+      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6 space-y-4">
+        <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
           Downside &amp; Stress
         </div>
 
@@ -573,12 +576,12 @@ export default function AnalysisResult({ result, meta }: Props) {
       <InvestorActionPlan result={result} purchasePrice={purchasePriceMeta} />
 
       {/* ============ 5. Supporting Detail ============ */}
-      <div className="text-[11px] uppercase tracking-widest text-white/40 pt-2">
+      <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/60 pt-2">
         Supporting Detail
       </div>
 
       {/* Metrics grid */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
+      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-4">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
@@ -655,7 +658,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       {/* Risk Flags card */}
       {((result.typed_flags?.length ?? 0) > 0 ||
         (result.risk_flags?.length ?? 0) > 0) && (
-        <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
+        <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6">
           <h3 className="font-serif-display text-base font-semibold text-white mb-3">
             Risk Flags
           </h3>
@@ -676,7 +679,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       )}
 
       {/* Narrative card — Why this verdict (notes + stress context) */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
+      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6">
         <h3 className="font-serif-display text-base font-semibold text-white mb-2">
           Why this verdict
         </h3>
@@ -688,7 +691,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       </section>
 
       {/* Actions card — Integrity Gate copy + grouped buttons */}
-      <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6 space-y-4">
+      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6 space-y-4">
         <div>
           <div className="text-sm font-semibold text-white">Integrity Gate</div>
           <div className="mt-1 text-xs text-white/60">
@@ -751,7 +754,7 @@ export default function AnalysisResult({ result, meta }: Props) {
         <div className="text-xs text-red-400 px-1">{scriptError}</div>
       )}
       {script && (
-        <section className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-6">
+        <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6">
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm font-semibold text-white">
               Negotiation Script
