@@ -4,15 +4,18 @@
 ---
 
 ## Last Updated
-2026-06-08
+2026-07-12
 
 ---
 
 ## 1. Current Phase & Progress
 
-**Product direction:** Upload the house. Know the rehab. Know the offer.
+**Product direction:** Bold Premium Investor one-page analyzer.
 
-**Short pitch:** FlipForge helps real estate investors decide if a property is worth flipping before they waste time, money, or emotion on it. Upload photos, estimate rehab, stress-test the deal, and know your max safe offer before chasing the property.
+**Short pitch:** FlipForge helps real estate investors decide if a property is worth flipping before they waste time, money, or emotion on it. Upload photos, estimate rehab, stress-test the deal, and know your max safe offer before chasing the property. Core promise: "Upload the house. Know the rehab. Know the offer."
+
+**Visual workflow (one-page analyzer):**
+Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Investor Memo.
 
 **Current core loop:**
 1. Enter property or deal info.
@@ -23,13 +26,21 @@
 6. User decides whether to offer, negotiate, verify, or walk away.
 
 **Current product state:**
+- Bold Premium Investor one-page analyzer shipped through v1.1 (frontend PRs #49, #50, #51, #52 — all merged).
+- QA status: local v1.1 visual smoke test passed against merged main. Production smoke test passed 2026-07-12 (see Production QA entry below).
+- Investor Memo Results Layout v1 merged (frontend PR #49) — five-zone lender-grade memo: Decision Header → Offer Safety → Downside & Stress → Investor Action Plan → Supporting Detail.
+- Product Experience Reset v1 merged (frontend PR #50) — premium hero, Investor Memo Preview panel, visual-only workflow rail, core product cards, grouped assumptions, "Generate Investor Memo" CTA.
+- Product Experience Reset v1.1 merged (frontend PR #51) — analyzer body and results aligned to Bold Premium Investor (black/gold) direction.
+- WorkflowRail label overlap fix merged (frontend PR #52).
+- Investor Action Plan v1 merged (frontend PR #47); negotiate-first verdict modifier merged (frontend PR #48).
 - Photo Rehab Analyzer v1 is built, deployed, and QA-verified in production (backend PR #13, frontend PR #42).
 - Live browser QA complete — core loop validated end-to-end in production.
 - Live Anthropic vision call confirmed working in production (provider_status: live_success).
-- Repair Budget Builder available in all three flows.
+- Repair Budget Builder available in all flows.
 - Offer Gap callout, verdict rationale, and stress tests render in all flows.
 - Verdict and narrative agree (hard-fail fix from backend PR #11).
 - Deal Killer Summary v1 merged (frontend PR #45) — visual QA complete (2026-06-08).
+- ShieldHeader has been unmounted since PR #49; removal is not scoped.
 
 ### Done
 - [x] Backend Day 1 complete — DraftDeal, DataPoint/Confidence models built
@@ -113,10 +124,45 @@
   - Invalid upload: PDF blocked at file-picker, 12 photos triggered frontend validation ("Maximum 8 photos. You selected 12.")
   - Oversized file not tested (no >3MB test file available — not a blocker)
   - Core loop validated: upload photo → estimate rehab → apply mid → run underwriting
+- [x] Investor Action Plan v1 — frontend PR #47 (merged 2026-06-08, commit 0338fcd)
+  - New component: src/components/InvestorActionPlan.tsx — 3-5 prioritized next-action bullets after DealKillerSummary, before Verdict card
+  - Bullet priority: overpay delta, verdict action (PASS/CONDITIONAL/BUY), low confidence (<60), major systems access, do-not-waive-inspection
+  - Frontend-only: no types.ts, api.ts, App.tsx, backend, or engine changes
+- [x] Negotiate-first verdict modifier — frontend PR #48 (merged, commit d60ac18)
+  - Adds NEGOTIATE FIRST verdict treatment when purchase price exceeds Max Safe Offer
+  - PR #49 later reuses the same trigger, unchanged logic, as a compact status chip
+- [x] Investor Memo Results Layout v1 — frontend PR #49 (merged 2026-07-09, commit 5509ee9)
+  - Results screen reorganized from dashboard into five-zone lender-grade underwriting memo:
+    Decision Header → Offer Safety → Downside & Stress → Investor Action Plan → Supporting Detail
+  - Uses existing AnalyzeResponse + meta data only — no backend, schema, api.ts, or types.ts changes
+  - Copy Offer / Copy Summary actions ported from ShieldHeader (byte-identical summary format)
+  - Offer Gap dollar math consolidated into Offer Safety as its single home; NEGOTIATE FIRST becomes a status chip
+  - ShieldHeader unmounted from App.tsx (its verdict/strategy/confidence/metrics duplicated the new Decision Header); ShieldHeader.tsx itself untouched — unmounted since PR #49, removal is not scoped
+  - Files: src/AnalysisResult.tsx, src/App.tsx, src/components/DealKillerSummary.tsx, src/components/InvestorActionPlan.tsx
+- [x] Product Experience Reset v1 — frontend PR #50 (merged 2026-07-09, commit bf36b5e)
+  - Bold Premium Investor (black/gold) one-page analyzer direction
+  - Premium hero with product promise (hidden once a real result exists)
+  - Static Investor Memo Preview panel, clearly labeled as a sample (src/components/InvestorMemoPreview.tsx)
+  - Visual-only workflow rail: Property → Photos/Rehab → Deal Assumptions → Analyze → Investor Memo (src/components/WorkflowRail.tsx — presentational only, no stepper state, no gating)
+  - Photo Rehab Analyzer + Repair Budget Builder promoted into large core product cards (internals untouched — wrapped only)
+  - Deal assumption inputs grouped: Deal Numbers / Financing & Holding / Investor Criteria
+  - Analyze CTA renamed to "Generate Investor Memo" (handlers unchanged); "Legacy" wording removed — now "Manual Entry"
+  - Nav simplified to Analyze + Saved Deals; PR #49 memo hierarchy preserved (AnalysisResult.tsx untouched)
+- [x] Product Experience Reset v1.1 — frontend PR #51 (merged 2026-07-10, commit 7f0101a)
+  - Manual analyzer body upgraded to step-labeled premium underwriting workspace
+  - Photo Rehab Analyzer + Repair Budget Builder as elevated core cards under "Step 2 — Photos / Rehab Intelligence" (onApply wiring untouched)
+  - "Step 5 — Investor Memo" wrapper around results in both flows
+  - AnalysisResult.tsx styling aligned (className/static-text changes only); five-zone memo hierarchy preserved exactly
+  - Files: src/App.tsx, src/AnalysisResult.tsx, src/components/WorkflowRail.tsx
+- [x] WorkflowRail label overlap fix — frontend PR #52 (merged 2026-07-12, commit 75eef17)
+  - Removed whitespace-nowrap from the step label span so long labels wrap inside their own slot (1 insertion, 1 deletion, one file)
+  - Fixes desktop-width label overlap/truncation introduced with the v1.1 rail labels
+- [x] Local v1.1 visual smoke test passed against merged main
+- [x] Production smoke test passed 2026-07-12 (see Production QA — Bold Premium Investor v1.1 below)
 
 ### Not Done / Blocked
-- [ ] Tighten CORS from * to https://flipforge-frontend.vercel.app
-  - Note: code in app/main.py is already tightened to Vercel domain; CLAUDE.md docs are stale on this point
+- [x] Tighten CORS from * to https://flipforge-frontend.vercel.app
+  - Code in app/main.py allows the Vercel domain + localhost dev origins; CLAUDE.md updated to match the code (2026-07-12)
 - [ ] Add minimal GitHub Actions CI
   - Frontend: TypeScript + build check (tsc --noEmit && vite build)
   - Backend: import/startup check for FastAPI app
@@ -124,9 +170,14 @@
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Investor Action Plan — scope and implement**
+**Demo Readiness / Lender Credibility Polish v1 — recommended next sprint**
 
 - Do not start until PM explicitly approves scope in next session.
+- Candidate focus areas (candidates only — NOT approved scope):
+  - Breakpoint prominence
+  - Monthly holding-cost burn
+  - Contingency/reserve discipline display
+  - Lender-memo copy polish
 
 ---
 
@@ -275,12 +326,17 @@ src/
   App.css / index.css            ← Global styles
   config.ts                      ← API_BASE_URL (keep separate from api.ts — do not merge)
   shield.ts                      ← Shield logic
-  AnalysisResult.tsx             ← Deal analysis results display (Offer Gap callout, verdict rationale)
+  AnalysisResult.tsx             ← Investor Memo results display — five-zone memo (PR #49), premium styling (PR #51)
   components/
-    ShieldHeader.tsx             ← Header component
-    RepairBudgetBuilder.tsx      ← Manual repair budget estimator (PR #39+#41, all three flows)
-    PhotoRehabAnalyzer.tsx       ← Photo rehab analyzer (PR #42, all three flows)
+    ShieldHeader.tsx             ← Header component — unmounted since PR #49; removal is not scoped
+    RepairBudgetBuilder.tsx      ← Manual repair budget estimator (PR #39+#41, all flows)
+    PhotoRehabAnalyzer.tsx       ← Photo rehab analyzer (PR #42, all flows)
     DealKillerSummary.tsx        ← Deal Killer Summary (PR #45, frontend-only)
+    InvestorActionPlan.tsx       ← Investor Action Plan v1 (PR #47, frontend-only)
+    InvestorMemoPreview.tsx      ← Static sample Investor Memo Preview panel (PR #50, presentational)
+    WorkflowRail.tsx             ← Visual-only workflow rail (PR #50, label wrap fix PR #52)
+    DealPage.tsx                 ← View Saved Deal page (/deal/:id)
+    DealsPage.tsx                ← Saved Deals list page
   lib/
     api.ts                       ← ALL fetch calls to backend
     types.ts                     ← ALL TypeScript types (canonical contract)
@@ -351,6 +407,22 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+75eef17  Merge pull request #52 — fix: prevent workflow rail label overlap
+e51c196  fix: prevent workflow rail label overlap (PR #52)
+7f0101a  Merge pull request #51 — style: align analyzer body with product experience reset
+a9fbf37  style: align analyzer body with product experience reset (PR #51)
+bf36b5e  Merge pull request #50 — feat: add product experience reset layout
+0f7228d  feat: add product experience reset layout (PR #50)
+5509ee9  Merge pull request #49 — feat: add investor memo results layout
+7cd2c1d  feat: add investor memo results layout (PR #49)
+d60ac18  Merge pull request #48 — Add negotiate-first verdict modifier
+738ee37  Add negotiate-first verdict modifier (PR #48)
+009e311  feat: Investor Action Plan v1
+0338fcd  feat: add Investor Action Plan v1 to result screen (PR #47)
+e042aea  Merge pull request #46 — docs: record Deal Killer Summary visual QA results
+316adb7  docs: record Deal Killer Summary visual QA results (2026-06-08)
+1776104  Merge pull request #45 — feat: add Deal Killer Summary v1
+44bc45d  docs: record Deal Killer Summary merge status
 b96c13f  chore: replace em dashes with ASCII hyphens in comments (PR #45)
 c213c1b  feat: add Deal Killer Summary v1 to result screen (PR #45)
 370f5f2  feat: add photo rehab analyzer frontend (PR #42)
@@ -380,10 +452,11 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 
 ## 8. Known Issues
 
+- ShieldHeader has been unmounted since PR #49; removal is not scoped. `src/components/ShieldHeader.tsx` remains in the repo as unmounted dead code.
 - Root `main.py` (backend) is an older v1 router setup — active app is `app/main.py`
 - `app/core/analysis_engine.py` exists alongside `app/analysis_engine.py` — confirm which is imported before editing either
 - `app/core/config.py` imports pydantic-settings but is dead code — not in active import chain
-- CORS: `app/main.py` is already tightened to Vercel domain; CLAUDE.md docs say `*` but the code is correct — docs are stale
+- CORS: `app/main.py` allows `https://flipforge-frontend.vercel.app` plus `http://localhost:5173` / `http://127.0.0.1:5173` dev origins, with `allow_credentials=True`; CLAUDE.md now matches the code (updated 2026-07-12)
 - Zillow/Redfin block URL scraping (SOURCE_BLOCKED) — known limitation, not a bug
 - PDF generation must use in-memory bytes in production — disk writes will fail on Render
 - Render free tier cold starts — first request after inactivity may take 50+ seconds
@@ -409,7 +482,11 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 
 ## 9. Feature Backlog
 
-**Photo Rehab Analyzer live QA is complete. Next feature requires PM scope approval before any code.**
+**Bold Premium Investor one-page analyzer shipped through v1.1. Next recommended sprint: Demo Readiness / Lender Credibility Polish v1 (see Next Session Goal — candidates only, not approved scope). Any feature requires PM scope approval before any code.**
+
+### Backlog Notes
+
+- **Confidence score credibility:** current scoring may show 100/100 on deals with relatively thin margin. Review before live lender demos. This is engine territory (`analysis_engine.py`) and requires explicit PM approval before any code changes.
 
 ### Next Features To Add (in priority order)
 
@@ -419,9 +496,10 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
 - Visual QA complete: PASS and BUY verdict cases confirmed in production. CONDITIONAL title not reproduced during QA due to test-data economics, not a component failure.
 - Photo rehab mid threading (Priority 7 bullet) deferred — requires state lift from PhotoRehabAnalyzer into App.tsx.
 
-**Priority 2 — Investor Action Plan**
-- After each analysis, show next steps tailored to the result.
-- Examples: offer no more than $X, verify roof/HVAC/electrical/plumbing, request access to crawlspace/attic/mechanicals, ask seller/agent specific questions, do not waive inspection, use negotiation script.
+**Priority 2 — Investor Action Plan** *(complete — PR #47, merged 2026-06-08; overpay action copy trimmed in PR #49)*
+- Shipped frontend-only in src/components/InvestorActionPlan.tsx.
+- 3-5 prioritized next-action bullets: overpay delta, verdict action, low confidence, major systems access, do not waive inspection.
+- Renders as zone 4 of the Investor Memo layout since PR #49.
 
 **Priority 3 — Copyable Investor Summary**
 - One-click copy of property basics, rehab estimate, max safe offer, verdict, deal killers, risk warnings, next action.
@@ -466,6 +544,11 @@ Real estate only for now.
 - No AIM build.
 - No marketplace build.
 - No learning brain build.
+- No social / investor profiles build.
+- No agent system build.
+- No comps viewer build.
+- No backend rewrite. No engine rewrite.
+- No beginner education scope.
 - No new feature implementation without explicit PM scope approval.
 
 ---
@@ -675,3 +758,90 @@ All three Offer Gap callout states verified in production after backend PR #11 a
 - Do not fix now.
 
 **QA conclusion:** Deal Killer Summary v1 is visually confirmed. Ready to scope Investor Action Plan.
+
+---
+
+## Session 2026-06-08 — Investor Action Plan v1 + negotiate-first verdict modifier
+
+**Frontend PRs:** #47 (merged 2026-06-08, commit 0338fcd), #48 (merged, commit d60ac18)
+
+**PR #47 — Investor Action Plan v1:**
+- New component: src/components/InvestorActionPlan.tsx — 3-5 prioritized next-action bullets rendered after DealKillerSummary, before the Verdict card
+- Bullet priority order: overpay delta (only when purchase price known and above max_safe_offer), verdict action (PASS/CONDITIONAL/BUY branches), low confidence (<60), major systems access, do-not-waive-inspection (never dropped by the 5-bullet cap)
+- Files: src/components/InvestorActionPlan.tsx (new), src/AnalysisResult.tsx (+3 lines)
+- No types.ts, api.ts, App.tsx, backend, or analysis_engine.py changes. No new dependencies.
+
+**PR #48 — negotiate-first verdict modifier:**
+- Adds NEGOTIATE FIRST verdict treatment when purchase price exceeds Max Safe Offer
+- PR #49 later reuses the same trigger, unchanged logic, as a compact status chip in the Decision Header
+
+---
+
+## Session 2026-07-09 — Investor Memo Results Layout v1
+
+**Frontend PR:** #49 (merged 2026-07-09, commit 5509ee9)
+
+- Results screen reorganized from a dashboard into a five-zone lender-grade underwriting memo:
+  1. **Decision Header** — verdict badge, NEGOTIATE FIRST status chip (PR #48 trigger, unchanged logic), best strategy with per-strategy verdict, confidence score, one-line decision summary, Copy Offer / Copy Summary actions ported from ShieldHeader (byte-identical summary format)
+  2. **Offer Safety** — Max Safe Offer dominant, plus Purchase Price, Offer Gap, Total Project Cost, LTC (assumed, explicitly captioned as user-entered), Margin of Safety; red/amber/green overpay explanation moved here as the single home of the gap dollar math
+  3. **Downside & Stress** — Rehab severity + Breakpoint badges, stress-test verdict chip row, Deal Killer Summary
+  4. **Investor Action Plan** — unchanged component, trimmed overpay action copy
+  5. **Supporting Detail** — Net Profit / Profit % / ROI / ARV / strategy scores, Risk Flags, Why This Verdict, Integrity Gate + Lender Report / Negotiation Script actions
+- Uses existing AnalyzeResponse + meta data only — no backend, schema, api.ts, or types.ts changes
+- ShieldHeader unmounted from App.tsx; ShieldHeader.tsx itself untouched. ShieldHeader has been unmounted since PR #49; removal is not scoped.
+- Files: src/AnalysisResult.tsx, src/App.tsx, src/components/DealKillerSummary.tsx, src/components/InvestorActionPlan.tsx
+- Build passed cleanly; lender PDF payload untouched
+
+---
+
+## Session 2026-07-09/10 — Product Experience Reset v1 + v1.1
+
+**Frontend PRs:** #50 (merged 2026-07-09, commit bf36b5e), #51 (merged 2026-07-10, commit 7f0101a)
+
+**PR #50 — Product Experience Reset v1:**
+- Bold Premium Investor (black/gold) one-page analyzer direction established
+- Premium hero with product promise "Upload the house. Know the rehab. Know the offer." (hidden once a real result exists)
+- Static Investor Memo Preview panel, clearly labeled as a sample: src/components/InvestorMemoPreview.tsx
+- Visual-only workflow rail: Property → Photos/Rehab → Deal Assumptions → Analyze → Investor Memo (src/components/WorkflowRail.tsx — presentational only, no stepper state, no gating)
+- Photo Rehab Analyzer and Repair Budget Builder promoted into large core product cards (internals untouched — wrapped only)
+- Deal assumption inputs grouped: Deal Numbers / Financing & Holding / Investor Criteria
+- Analyze CTA renamed "Generate Investor Memo" (handlers unchanged); visible "Legacy" wording removed — now "Manual Entry" / "Analyze without address lookup"
+- Nav simplified to Analyze + Saved Deals; AnalysisResult.tsx untouched
+- Files: src/App.tsx + two new presentational components. Build passed cleanly (113 modules).
+
+**PR #51 — Product Experience Reset v1.1:**
+- Manual analyzer body upgraded into step-labeled premium underwriting workspace
+- Photo Rehab Analyzer + Repair Budget Builder as elevated core cards under "Step 2 — Photos / Rehab Intelligence" (onApply wiring untouched)
+- "Step 5 — Investor Memo" wrapper around results in both flows
+- AnalysisResult.tsx styling aligned with Bold Premium Investor direction — className/static-text changes only; PR #49 five-zone hierarchy preserved exactly
+- Files: src/App.tsx, src/AnalysisResult.tsx, src/components/WorkflowRail.tsx. Build passed cleanly.
+
+---
+
+## Session 2026-07-10/12 — WorkflowRail label overlap fix
+
+**Frontend PR:** #52 (merged 2026-07-12, commit 75eef17)
+
+- Problem: after v1.1, rail step labels overlapped/truncated at desktop width (1440px) — labels carried whitespace-nowrap inside equal-width flex slots
+- Fix: removed whitespace-nowrap from the step label span in src/components/WorkflowRail.tsx so long labels wrap inside their own slot (1 insertion, 1 deletion, one file)
+- Verified via build + 1440px screenshot with DOM measurements showing clear space between every label and the next step's circle
+- Local v1.1 visual smoke test passed against merged main after this merge
+
+---
+
+## Production QA — Bold Premium Investor v1.1 (completed 2026-07-12)
+
+**Result: PASS — production smoke test passed on 2026-07-12.**
+
+Verified by PM on production Vercel (signed in) after PR #52 merged:
+- Workflow rail labels no longer overlap and wrap cleanly
+- Step 5 is fully visible
+- Manual Entry opens
+- Photo Rehab Analyzer and Repair Budget Builder render as large cards
+- Grouped assumptions render correctly
+- BUY / manual analysis renders
+- PASS / manual analysis renders
+- Max Safe Offer / Offer Gap / Downside & Stress / What Kills This Deal / Investor Action Plan render correctly
+- Quick narrow/mobile viewport check did not show obvious breakage
+
+**QA conclusion:** Bold Premium Investor one-page analyzer is shipped through v1.1 and smoke-tested in production. Next recommended sprint: Demo Readiness / Lender Credibility Polish v1 (candidates only — scope requires PM approval).
