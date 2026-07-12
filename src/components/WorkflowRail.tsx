@@ -36,7 +36,7 @@ export default function WorkflowRail({ className = "" }: { className?: string })
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
                   {i + 1}
                 </span>
-                <span className="whitespace-nowrap text-sm font-semibold text-white">
+                <span className="text-sm font-semibold text-white">
                   {step.label}
                 </span>
               </div>
