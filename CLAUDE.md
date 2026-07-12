@@ -61,13 +61,20 @@ src/
   App.css / index.css         # Global styles
   config.ts                   # API_BASE_URL (reads VITE_API_BASE_URL, fallback http://127.0.0.1:8000)
   shield.ts                   # Shield logic
-  AnalysisResult.tsx          # Deal analysis display (Offer Gap callout, verdict rationale)
+  AnalysisResult.tsx          # Investor Memo results display — five-zone memo (PR #49),
+                              # premium styling alignment (PR #51)
   components/
-    ShieldHeader.tsx          # Header component
+    ShieldHeader.tsx          # Unmounted since PR #49; removal is not scoped
     RepairBudgetBuilder.tsx   # Manual repair budget estimator (frontend-only, PR #39+#41)
-                              # Available in: Draft Deal, Resume Deal, Legacy Manual Analyze
+                              # Available in: Draft Deal, Resume Deal, Manual Entry
     PhotoRehabAnalyzer.tsx    # Photo rehab analyzer (PR #42, wired into all flows)
                               # Uploads photos → AI estimates condition → applies mid to rehab_budget
+    DealKillerSummary.tsx     # Deal Killer Summary (PR #45, frontend-only)
+    InvestorActionPlan.tsx    # Investor Action Plan v1 (PR #47, frontend-only)
+    InvestorMemoPreview.tsx   # Static sample Investor Memo Preview panel (PR #50, presentational)
+    WorkflowRail.tsx          # Visual-only workflow rail (PR #50; label wrap fix PR #52)
+    DealPage.tsx              # View Saved Deal page (/deal/:id)
+    DealsPage.tsx             # Saved Deals list page
   lib/
     api.ts                    # All fetch calls to backend — DO NOT restructure
     types.ts                  # All shared TypeScript types — canonical contract
@@ -196,7 +203,7 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
   - Live: https://flipforge-backend.onrender.com
 - **Frontend:** Vercel (linked to GitHub)
   - Live: https://flipforge-frontend.vercel.app
-- **CORS:** Currently `allow_origins=["*"]` — tighten to Vercel domain once deployed
+- **CORS:** `app/main.py` currently sets `allow_origins=["https://flipforge-frontend.vercel.app", "http://localhost:5173", "http://127.0.0.1:5173"]` with `allow_credentials=True`
 - **Env var:** Frontend reads `VITE_API_BASE_URL` — must be set to live Render URL on Vercel
 - **Pipeline status:** `/api/analyze`, `/api/export/lender-report`, and `/api/generate/negotiation-script` confirmed working in prod
 - **Photo Rehab env vars (Render):** `ANTHROPIC_API_KEY` set (hidden), `ANTHROPIC_MODEL=claude-sonnet-4-5` set
@@ -208,6 +215,14 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
 
 **Frontend:**
 ```
+75eef17  Merge pull request #52 — fix: prevent workflow rail label overlap
+7f0101a  Merge pull request #51 — style: align analyzer body with product experience reset
+bf36b5e  Merge pull request #50 — feat: add product experience reset layout
+5509ee9  Merge pull request #49 — feat: add investor memo results layout
+d60ac18  Merge pull request #48 — Add negotiate-first verdict modifier
+0338fcd  feat: add Investor Action Plan v1 to result screen (PR #47)
+e042aea  Merge pull request #46 — docs: record Deal Killer Summary visual QA results
+1776104  Merge pull request #45 — feat: add Deal Killer Summary v1
 370f5f2  feat: add photo rehab analyzer frontend (PR #42)
 3a2b600  fix: show repair budget builder in legacy manual analyzer (#41)
 07654861 feat: result screen deal-memo polish — offer gap callout + verdict rationale (#40)
