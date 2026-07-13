@@ -48,7 +48,7 @@ export default function DealKillerSummary({ result, purchasePrice, photoRehabMid
       .find((s) => verdictRank(s.verdict) < baseRank);
     if (downgraded) {
       bullets.push(
-        `The deal weakens under stress. If ${downgraded.name}, the numbers no longer work.`
+        `The deal weakens under stress. Under the "${downgraded.name}" scenario, it no longer meets underwriting standards.`
       );
     }
   }
