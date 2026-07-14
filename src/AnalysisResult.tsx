@@ -28,14 +28,6 @@ function rehabBadgeClass(sev?: string) {
   return `${base} border-white/10 text-white/60 bg-white/5`;
 }
 
-function breakpointBadgeClass(isFragile?: boolean) {
-  const base =
-    "inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold border";
-  if (isFragile)
-    return `${base} border-red-500/40 text-red-200 bg-red-500/10`;
-  return `${base} border-emerald-500/40 text-emerald-200 bg-emerald-500/10`;
-}
-
 function verdictBadgeClass(verdict?: string) {
   const base =
     "verdict-badge font-serif-display inline-flex items-center rounded-lg px-3 py-1.5 text-sm font-bold border";
@@ -90,6 +82,26 @@ function fmtMoney(n: number) {
 function fmtPctDecimalToPct(n: number) {
   if (!Number.isFinite(n)) return "—";
   return `${(n * 100).toFixed(1)}%`;
+}
+
+// Compact money for stress chips ONLY - nearest $1K shorthand (e.g. -$18K).
+// Exact memo figures elsewhere always use fmtMoney; chips are secondary display.
+// Values under $1,000 render exact to avoid a misleading "$0K".
+function fmtMoneyCompact(n: number) {
+  if (!Number.isFinite(n)) return "—";
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  if (abs < 1000) return `${sign}$${Math.round(abs).toLocaleString()}`;
+  return `${sign}$${Math.round(abs / 1000)}K`;
+}
+
+// Lender-readable explanation of breakpoints.break_reason (engine enum).
+function breakReasonText(reason?: string | null) {
+  if (reason === "NEGATIVE_PROFIT") return "profit goes negative";
+  if (reason === "BELOW_MARGIN") return "profit falls below your required margin";
+  if (reason === "VERDICT_FAIL")
+    return "the deal no longer qualifies under this strategy";
+  return null;
 }
 
 // safe clipboard helper (with fallback)
@@ -218,7 +230,9 @@ export default function AnalysisResult({ result, meta }: Props) {
     whyBullets.push("Deal is profitable assuming inputs are accurate.");
   }
   if (bp?.is_fragile && bp?.first_break_scenario) {
-    whyBullets.push(`Breaks under "${bp.first_break_scenario}" stress test.`);
+    whyBullets.push(
+      `The deal breaks under the "${bp.first_break_scenario}" stress scenario.`
+    );
   }
   const baseRank = verdictRank(result.stress_tests?.[0]?.verdict ?? "");
   const firstDowngrade = result.stress_tests?.slice(1).find(
@@ -278,6 +292,17 @@ export default function AnalysisResult({ result, meta }: Props) {
     purchasePriceMeta !== null && result.max_safe_offer > 0
       ? ((result.max_safe_offer - purchasePriceMeta) / result.max_safe_offer) * 100
       : null;
+
+  // Breakpoint prominence - engine-asserted values only. The failing scenario's
+  // dollar figure comes from the matching stress_tests entry, never derived.
+  const breakScenario =
+    bp?.is_fragile && bp.first_break_scenario
+      ? result.stress_tests?.find((s) => s.name === bp.first_break_scenario) ??
+        null
+      : null;
+  const breakReason = breakReasonText(bp?.break_reason);
+  // Non-base stress scenarios (index 0 is "Base").
+  const stressCount = Math.max((result.stress_tests?.length ?? 0) - 1, 0);
 
   const offer = Number(result.max_safe_offer ?? 0);
   const offerText = fmtMoney(offer);
@@ -376,6 +401,15 @@ export default function AnalysisResult({ result, meta }: Props) {
           {negotiateFirstDelta !== null && (
             <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border border-amber-500/40 text-amber-200 bg-amber-500/10">
               NEGOTIATE FIRST • {negotiateFirstDelta} over MAO
+            </span>
+          )}
+
+          {/* Breakpoint echo chip - light echo only; the full callout lives in
+              Downside & Stress. Isolated on purpose: delete this block alone
+              to remove the echo without touching the rest of the header. */}
+          {bp?.is_fragile && bp.first_break_scenario && (
+            <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border border-red-500/40 text-red-200 bg-red-500/10">
+              BREAKS AT {bp.first_break_scenario}
             </span>
           )}
 
@@ -524,6 +558,44 @@ export default function AnalysisResult({ result, meta }: Props) {
           Downside &amp; Stress
         </div>
 
+        {/* Breakpoint callout - single home of the breakpoint statement. */}
+        {bp && bp.is_fragile && bp.first_break_scenario && (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-5">
+            <div className="text-[10px] uppercase tracking-widest text-red-300/70 mb-1.5">
+              Breakpoint
+            </div>
+            <p className="text-sm text-red-200 leading-relaxed">
+              This deal breaks at{" "}
+              <span className="font-semibold">{bp.first_break_scenario}</span>
+              {breakReason ? <> — {breakReason}</> : null}.
+              {breakScenario && (
+                <>
+                  {" "}
+                  Net profit at that point:{" "}
+                  <span className="font-semibold">
+                    {fmtMoney(breakScenario.net_profit)}
+                  </span>
+                  .
+                </>
+              )}
+            </p>
+          </div>
+        )}
+        {bp && !bp.is_fragile && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+            <div className="text-[10px] uppercase tracking-widest text-emerald-300/70 mb-1.5">
+              Breakpoint
+            </div>
+            <p className="text-sm text-emerald-200 leading-relaxed">
+              No breakpoint hit — this deal holds under{" "}
+              {stressCount > 0
+                ? `all ${stressCount} stress scenarios`
+                : "the applied stress scenarios"}
+              .
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           {rehab && (
             <div className="flex items-center gap-2">
@@ -532,19 +604,6 @@ export default function AnalysisResult({ result, meta }: Props) {
               </span>
               <span className={rehabBadgeClass(rehab.severity)}>
                 {rehab.severity}
-              </span>
-            </div>
-          )}
-
-          {bp && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-widest text-white/60">
-                Breakpoint
-              </span>
-              <span className={breakpointBadgeClass(bp.is_fragile)}>
-                {bp.first_break_scenario
-                  ? bp.first_break_scenario
-                  : "Holds under mild stress"}
               </span>
             </div>
           )}
@@ -558,7 +617,7 @@ export default function AnalysisResult({ result, meta }: Props) {
             <div className="flex flex-wrap gap-2">
               {result.stress_tests.map((s, i) => (
                 <span key={i} className={stressChipClass(s.verdict)}>
-                  {s.name}: {s.verdict}
+                  {s.name}: {s.verdict} • {fmtMoneyCompact(s.net_profit)}
                 </span>
               ))}
             </div>
@@ -697,7 +756,7 @@ export default function AnalysisResult({ result, meta }: Props) {
           <div className="mt-1 text-xs text-white/60">
             {canReport && canScript
               ? "Lender Report and Negotiation Script are available."
-              : "Outputs are disabled — deal did not meet viability threshold."}
+              : "Outputs are withheld — this deal did not meet the underwriting viability threshold."}
           </div>
         </div>
 
