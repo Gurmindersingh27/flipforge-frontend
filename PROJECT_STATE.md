@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-07-12
+2026-07-16
 
 ---
 
@@ -27,6 +27,7 @@ Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Inve
 
 **Current product state:**
 - Bold Premium Investor one-page analyzer shipped through v1.1 (frontend PRs #49, #50, #51, #52 — all merged).
+- Demo Readiness / Lender Credibility Polish v1A COMPLETE (frontend PR #54, merged 2026-07-16, commit 18622b9) — breakpoint prominence + surgical lender-memo copy polish. Production deployment completed; production smoke test passed 2026-07-16 (see Production QA entry below).
 - QA status: local v1.1 visual smoke test passed against merged main. Production smoke test passed 2026-07-12 (see Production QA entry below).
 - Investor Memo Results Layout v1 merged (frontend PR #49) — five-zone lender-grade memo: Decision Header → Offer Safety → Downside & Stress → Investor Action Plan → Supporting Detail.
 - Product Experience Reset v1 merged (frontend PR #50) — premium hero, Investor Memo Preview panel, visual-only workflow rail, core product cards, grouped assumptions, "Generate Investor Memo" CTA.
@@ -159,6 +160,20 @@ Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Inve
   - Fixes desktop-width label overlap/truncation introduced with the v1.1 rail labels
 - [x] Local v1.1 visual smoke test passed against merged main
 - [x] Production smoke test passed 2026-07-12 (see Production QA — Bold Premium Investor v1.1 below)
+- [x] Demo Readiness / Lender Credibility Polish v1A — frontend PR #54 (merged 2026-07-16, commit 18622b9)
+  - Breakpoint callout at the top of the DOWNSIDE & STRESS zone:
+    - Fragile state: red treatment, shows first breaking scenario, engine-provided break_reason in lender-readable language, exact net profit at the breaking scenario
+    - Non-fragile state: emerald treatment, states the deal survives the full stress set
+  - breakpoints.break_reason now surfaced in the frontend — already produced by the underwriting engine but previously discarded by the UI; no new engine calculation introduced
+    - Wording: NEGATIVE_PROFIT → "profit goes negative", BELOW_MARGIN → "profit falls below your required margin", VERDICT_FAIL → "the deal no longer qualifies under this strategy"
+  - Stress-test chips now include net-profit magnitude — compact rounded nearest-$1,000 shorthand (e.g. -$18K, minus sign preserved, exact under $1,000); exact figures remain in the primary Breakpoint callout
+  - Removable Decision-zone echo chip on fragile deals: BREAKS AT {scenario} (isolated JSX block, deletable alone)
+  - Surgical lender-memo copy polish: Why-this-verdict breakpoint bullet, Integrity Gate suppressed caption, Deal Killer Summary stress bullet; Copy Offer / Copy Summary strings byte-identical
+  - Five-zone Investor Memo hierarchy unchanged: DECISION → OFFER SAFETY → DOWNSIDE & STRESS → Investor Action Plan → SUPPORTING DETAIL
+  - Files changed: src/AnalysisResult.tsx, src/components/DealKillerSummary.tsx (one copy string). InvestorActionPlan.tsx, App.tsx, WorkflowRail.tsx, api.ts, types.ts untouched.
+  - Explicitly not included: monthly holding-cost burn, contingency/reserve-discipline display, confidence-score recalibration, backend changes, schema changes, PDF work
+  - Validation: build passed; lint reports the same 12 pre-existing errors from main, zero new; component-level visual QA passed for 4 states (fragile PASS, fragile BUY, clean non-fragile BUY, missing-purchase-price flow) at ~1440px and ~390px using real analyze_deal() engine output rendered through the actual AnalysisResult component and Vite/Tailwind pipeline in a temporary harness (harness deleted after QA)
+  - Production smoke test passed 2026-07-16: bad PASS deal + clean BUY deal (see Production QA entry below)
 
 ### Not Done / Blocked
 - [x] Tighten CORS from * to https://flipforge-frontend.vercel.app
@@ -170,14 +185,16 @@ Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Inve
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Demo Readiness / Lender Credibility Polish v1 — recommended next sprint**
+**Demo Conversion Readiness**
 
-- Do not start until PM explicitly approves scope in next session.
-- Candidate focus areas (candidates only — NOT approved scope):
-  - Breakpoint prominence
-  - Monthly holding-cost burn
-  - Contingency/reserve discipline display
-  - Lender-memo copy polish
+The next phase is not automatically another product feature. Before approving v1B, FlipForge must determine:
+- Who will be in the next demo: hard money lender, experienced flipper, acquisition manager, or another defined buyer.
+- What that person must understand or feel in the first 30 seconds.
+- Which deal examples best demonstrate FlipForge's risk-first value.
+- What the demo call-to-action is.
+- What real feedback or buyer objection would justify another build sprint.
+
+The product should now move toward demos, feedback, credibility, and revenue rather than continuing to add speculative features. No implementation is approved. Scope requires explicit PM approval before any code.
 
 ---
 
@@ -407,6 +424,8 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+77d9434  Merge pull request #54 — Demo Readiness v1A: Breakpoint prominence and lender memo polish
+18622b9  feat: elevate breakpoint risk in investor memo (PR #54)
 75eef17  Merge pull request #52 — fix: prevent workflow rail label overlap
 e51c196  fix: prevent workflow rail label overlap (PR #52)
 7f0101a  Merge pull request #51 — style: align analyzer body with product experience reset
@@ -477,16 +496,26 @@ fa30d10  fix(pdf): render None percentage fields as '—' instead of 'None%'
   - Observed UI: BUY / BRRRR / confidence 40/100 / net_profit $7,375 / profit_pct 3.8% / max_safe_offer $126,900 / "Purchase is $13,100 over Max Safe Offer."
   - Future fix: verdict consistency review — decide whether BUY should be suppressed or visually downgraded when purchase exceeds max safe offer, even if BRRRR is the best strategy.
   - Do not fix now. Do not touch analysis_engine.py.
+- **Missing-purchase-price contradiction (integrity bug, predates PR #54):**
+  - A missing-purchase state may still display backend-generated notes or risk flags claiming the purchase price is above Max Safe Offer even though purchase-price metadata is unavailable (e.g. "Your purchase price is above Max Safe Offer" in Why This Verdict / "Offer is far above Max Safe Offer" risk flag).
+  - Backend notes/flags are computed from the analyzed request; the frontend meta is what can be missing.
+  - Log as a focused integrity bug. Do not fix in a docs PR.
+- **Stress-chip PASS terminology ambiguity:**
+  - PASS can mean the overall deal should be passed on, and it also appears inside stress-test chips as a per-scenario verdict.
+  - The dollar magnitude added in PR #54 reduces confusion, but the terminology should be reviewed later.
+- **Session-boot skill has a stale branch-name reference:**
+  - The flipforge-session-boot skill checklist expects branch claude/load-claude-skills-IpLZn; sessions run on their own designated branches (e.g. claude/flipforge-session-setup-4znzae on 2026-07-16).
+  - Record for a future documentation/skill maintenance task. Skill files were not edited in this closeout.
 
 ---
 
 ## 9. Feature Backlog
 
-**Bold Premium Investor one-page analyzer shipped through v1.1. Next recommended sprint: Demo Readiness / Lender Credibility Polish v1 (see Next Session Goal — candidates only, not approved scope). Any feature requires PM scope approval before any code.**
+**Bold Premium Investor one-page analyzer shipped through v1.1. Demo Readiness / Lender Credibility Polish v1A complete (PR #54, 2026-07-16). Next strategic goal: Demo Conversion Readiness (see Next Session Goal). Any feature requires PM scope approval before any code.**
 
 ### Backlog Notes
 
-- **Confidence score credibility:** current scoring may show 100/100 on deals with relatively thin margin. Review before live lender demos. This is engine territory (`analysis_engine.py`) and requires explicit PM approval before any code changes.
+- **Confidence score credibility:** clean deals can still display approximately 98–100/100 confidence, and thin or imperfect deals may appear more certain than a lender would expect. Review before live lender demos. This is engine territory (`analysis_engine.py`) — do not change without a separately approved backend/engine investigation.
 
 ### Next Features To Add (in priority order)
 
@@ -845,3 +874,38 @@ Verified by PM on production Vercel (signed in) after PR #52 merged:
 - Quick narrow/mobile viewport check did not show obvious breakage
 
 **QA conclusion:** Bold Premium Investor one-page analyzer is shipped through v1.1 and smoke-tested in production. Next recommended sprint: Demo Readiness / Lender Credibility Polish v1 (candidates only — scope requires PM approval).
+
+---
+
+## Session 2026-07-16 — Demo Readiness / Lender Credibility Polish v1A
+
+**Frontend PR:** #54 (merged 2026-07-16, commit 18622b9)
+
+**Scope decision:** PM approved v1A as breakpoint prominence + surgical lender-memo copy polish only. Inspected but explicitly parked: monthly holding-cost burn (holding_cost is engine-internal, not an AnalyzeResponse field — would require frontend re-derivation or an additive backend field; also meta.holding_months uses manual-flow state even in draft flow, App.tsx pdfMeta), and contingency/reserve-discipline display (rehab_reality.contingency_pct is advisory-only — never applied to project cost, profit, or confidence in the engine; reserve data does not exist).
+
+**Shipped:**
+- Breakpoint callout at the top of DOWNSIDE & STRESS — fragile: red, first breaking scenario, engine break_reason in lender-readable language, exact net profit at the breaking scenario; non-fragile: emerald, deal survives the full stress set
+- breakpoints.break_reason surfaced for the first time (engine already produced it; UI previously discarded it — no new engine calculation)
+- Stress chips show net-profit magnitude: compact nearest-$1,000 shorthand in chips only; exact figures in the callout; minus sign preserved; exact under $1,000
+- Removable Decision-zone echo chip on fragile deals: BREAKS AT {scenario}
+- Copy polish: Why-this-verdict breakpoint bullet, Integrity Gate suppressed caption ("Outputs are withheld — this deal did not meet the underwriting viability threshold."), Deal Killer stress bullet ("...no longer meets underwriting standards.")
+- Five-zone memo hierarchy preserved exactly
+
+**Files:** src/AnalysisResult.tsx, src/components/DealKillerSummary.tsx. No backend, schema, api.ts, types.ts, App.tsx, WorkflowRail.tsx, PDF, or dependency changes. InvestorActionPlan.tsx deliberately zero-diff.
+
+**Validation:**
+- Build passed; lint unchanged — same 12 pre-existing errors as unmodified main (verified via stash comparison), zero new
+- Component-level visual QA: 4 states (fragile PASS 220k/300k/50k; fragile BUY via known BRRRR case 140k/200k/25k/rent 1800/6mo/10%/80 LTC; clean non-fragile BUY 160k/300k/50k; missing-purchase-price flow) x 1440px and ~390px — all passed
+- QA method: Clerk credentials unavailable in the session environment, so QA used real analyze_deal() engine output rendered through the actual AnalysisResult component and the project's Vite/Tailwind pipeline in a temporary harness page; harness deleted after QA
+- Verified in QA: zone order (DOM probe), no breakpoint duplication after old chip removal, chip wrap at 390px, Decision header not crowded (echo chip kept per PM approval), Copy Offer / Copy Summary clipboard strings byte-identical, zero non-localhost network requests (no RentCast or Anthropic calls)
+
+---
+
+## Production QA — Demo Readiness v1A (completed 2026-07-16)
+
+**Result: PASS — production deployment completed and smoke test passed manually.**
+
+- Bad PASS deal: verified in production
+- Clean BUY deal: verified in production
+
+**Conclusion:** Demo Readiness / Lender Credibility Polish v1A is complete. Next strategic goal: Demo Conversion Readiness (see Next Session Goal) — demos, feedback, credibility, and revenue before any v1B build sprint.

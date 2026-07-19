@@ -62,14 +62,15 @@ src/
   config.ts                   # API_BASE_URL (reads VITE_API_BASE_URL, fallback http://127.0.0.1:8000)
   shield.ts                   # Shield logic
   AnalysisResult.tsx          # Investor Memo results display — five-zone memo (PR #49),
-                              # premium styling alignment (PR #51)
+                              # premium styling alignment (PR #51),
+                              # breakpoint prominence + lender-memo copy polish (PR #54)
   components/
     ShieldHeader.tsx          # Unmounted since PR #49; removal is not scoped
     RepairBudgetBuilder.tsx   # Manual repair budget estimator (frontend-only, PR #39+#41)
                               # Available in: Draft Deal, Resume Deal, Manual Entry
     PhotoRehabAnalyzer.tsx    # Photo rehab analyzer (PR #42, wired into all flows)
                               # Uploads photos → AI estimates condition → applies mid to rehab_budget
-    DealKillerSummary.tsx     # Deal Killer Summary (PR #45, frontend-only)
+    DealKillerSummary.tsx     # Deal Killer Summary (PR #45, frontend-only; copy polish PR #54)
     InvestorActionPlan.tsx    # Investor Action Plan v1 (PR #47, frontend-only)
     InvestorMemoPreview.tsx   # Static sample Investor Memo Preview panel (PR #50, presentational)
     WorkflowRail.tsx          # Visual-only workflow rail (PR #50; label wrap fix PR #52)
@@ -215,6 +216,8 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
 
 **Frontend:**
 ```
+77d9434  Merge pull request #54 — Demo Readiness v1A: Breakpoint prominence and lender memo polish
+18622b9  feat: elevate breakpoint risk in investor memo (PR #54)
 75eef17  Merge pull request #52 — fix: prevent workflow rail label overlap
 7f0101a  Merge pull request #51 — style: align analyzer body with product experience reset
 bf36b5e  Merge pull request #50 — feat: add product experience reset layout
