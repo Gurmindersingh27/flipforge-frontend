@@ -537,8 +537,8 @@ export default function AnalysisResult({ result, meta }: Props) {
 
         {ltcMeta !== null && (
           <div className="text-xs text-white/50">
-            LTC is a financing assumption you entered — not computed by
-            underwriting.
+            LTC is an underwriting assumption used in the analysis, not a
+            calculated result.
           </div>
         )}
 

@@ -52,6 +52,9 @@ const FIELD_LABELS: Record<string, string> = {
   loan_to_cost_pct: "LTC (%)",
 };
 
+// Mirrors the backend default loan_to_cost_pct = 0.90 (app/models.py). Percent form for display.
+const DEFAULT_LTC_PCT = 90;
+
 // 3d — Maps a RentCast EnrichAddressResponse into a DraftDeal for the editor.
 // ARV ← value_signal.estimate, rent ← rent_signal.estimate.
 // purchase_price and rehab_budget are always null — user must fill them.
@@ -86,7 +89,7 @@ function enrichResponseToDraft(
     selling_cost_pct: 0.08,
     holding_months: 6,
     annual_interest_rate: 0.10,
-    loan_to_cost_pct: 0.90,
+    loan_to_cost_pct: DEFAULT_LTC_PCT / 100,
     required_profit_margin_pct: 0.12,
     notes: [],
     signals: [],
@@ -339,7 +342,6 @@ function AnalyzerPage() {
   // ✅ Financing assumptions (PDF-only)
   const [holdingMonths, setHoldingMonths] = useState<number>(6);
   const [annualInterestRate, setAnnualInterestRate] = useState<number>(10);
-  const [loanToCostPct, setLoanToCostPct] = useState<number>(80);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
@@ -437,7 +439,7 @@ function AnalyzerPage() {
         Optional — used to estimate carry. Pre-filled with common defaults.
       </div>
 
-      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs text-slate-400 mb-1">
             Holding Months
@@ -472,22 +474,6 @@ function AnalyzerPage() {
           />
         </div>
 
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">
-            Loan-to-Cost (LTC %)
-          </label>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={1}
-            value={loanToCostPct}
-            onChange={(e) =>
-              setLoanToCostPct(e.target.value === "" ? 0 : Number(e.target.value))
-            }
-            className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
-          />
-        </div>
       </div>
 
       <div className="mt-2 text-xs text-white/65">
@@ -535,7 +521,7 @@ function AnalyzerPage() {
       // financing assumptions (PDF-only)
       holding_months: holdingMonths,
       interest_rate_pct: annualInterestRate,
-      ltc_pct: loanToCostPct,
+      ltc_pct: draft ? draft.loan_to_cost_pct * 100 : DEFAULT_LTC_PCT,
     };
   }, [
     draft,
@@ -549,7 +535,6 @@ function AnalyzerPage() {
     monthlyRent,
     holdingMonths,
     annualInterestRate,
-    loanToCostPct,
   ]);
 
   return (
