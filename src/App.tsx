@@ -305,7 +305,16 @@ function AnalyzerPage() {
 
     try {
       setAnalyzeLoading(true);
-      const res = await finalizeAndAnalyze(draft);
+      // Treat a non-positive draft rent as "no rent" (omitted), without mutating draft state.
+      const normalizedDraft =
+        draft.est_monthly_rent.value !== null &&
+        draft.est_monthly_rent.value <= 0
+          ? {
+              ...draft,
+              est_monthly_rent: { ...draft.est_monthly_rent, value: null },
+            }
+          : draft;
+      const res = await finalizeAndAnalyze(normalizedDraft);
 
       if (!res.ok) {
         const fields = res.missing_fields || [];
@@ -363,7 +372,8 @@ function AnalyzerPage() {
       purchase_price: purchasePrice,
       arv,
       rehab_budget: rehabBudget,
-      est_monthly_rent: monthlyRent === "" ? null : monthlyRent,
+      est_monthly_rent:
+        monthlyRent === "" || Number(monthlyRent) <= 0 ? null : monthlyRent,
     };
 
     try {
@@ -499,7 +509,7 @@ function AnalyzerPage() {
 
     const rentVal = usingDraft
       ? (draft?.est_monthly_rent?.value ?? null)
-      : monthlyRent === ""
+      : monthlyRent === "" || Number(monthlyRent) <= 0
       ? null
       : monthlyRent;
 
