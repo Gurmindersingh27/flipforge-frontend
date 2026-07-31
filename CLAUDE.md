@@ -57,13 +57,16 @@ git clone https://github.com/Gurmindersingh27/flipforge-backend
 ```
 src/
   main.tsx                    # App entry point
-  App.tsx                     # Root component
+  App.tsx                     # Root component — LTC display sourced from underwriting value,
+                              # manual LTC input removed, 90% default via DEFAULT_LTC_PCT (PR #56);
+                              # non-positive rent normalized to null in manual + draft flows (PR #57)
   App.css / index.css         # Global styles
   config.ts                   # API_BASE_URL (reads VITE_API_BASE_URL, fallback http://127.0.0.1:8000)
   shield.ts                   # Shield logic
   AnalysisResult.tsx          # Investor Memo results display — five-zone memo (PR #49),
                               # premium styling alignment (PR #51),
-                              # breakpoint prominence + lender-memo copy polish (PR #54)
+                              # breakpoint prominence + lender-memo copy polish (PR #54),
+                              # LTC caption accuracy for both flows (PR #56)
   components/
     ShieldHeader.tsx          # Unmounted since PR #49; removal is not scoped
     RepairBudgetBuilder.tsx   # Manual repair budget estimator (frontend-only, PR #39+#41)
@@ -207,6 +210,7 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
 - **CORS:** `app/main.py` currently sets `allow_origins=["https://flipforge-frontend.vercel.app", "http://localhost:5173", "http://127.0.0.1:5173"]` with `allow_credentials=True`
 - **Env var:** Frontend reads `VITE_API_BASE_URL` — must be set to live Render URL on Vercel
 - **Pipeline status:** `/api/analyze`, `/api/export/lender-report`, and `/api/generate/negotiation-script` confirmed working in prod
+- **Lender demo integrity fixes (2026-07-31):** LTC display (PR #56) and non-positive rent normalization (PR #57) merged and production-tested against the locked demo set. Frontend-only; no backend, engine, schema, AnalyzeRequest, API-contract, type, dependency, scoring, confidence, or risk-logic changes.
 - **Photo Rehab env vars (Render):** `ANTHROPIC_API_KEY` set (hidden), `ANTHROPIC_MODEL=claude-sonnet-4-5` set
 - **PHOTO_REHAB_DEV_STUB:** NOT set in production — do not add it
 
@@ -216,6 +220,9 @@ Do not touch pdf_service.py without explicitly flagging this risk first.
 
 **Frontend:**
 ```
+fc0aab5  Merge pull request #57 — fix: treat non-positive rent as omitted
+6f0b01c  Merge pull request #56 — fix: align displayed LTC with underwriting assumption
+5ee54a8  Merge pull request #55 — docs: close Demo Readiness v1A and set demo conversion goal
 77d9434  Merge pull request #54 — Demo Readiness v1A: Breakpoint prominence and lender memo polish
 18622b9  feat: elevate breakpoint risk in investor memo (PR #54)
 75eef17  Merge pull request #52 — fix: prevent workflow rail label overlap

@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-07-16
+2026-07-31
 
 ---
 
@@ -28,6 +28,9 @@ Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Inve
 **Current product state:**
 - Bold Premium Investor one-page analyzer shipped through v1.1 (frontend PRs #49, #50, #51, #52 — all merged).
 - Demo Readiness / Lender Credibility Polish v1A COMPLETE (frontend PR #54, merged 2026-07-16, commit 18622b9) — breakpoint prominence + surgical lender-memo copy polish. Production deployment completed; production smoke test passed 2026-07-16 (see Production QA entry below).
+- Lender demo integrity fixes COMPLETE (frontend PRs #56 + #57, merged 2026-07-31) — production-tested against the locked demo set (see Production QA entry below). Both are surgical frontend-only fixes: no backend, engine, schema, AnalyzeRequest, API-contract, type, dependency, scoring, confidence, risk-logic, or five-zone-hierarchy changes.
+  - **LTC display integrity (PR #56, source 8e5e710, merge 6f0b01c):** the Investor Memo previously displayed 80% LTC while underwriting used 90%. The misleading manual LTC input (which did not affect underwriting) was removed. Draft/finalize flow now displays the actual LTC submitted to underwriting; manual flow displays the actual 90% underwriting default (single `DEFAULT_LTC_PCT` constant mirroring the backend default). LTC explanatory copy was updated so it is accurate in both flows.
+  - **Non-positive rent normalization (PR #57, source 7c643d7, merge fc0aab5):** blank, zero, and negative rent now normalize to omitted/null across the manual `/api/analyze` flow, manual memo/PDF metadata, and the draft/finalize flow (via a shallow copy; existing draft state is not mutated). Positive rent values are unchanged. Zero rent no longer produces a false `Weak rent-to-cost for BRRRR` flag, false "Rent provided" wording, or a misleading BRRRR CONDITIONAL / "What Could Still Go Wrong" result on an otherwise clean BUY.
 - QA status: local v1.1 visual smoke test passed against merged main. Production smoke test passed 2026-07-12 (see Production QA entry below).
 - Investor Memo Results Layout v1 merged (frontend PR #49) — five-zone lender-grade memo: Decision Header → Offer Safety → Downside & Stress → Investor Action Plan → Supporting Detail.
 - Product Experience Reset v1 merged (frontend PR #50) — premium hero, Investor Memo Preview panel, visual-only workflow rail, core product cards, grouped assumptions, "Generate Investor Memo" CTA.
@@ -185,16 +188,27 @@ Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Inve
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Demo Conversion Readiness**
+**Demo Conversion Readiness (active phase)**
 
-The next phase is not automatically another product feature. Before approving v1B, FlipForge must determine:
-- Who will be in the next demo: hard money lender, experienced flipper, acquisition manager, or another defined buyer.
-- What that person must understand or feel in the first 30 seconds.
-- Which deal examples best demonstrate FlipForge's risk-first value.
-- What the demo call-to-action is.
-- What real feedback or buyer objection would justify another build sprint.
+The two lender demo integrity fixes (LTC display, non-positive rent) are merged and production-tested, so the product side of demo readiness is closed. The active work is now go-to-market, not features.
 
-The product should now move toward demos, feedback, credibility, and revenue rather than continuing to add speculative features. No implementation is approved. Scope requires explicit PM approval before any code.
+**Status:**
+- Initial cold lender outreach has been sent.
+- The demo set is locked (do not change without PM approval):
+  1. Obvious PASS ($185K / $240K / $45K).
+  2. Same property at a corrected offer ($135K / $240K / $45K → BUY).
+  3. Clean BUY ($200K / $345K / $50K, rent entered as 0 → treated as omitted).
+- No additional product sprint is approved.
+
+**Next work (business, not code):**
+- Monitor replies and bounces from cold outreach.
+- Schedule lender demos.
+- Run the locked demo.
+- Collect structured buyer feedback.
+- Identify repeated blockers.
+- Test pilot interest and willingness to pay.
+
+**Claude Code should remain closed** unless (1) a production-blocking issue appears, or (2) repeated buyer feedback justifies a tightly scoped change. The product should move toward demos, feedback, credibility, and revenue rather than adding speculative features. No implementation is approved. Scope requires explicit PM approval before any code.
 
 ---
 
@@ -424,6 +438,12 @@ Any change must be made in BOTH `src/lib/types.ts` (frontend) AND `app/models.py
 
 **Frontend:**
 ```
+fc0aab5  Merge pull request #57 — fix: treat non-positive rent as omitted
+7c643d7  fix: treat non-positive rent as omitted (PR #57)
+6f0b01c  Merge pull request #56 — fix: align displayed LTC with underwriting assumption
+8e5e710  fix: align displayed LTC with underwriting assumption (PR #56)
+5ee54a8  Merge pull request #55 — docs: close Demo Readiness v1A and set demo conversion goal
+90cf29f  docs: close Demo Readiness v1A and set demo conversion goal (PR #55)
 77d9434  Merge pull request #54 — Demo Readiness v1A: Breakpoint prominence and lender memo polish
 18622b9  feat: elevate breakpoint risk in investor memo (PR #54)
 75eef17  Merge pull request #52 — fix: prevent workflow rail label overlap
@@ -909,3 +929,56 @@ Verified by PM on production Vercel (signed in) after PR #52 merged:
 - Clean BUY deal: verified in production
 
 **Conclusion:** Demo Readiness / Lender Credibility Polish v1A is complete. Next strategic goal: Demo Conversion Readiness (see Next Session Goal) — demos, feedback, credibility, and revenue before any v1B build sprint.
+
+---
+
+## Session 2026-07-31 — Lender demo integrity fixes (LTC display + non-positive rent)
+
+Two surgical, frontend-only integrity fixes found during Demo Conversion Readiness demo preparation. Each was investigated read-only, scoped and approved by the PM, implemented, validated, merged, and production-tested before this closeout.
+
+**LTC display integrity — Frontend PR #56** (source 8e5e710, merge 6f0b01c)
+- The Investor Memo's "LTC (assumed)" previously displayed 80% while underwriting used 90%. It was wired to a legacy manual-flow state (`loanToCostPct`, default 80) that never reached the engine.
+- Removed the misleading editable "Loan-to-Cost (LTC %)" input from the manual Financing & Holding section — it did not affect underwriting (the manual `/api/analyze` request omits `loan_to_cost_pct`, so the backend applies its 90% default).
+- Draft/finalize flow now displays the actual LTC submitted to underwriting (`draft.loan_to_cost_pct * 100`); manual flow displays the actual 90% underwriting default via a single named `DEFAULT_LTC_PCT` constant mirroring the backend default.
+- LTC explanatory copy updated to read accurately in both flows: "LTC is an underwriting assumption used in the analysis, not a calculated result."
+- **Files:** `src/App.tsx`, `src/AnalysisResult.tsx` (one copy line).
+
+**Non-positive rent normalization — Frontend PR #57** (source 7c643d7, merge fc0aab5)
+- The manual `Est. Monthly Rent` field entered as `0` was sent as a real `$0` rent. The engine distinguishes rent only by `None` vs not-`None`, so `0` triggered `Weak rent-to-cost for BRRRR`, the "Rent provided — BRRRR logic includes rent-to-cost check" note, a BRRRR CONDITIONAL downgrade on a clean BUY, and a "What Could Still Go Wrong" card.
+- Blank, zero, and negative rent now normalize to omitted/null across: the manual `/api/analyze` flow, manual memo/PDF metadata, and the draft/finalize flow (via a shallow copy). Positive rent values are unchanged. Existing draft state is not mutated during normalization.
+- **Files:** `src/App.tsx` only.
+
+**Scope confirmation (both fixes):** no backend source changes, no `analysis_engine.py` changes, no schema changes, no `AnalyzeRequest` changes, no API-contract changes, no type changes, no dependencies, no scoring changes, no confidence changes, no risk-logic changes, no five-zone-hierarchy changes. Code is source of truth; PRs #56/#57 touched only frontend `src/` files (verified: `src/App.tsx`, `src/AnalysisResult.tsx`).
+
+**Validation:** `npm run build` passed for both; repo-wide lint had zero new findings versus `origin/main` (per-file baseline comparison). PR #57 additionally verified via a runtime truth-table of the normalization expressions (manual blank/0/negative → null; positive unchanged; draft 0 → null; draft null/positive unchanged; original draft not mutated).
+
+**Note (supersedes earlier wording):** the 2026-07-09 Investor Memo layout entry described LTC as "user-entered." As of PR #56 that is no longer accurate — LTC is an underwriting assumption shown from the value actually used by the engine (draft-edited value, or the 90% default in manual). The historical session log is left intact; this note is the current source of truth.
+
+---
+
+## Production QA — Lender demo integrity fixes (completed 2026-07-31)
+
+**Result: PASS — both fixes deployed and production-tested against the locked demo set.**
+
+**Scenario 1 — Obvious PASS**
+- Purchase $185,000 / ARV $240,000 / Rehab $45,000
+- Decision: PASS
+- Max Safe Offer ≈ $137,700; purchase ≈ $47,300 above Max Safe Offer
+- Net profit ≈ -$25,100; breaks at ARV -5%
+- Lender outputs withheld (Integrity Gate)
+
+**Scenario 2 — Corrected offer (same property)**
+- Purchase $135,000 / ARV $240,000 / Rehab $45,000
+- Decision: BUY; ≈ $2,700 below Max Safe Offer
+- LTC displays 90% (correct — matches underwriting)
+
+**Scenario 3 — Clean BUY (zero-rent case)**
+- Purchase $200,000 / ARV $345,000 / Rehab $50,000; rent entered as 0 → correctly treated as omitted
+- Decision: BUY; Confidence 93/100
+- Max Safe Offer $212,300; offer gap $12,300 under
+- Net profit $50,150; profit margin 17.0%; ROI 34.0%
+- All stress scenarios remain BUY
+- No weak rent-to-cost flag; no false "Rent provided" note; no unnecessary "What Could Still Go Wrong" card
+- Lender Report and Negotiation Script available
+
+**Conclusion:** Both lender demo integrity fixes are complete and production-verified. Demo Conversion Readiness remains the active phase; the demo set is locked and the next work is go-to-market (see Next Session Goal). No further product sprint is approved.
