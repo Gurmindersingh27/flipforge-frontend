@@ -84,6 +84,11 @@ function fmtPctDecimalToPct(n: number) {
   return `${(n * 100).toFixed(1)}%`;
 }
 
+function fmtDisplayPct(n: number | null) {
+  if (n === null || !Number.isFinite(n)) return "—";
+  return `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+}
+
 // Compact money for stress chips ONLY - nearest $1K shorthand (e.g. -$18K).
 // Exact memo figures elsewhere always use fmtMoney; chips are secondary display.
 // Values under $1,000 render exact to avoid a misleading "$0K".
@@ -279,12 +284,33 @@ export default function AnalysisResult({ result, meta }: Props) {
       ? "Deal may work, but key assumptions must be verified first."
       : "Deal does not pencil at current terms.");
 
-  // ARV and LTC arrive via meta. LTC is a user-entered financing assumption,
-  // NOT engine output — it must always be labeled as assumed.
+  // ARV and underwriting assumptions arrive via meta. These values are user
+  // inputs/defaults, not engine outputs, and must be labeled as assumptions.
   const arvMeta =
     typeof meta?.arv === "number" && meta.arv > 0 ? meta.arv : null;
   const ltcMeta =
-    typeof meta?.ltc_pct === "number" && meta.ltc_pct > 0 ? meta.ltc_pct : null;
+    typeof meta?.ltc_pct === "number" && meta.ltc_pct >= 0 ? meta.ltc_pct : null;
+  const closingCostPctMeta =
+    typeof meta?.closing_cost_pct === "number" && meta.closing_cost_pct >= 0
+      ? meta.closing_cost_pct
+      : null;
+  const sellingCostPctMeta =
+    typeof meta?.selling_cost_pct === "number" && meta.selling_cost_pct >= 0
+      ? meta.selling_cost_pct
+      : null;
+  const holdingMonthsMeta =
+    typeof meta?.holding_months === "number" && meta.holding_months >= 0
+      ? meta.holding_months
+      : null;
+  const interestRatePctMeta =
+    typeof meta?.interest_rate_pct === "number" && meta.interest_rate_pct >= 0
+      ? meta.interest_rate_pct
+      : null;
+  const requiredMarginPctMeta =
+    typeof meta?.required_profit_margin_pct === "number" &&
+    meta.required_profit_margin_pct >= 0
+      ? meta.required_profit_margin_pct
+      : null;
 
   const offerGapValue =
     purchasePriceMeta !== null ? purchasePriceMeta - result.max_safe_offer : null;
@@ -541,6 +567,68 @@ export default function AnalysisResult({ result, meta }: Props) {
             calculated result.
           </div>
         )}
+
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-white/50 mb-3">
+            Assumptions Used
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40">
+                Closing Costs
+              </div>
+              <div className="mt-1 font-jetbrains text-sm text-white/75">
+                {fmtDisplayPct(closingCostPctMeta)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40">
+                Selling Costs
+              </div>
+              <div className="mt-1 font-jetbrains text-sm text-white/75">
+                {fmtDisplayPct(sellingCostPctMeta)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40">
+                Holding Period
+              </div>
+              <div className="mt-1 font-jetbrains text-sm text-white/75">
+                {holdingMonthsMeta !== null
+                  ? `${holdingMonthsMeta} month${holdingMonthsMeta === 1 ? "" : "s"}`
+                  : "—"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40">
+                Interest Rate
+              </div>
+              <div className="mt-1 font-jetbrains text-sm text-white/75">
+                {fmtDisplayPct(interestRatePctMeta)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40">
+                Loan-to-Cost
+              </div>
+              <div className="mt-1 font-jetbrains text-sm text-white/75">
+                {fmtDisplayPct(ltcMeta)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-white/40">
+                Required Margin
+              </div>
+              <div className="mt-1 font-jetbrains text-sm text-white/75">
+                {fmtDisplayPct(requiredMarginPctMeta)}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-white/45">
+            User inputs and defaults used by the underwriting engine. Verify them
+            before making an offer.
+          </div>
+        </div>
 
         {purchasePriceMeta === null && (
           <div className="text-xs text-white/50">
