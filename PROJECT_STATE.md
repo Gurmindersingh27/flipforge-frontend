@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-07-31
+2026-09-02
 
 ---
 
@@ -26,6 +26,7 @@ Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Inve
 6. User decides whether to offer, negotiate, verify, or walk away.
 
 **Current product state:**
+- Underwriting Controls v1 is implemented and PM-approved for a frontend PR on `codex/underwriting-controls-v1`. This frontend-only integrity build makes all existing transaction-cost, financing, holding, LTC, and required-margin inputs editable and ensures the same assumptions drive both manual and draft/address analysis. Deployment and production QA remain pending.
 - Bold Premium Investor one-page analyzer shipped through v1.1 (frontend PRs #49, #50, #51, #52 — all merged).
 - Demo Readiness / Lender Credibility Polish v1A COMPLETE (frontend PR #54, merged 2026-07-16, commit 18622b9) — breakpoint prominence + surgical lender-memo copy polish. Production deployment completed; production smoke test passed 2026-07-16 (see Production QA entry below).
 - Lender demo integrity fixes COMPLETE (frontend PRs #56 + #57, merged 2026-07-31) — production-tested against the locked demo set (see Production QA entry below). Both are surgical frontend-only fixes: no backend, engine, schema, AnalyzeRequest, API-contract, type, dependency, scoring, confidence, risk-logic, or five-zone-hierarchy changes.
@@ -188,27 +189,28 @@ Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Inve
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Demo Conversion Readiness (active phase)**
+**Underwriting Controls v1 release and production QA, then real-deal usage**
 
-The two lender demo integrity fixes (LTC display, non-positive rent) are merged and production-tested, so the product side of demo readiness is closed. The active work is now go-to-market, not features.
+The PM approved one narrow exception to the previous no-feature hold: remove the manual-flow assumption integrity gap before using FlipForge for outside deal reviews. The implementation and diff are approved for commit, push, and frontend PR creation.
 
-**Status:**
-- Initial cold lender outreach has been sent.
-- The demo set is locked (do not change without PM approval):
-  1. Obvious PASS ($185K / $240K / $45K).
-  2. Same property at a corrected offer ($135K / $240K / $45K → BUY).
-  3. Clean BUY ($200K / $345K / $50K, rent entered as 0 → treated as omitted).
-- No additional product sprint is approved.
+**Current release state:**
+- Branch: `codex/underwriting-controls-v1`
+- Changed product files: `src/App.tsx`, `src/AnalysisResult.tsx`, `src/components/DealPage.tsx`
+- Documentation: `PROJECT_STATE.md`
+- No backend, engine, schema, API-contract, shared-type, dependency, PDF-service, RentCast, or Anthropic changes
+- Frontend production build passes
+- Locked demo API results remain: obvious PASS → PASS; corrected offer → BUY; clean deal → BUY
+- Assumption sensitivity confirmed: changing hold, rate, LTC, costs, and required margin changes project cost, profit, and/or Max Safe Offer
+- Repo-wide lint still reports the same 12 pre-existing errors; no lint cleanup is included in this scope
+- PM diff review complete; branch approved for commit, push, and PR creation
+- No deployment or production QA yet
 
-**Next work (business, not code):**
-- Monitor replies and bounces from cold outreach.
-- Schedule lender demos.
-- Run the locked demo.
-- Collect structured buyer feedback.
-- Identify repeated blockers.
-- Test pilot interest and willingness to pay.
+**Next actions:**
+1. Commit, push, and open the approved frontend PR.
+2. After merge: production QA both manual and draft/address flows, including the Assumptions Used block and saved-deal reopen behavior.
+3. Then return to commercial validation: screen public listings, deliver five free outside deal reviews, and let repeated real-user questions determine the next feature.
 
-**Claude Code should remain closed** unless (1) a production-blocking issue appears, or (2) repeated buyer feedback justifies a tightly scoped change. The product should move toward demos, feedback, credibility, and revenue rather than adding speculative features. No implementation is approved. Scope requires explicit PM approval before any code.
+Union Point is not a validation gate. Its construction scope and actual costs are unresolved; use it later as a rehab-calibration data point once real pricing and execution exist.
 
 ---
 
@@ -982,3 +984,39 @@ Two surgical, frontend-only integrity fixes found during Demo Conversion Readine
 - Lender Report and Negotiation Script available
 
 **Conclusion:** Both lender demo integrity fixes are complete and production-verified. Demo Conversion Readiness remains the active phase; the demo set is locked and the next work is go-to-market (see Next Session Goal). No further product sprint is approved.
+
+---
+
+## Session 2026-09-02 — Underwriting Controls v1 (implementation approved for PR)
+
+**Why this build was approved:** Manual Entry displayed holding months and interest rate but omitted both from the `/api/analyze` payload, so the backend silently used its 6-month / 10% defaults. The address/draft flow did submit its edited assumptions. The same deal could therefore be underwritten differently depending on which input path was used. Manual copy disclosed that the fields were PDF-only, but a visible control that does not affect underwriting is still an integrity defect.
+
+**Implemented locally:**
+- Manual Entry now submits all existing `AnalyzeRequest` controls: acquisition closing costs, selling costs, holding months, annual interest rate, LTC, and required profit margin.
+- Draft/address flow keeps holding, interest, and LTC editable and now also exposes acquisition closing costs, selling costs, and required profit margin.
+- Investor Memo adds a compact **Assumptions Used** block showing the exact six values used by underwriting, with a verification warning.
+- Memo metadata now uses draft assumptions in the draft flow and manual assumptions in the manual flow; it no longer leaks manual hold/rate state into a draft memo.
+- Newly saved manual deals now persist a complete manual `DraftDeal` snapshot, including all six assumptions, so reopening/resuming does not lose them.
+- Resume logic backfills backend defaults for older saved deals that predate assumption persistence.
+- Saved Deal view displays the same assumption set and corrects its stale missing-data LTC fallback from 80% to the current 90% backend default.
+
+**Files:** `src/App.tsx`, `src/AnalysisResult.tsx`, `src/components/DealPage.tsx`, `PROJECT_STATE.md`.
+
+**Explicitly unchanged:** backend source, `app/analysis_engine.py`, `AnalyzeRequest`, response schemas, API routes, `src/lib/types.ts`, dependencies, scoring, confidence, risk logic, stress scenarios, PDF service, RentCast, Anthropic, and the five-zone memo hierarchy.
+
+**Validation completed before PM review:**
+- `npm run build`: PASS (113 modules). Existing CSS `@import` ordering warning remains; not introduced or changed by this scope.
+- `npm run lint`: 12 pre-existing repository errors remain in existing files; no lint cleanup was attempted.
+- Live production `/api/analyze` regression set:
+  - $185K / $240K / $45K → PASS; Max Safe Offer $137,700; net profit -$25,100.
+  - $135K / $240K / $45K → BUY; Max Safe Offer $137,700; net profit $28,650.
+  - $200K / $345K / $50K / rent omitted → BUY; Max Safe Offer $212,300; net profit $50,150; confidence 93.
+- Assumption sensitivity on $150K / $270K / $50K:
+  - Base (3% close / 8% sell / 6 months / 10% / 90% LTC / 12% margin): project cost $235,100; net profit $34,900; Max Safe Offer $155,600; BUY.
+  - Hold changed to 12 months: project cost $244,100; net profit $25,900; Max Safe Offer $147,300.
+  - Rate changed to 14%: project cost $238,700; net profit $31,300; Max Safe Offer $152,200.
+  - LTC changed to 70%: project cost $233,100; net profit $36,900; Max Safe Offer $157,500.
+  - Conservative combined assumptions (5% close / 10% sell / 12 months / 14% / 90% LTC / 15% margin): project cost $259,700; net profit $10,300; Max Safe Offer $128,800; CONDITIONAL.
+- Attempted local browser QA through the available cloud browser, but loopback access was blocked by the browser client. Temporary QA-only auth mock and Vite alias were removed completely; neither appears in the final diff. Production visual QA remains required after merge.
+
+**Current stop point:** implementation and validation are complete on `codex/underwriting-controls-v1`. PM reviewed the diff and approved commit, push, and PR creation. Deployment and production QA remain separate post-merge steps.

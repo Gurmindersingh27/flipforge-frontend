@@ -22,9 +22,14 @@ function DealView({ deal }: { deal: SavedDeal }) {
     arv: draft?.arv?.value ?? null,
     rehab_budget: draft?.rehab_budget?.value ?? null,
     est_monthly_rent: draft?.est_monthly_rent?.value ?? null,
+    closing_cost_pct: draft ? (draft.closing_cost_pct ?? 0.03) * 100 : 3,
+    selling_cost_pct: draft ? (draft.selling_cost_pct ?? 0.08) * 100 : 8,
     holding_months: draft?.holding_months ?? 6,
-    interest_rate_pct: draft ? draft.annual_interest_rate * 100 : 10,
-    ltc_pct: draft ? draft.loan_to_cost_pct * 100 : 80,
+    interest_rate_pct: draft ? (draft.annual_interest_rate ?? 0.10) * 100 : 10,
+    ltc_pct: draft ? (draft.loan_to_cost_pct ?? 0.90) * 100 : 90,
+    required_profit_margin_pct: draft
+      ? (draft.required_profit_margin_pct ?? 0.12) * 100
+      : 12,
   };
 
   return (

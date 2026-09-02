@@ -159,6 +159,30 @@ function AnalyzerPage() {
       arv: fixDp(resumeDraft.arv),
       rehab_budget: fixDp(resumeDraft.rehab_budget),
       est_monthly_rent: fixDp(resumeDraft.est_monthly_rent),
+      closing_cost_pct:
+        typeof resumeDraft.closing_cost_pct === "number"
+          ? resumeDraft.closing_cost_pct
+          : 0.03,
+      selling_cost_pct:
+        typeof resumeDraft.selling_cost_pct === "number"
+          ? resumeDraft.selling_cost_pct
+          : 0.08,
+      holding_months:
+        typeof resumeDraft.holding_months === "number"
+          ? resumeDraft.holding_months
+          : 6,
+      annual_interest_rate:
+        typeof resumeDraft.annual_interest_rate === "number"
+          ? resumeDraft.annual_interest_rate
+          : 0.10,
+      loan_to_cost_pct:
+        typeof resumeDraft.loan_to_cost_pct === "number"
+          ? resumeDraft.loan_to_cost_pct
+          : DEFAULT_LTC_PCT / 100,
+      required_profit_margin_pct:
+        typeof resumeDraft.required_profit_margin_pct === "number"
+          ? resumeDraft.required_profit_margin_pct
+          : 0.12,
     });
     setIsResumed(true);
 
@@ -275,7 +299,13 @@ function AnalyzerPage() {
   }
 
   function setDraftAssumption(
-    field: "holding_months" | "annual_interest_rate" | "loan_to_cost_pct",
+    field:
+      | "closing_cost_pct"
+      | "selling_cost_pct"
+      | "holding_months"
+      | "annual_interest_rate"
+      | "loan_to_cost_pct"
+      | "required_profit_margin_pct",
     v: string
   ) {
     if (!draft) return;
@@ -348,9 +378,14 @@ function AnalyzerPage() {
   const [rehabBudget, setRehabBudget] = useState<number>(35000);
   const [monthlyRent, setMonthlyRent] = useState<number | "">(1800);
 
-  // ✅ Financing assumptions (PDF-only)
+  // Manual underwriting assumptions. Percentages are stored in display form
+  // here (e.g. 10 = 10%) and converted to decimals in the API payload.
+  const [closingCostPct, setClosingCostPct] = useState<number>(3);
+  const [sellingCostPct, setSellingCostPct] = useState<number>(8);
   const [holdingMonths, setHoldingMonths] = useState<number>(6);
   const [annualInterestRate, setAnnualInterestRate] = useState<number>(10);
+  const [loanToCostPct, setLoanToCostPct] = useState<number>(DEFAULT_LTC_PCT);
+  const [requiredProfitMarginPct, setRequiredProfitMarginPct] = useState<number>(12);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
@@ -372,6 +407,12 @@ function AnalyzerPage() {
       purchase_price: purchasePrice,
       arv,
       rehab_budget: rehabBudget,
+      closing_cost_pct: closingCostPct / 100,
+      selling_cost_pct: sellingCostPct / 100,
+      holding_months: holdingMonths,
+      annual_interest_rate: annualInterestRate / 100,
+      loan_to_cost_pct: loanToCostPct / 100,
+      required_profit_margin_pct: requiredProfitMarginPct / 100,
       est_monthly_rent:
         monthlyRent === "" || Number(monthlyRent) <= 0 ? null : monthlyRent,
     };
@@ -411,10 +452,21 @@ function AnalyzerPage() {
           draft_input: draft
             ? (draft as unknown as Record<string, unknown>)
             : {
-                purchase_price:   { value: pdfMeta.purchase_price   ?? null, confidence: "MANUAL" },
-                arv:              { value: pdfMeta.arv              ?? null, confidence: "MANUAL" },
-                rehab_budget:     { value: pdfMeta.rehab_budget     ?? null, confidence: "MANUAL" },
-                est_monthly_rent: { value: pdfMeta.est_monthly_rent ?? null, confidence: "MANUAL" },
+                source: "manual",
+                url: null,
+                address: pdfMeta.property_address ?? null,
+                purchase_price:   { value: pdfMeta.purchase_price   ?? null, confidence: "HIGH", source: "manual" },
+                arv:              { value: pdfMeta.arv              ?? null, confidence: "HIGH", source: "manual" },
+                rehab_budget:     { value: pdfMeta.rehab_budget     ?? null, confidence: "HIGH", source: "manual" },
+                est_monthly_rent: { value: pdfMeta.est_monthly_rent ?? null, confidence: "HIGH", source: "manual" },
+                closing_cost_pct: closingCostPct / 100,
+                selling_cost_pct: sellingCostPct / 100,
+                holding_months: holdingMonths,
+                annual_interest_rate: annualInterestRate / 100,
+                loan_to_cost_pct: loanToCostPct / 100,
+                required_profit_margin_pct: requiredProfitMarginPct / 100,
+                notes: [],
+                signals: [],
               },
           analysis_result: result as unknown as Record<string, unknown>,
         },
@@ -446,10 +498,45 @@ function AnalyzerPage() {
   const FinancingAssumptions = (
     <div className="rounded-xl border border-white/10 bg-white/5 p-4">
       <div className="text-xs text-white/50">
-        Optional — used to estimate carry. Pre-filled with common defaults.
+        Pre-filled with common defaults. Every value below is used in the
+        underwriting math.
       </div>
 
-      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">
+            Acquisition Closing Costs (%)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={20}
+            step={0.25}
+            value={closingCostPct}
+            onChange={(e) =>
+              setClosingCostPct(e.target.value === "" ? 0 : Number(e.target.value))
+            }
+            className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">
+            Selling Costs (%)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={25}
+            step={0.25}
+            value={sellingCostPct}
+            onChange={(e) =>
+              setSellingCostPct(e.target.value === "" ? 0 : Number(e.target.value))
+            }
+            className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+          />
+        </div>
+
         <div>
           <label className="block text-xs text-slate-400 mb-1">
             Holding Months
@@ -457,6 +544,7 @@ function AnalyzerPage() {
           <input
             type="number"
             min={0}
+            max={60}
             step={1}
             value={holdingMonths}
             onChange={(e) =>
@@ -473,6 +561,7 @@ function AnalyzerPage() {
           <input
             type="number"
             min={0}
+            max={100}
             step={0.25}
             value={annualInterestRate}
             onChange={(e) =>
@@ -484,11 +573,41 @@ function AnalyzerPage() {
           />
         </div>
 
-      </div>
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">
+            Loan-to-Cost (LTC %)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={1}
+            value={loanToCostPct}
+            onChange={(e) =>
+              setLoanToCostPct(e.target.value === "" ? 0 : Number(e.target.value))
+            }
+            className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+          />
+        </div>
 
-      <div className="mt-2 text-xs text-white/65">
-        Used only to estimate carry in the lender report. Does not change underwriting
-        math.
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">
+            Required Profit Margin (%)
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={0.5}
+            value={requiredProfitMarginPct}
+            onChange={(e) =>
+              setRequiredProfitMarginPct(
+                e.target.value === "" ? 0 : Number(e.target.value)
+              )
+            }
+            className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
+          />
+        </div>
       </div>
     </div>
   );
@@ -528,10 +647,22 @@ function AnalyzerPage() {
       rehab_budget: rehabVal,
       est_monthly_rent: rentVal,
 
-      // financing assumptions (PDF-only)
-      holding_months: holdingMonths,
-      interest_rate_pct: annualInterestRate,
-      ltc_pct: draft ? draft.loan_to_cost_pct * 100 : DEFAULT_LTC_PCT,
+      // Exact assumptions used in underwriting. Percentage values are converted
+      // to display form for the memo and lender report metadata.
+      closing_cost_pct: draft
+        ? draft.closing_cost_pct * 100
+        : closingCostPct,
+      selling_cost_pct: draft
+        ? draft.selling_cost_pct * 100
+        : sellingCostPct,
+      holding_months: draft ? draft.holding_months : holdingMonths,
+      interest_rate_pct: draft
+        ? draft.annual_interest_rate * 100
+        : annualInterestRate,
+      ltc_pct: draft ? draft.loan_to_cost_pct * 100 : loanToCostPct,
+      required_profit_margin_pct: draft
+        ? draft.required_profit_margin_pct * 100
+        : requiredProfitMarginPct,
     };
   }, [
     draft,
@@ -543,8 +674,12 @@ function AnalyzerPage() {
     arv,
     rehabBudget,
     monthlyRent,
+    closingCostPct,
+    sellingCostPct,
     holdingMonths,
     annualInterestRate,
+    loanToCostPct,
+    requiredProfitMarginPct,
   ]);
 
   return (
@@ -947,6 +1082,7 @@ function AnalyzerPage() {
                     <input
                       type="number"
                       min={0}
+                      max={60}
                       step={1}
                       value={draft.holding_months}
                       onChange={(e) =>
@@ -962,6 +1098,7 @@ function AnalyzerPage() {
                     <input
                       type="number"
                       min={0}
+                      max={100}
                       step={0.25}
                       value={Number((draft.annual_interest_rate * 100).toFixed(4))}
                       onChange={(e) =>
@@ -998,26 +1135,83 @@ function AnalyzerPage() {
                 </div>
               </div>
 
-              {/* Investor Criteria — read-only, presentational only. No editable state. */}
+              {/* Transaction costs and investor criteria — all used by underwriting. */}
               <div className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
-                Investor Criteria
+                Transaction Costs &amp; Investor Criteria
               </div>
               <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                <div className="flex items-center justify-between gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <div className="text-sm font-semibold text-white">
-                      Required Profit Margin
-                    </div>
-                    <div className="mt-1 text-xs text-white/55">
-                      Minimum margin the underwriting engine holds this deal to.
-                    </div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Acquisition Closing Costs (%)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={20}
+                      step={0.25}
+                      value={Number((draft.closing_cost_pct * 100).toFixed(4))}
+                      onChange={(e) =>
+                        setDraftAssumption(
+                          "closing_cost_pct",
+                          e.target.value === ""
+                            ? ""
+                            : String(Number(e.target.value) / 100)
+                        )
+                      }
+                      className={inputClass(missing.has("closing_cost_pct"), false)}
+                    />
                   </div>
-                  <div className="text-right">
-                    <div className="font-serif-display text-2xl font-bold text-amber-300">
-                      {Math.round((draft.required_profit_margin_pct ?? 0) * 100)}%
-                    </div>
-                    <div className="text-xs text-white/45">read-only</div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Selling Costs (%)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={25}
+                      step={0.25}
+                      value={Number((draft.selling_cost_pct * 100).toFixed(4))}
+                      onChange={(e) =>
+                        setDraftAssumption(
+                          "selling_cost_pct",
+                          e.target.value === ""
+                            ? ""
+                            : String(Number(e.target.value) / 100)
+                        )
+                      }
+                      className={inputClass(missing.has("selling_cost_pct"), false)}
+                    />
                   </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Required Profit Margin (%)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={Number(
+                        (draft.required_profit_margin_pct * 100).toFixed(4)
+                      )}
+                      onChange={(e) =>
+                        setDraftAssumption(
+                          "required_profit_margin_pct",
+                          e.target.value === ""
+                            ? ""
+                            : String(Number(e.target.value) / 100)
+                        )
+                      }
+                      className={inputClass(
+                        missing.has("required_profit_margin_pct"),
+                        false
+                      )}
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-white/65">
+                  These values directly affect total project cost and Max Safe Offer.
                 </div>
               </div>
 
@@ -1194,24 +1388,11 @@ function AnalyzerPage() {
             </div>
           </div>
 
-          {/* Financing & Holding */}
+          {/* Underwriting Controls */}
           <div className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
-            Financing &amp; Holding
+            Underwriting Controls
           </div>
           {FinancingAssumptions}
-
-          {/* Investor Criteria — presentational only. No value in manual state; no fake numbers. */}
-          <div className="mt-4 mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">
-            Investor Criteria
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-            <div className="text-sm font-semibold text-white">
-              Underwriting Criteria
-            </div>
-            <div className="mt-1 text-xs text-white/55">
-              Default underwriting criteria applied by FlipForge.
-            </div>
-          </div>
 
           {/* Step 4 — Generate Investor Memo */}
           <div className="mt-6 mb-3 flex items-center gap-2">
