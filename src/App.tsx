@@ -9,6 +9,10 @@ import PhotoRehabAnalyzer from "./components/PhotoRehabAnalyzer";
 import WorkflowRail from "./components/WorkflowRail";
 import InvestorMemoPreview from "./components/InvestorMemoPreview";
 import { analyzeDeal, draftFromUrl, enrichAddress, finalizeAndAnalyze, saveDeal } from "./lib/api";
+import {
+  createDraftAnalysisSnapshot,
+  createManualAnalysisSnapshot,
+} from "./lib/analysisSnapshot";
 import type {
   AnalyzeRequest,
   AnalyzeResponse,
@@ -16,6 +20,7 @@ import type {
   Confidence,
   EnrichAddressResponse,
 } from "./lib/types";
+import type { AnalysisSnapshot } from "./lib/analysisSnapshot";
 import "./App.css";
 
 function dpNumber(val: number | ""): number | null {
@@ -119,6 +124,8 @@ function AnalyzerPage() {
   const [analyzeError, setAnalyzeError] = useState<string>("");
 
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
+  const [analysisSnapshot, setAnalysisSnapshot] =
+    useState<AnalysisSnapshot | null>(null);
   const [isResumed, setIsResumed] = useState(false);
 
   // 3c — Address enrichment flow
@@ -203,6 +210,7 @@ function AnalyzerPage() {
     setAnalyzeLoading(false);
     setAnalyzeError("");
     setResult(null);
+    setAnalysisSnapshot(null);
     setSaveLoading(false);
     setSaveError("");
     setSaveSuccess(false);
@@ -236,6 +244,9 @@ function AnalyzerPage() {
     setAnalyzeError("");
     setMissingFields([]);
     setResult(null);
+    setAnalysisSnapshot(null);
+    setSaveError("");
+    setSaveSuccess(false);
     setIsResumed(false);
 
     if (!listingUrl.trim()) {
@@ -263,6 +274,9 @@ function AnalyzerPage() {
     setAnalyzeError("");
     setMissingFields([]);
     setResult(null);
+    setAnalysisSnapshot(null);
+    setSaveError("");
+    setSaveSuccess(false);
     setIsResumed(false);
 
     const trimmed = addressInput.trim();
@@ -320,6 +334,9 @@ function AnalyzerPage() {
     setEnrichError("");
     setMissingFields([]);
     setResult(null);
+    setAnalysisSnapshot(null);
+    setSaveError("");
+    setSaveSuccess(false);
 
     if (!draft) {
       setAnalyzeError("Fetch a draft first.");
@@ -344,6 +361,16 @@ function AnalyzerPage() {
               est_monthly_rent: { ...draft.est_monthly_rent, value: null },
             }
           : draft;
+      const snapshot = createDraftAnalysisSnapshot(normalizedDraft, {
+        listingUrl:
+          normalizedDraft.source === "rentcast"
+            ? null
+            : listingUrl || normalizedDraft.url,
+        propertyAddress:
+          normalizedDraft.source === "rentcast"
+            ? addressInput || normalizedDraft.address
+            : manualAddress || normalizedDraft.address,
+      });
       const res = await finalizeAndAnalyze(normalizedDraft);
 
       if (!res.ok) {
@@ -360,6 +387,7 @@ function AnalyzerPage() {
 
       setMissingFields([]);
       setAnalyzeError("");
+      setAnalysisSnapshot(snapshot);
       setResult(res.result);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to finalize/analyze.";
@@ -397,6 +425,9 @@ function AnalyzerPage() {
   async function onAnalyze() {
     setError("");
     setResult(null);
+    setAnalysisSnapshot(null);
+    setSaveError("");
+    setSaveSuccess(false);
 
     if (!canAnalyze) {
       setError("Please enter valid Purchase Price, ARV, and Rehab Budget.");
@@ -416,10 +447,16 @@ function AnalyzerPage() {
       est_monthly_rent:
         monthlyRent === "" || Number(monthlyRent) <= 0 ? null : monthlyRent,
     };
+    const snapshot = createManualAnalysisSnapshot(payload, {
+      listingUrl: activeTab === "url" ? listingUrl : null,
+      propertyAddress:
+        activeTab === "address" ? addressInput : manualAddress,
+    });
 
     try {
       setLoading(true);
       const res = await analyzeDeal(payload);
+      setAnalysisSnapshot(snapshot);
       setResult(res);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to analyze deal.";
@@ -430,7 +467,7 @@ function AnalyzerPage() {
   }
 
   async function onSaveDeal() {
-    if (!result) return;
+    if (!result || !analysisSnapshot) return;
     setSaveError("");
     setSaveSuccess(false);
 
@@ -442,32 +479,13 @@ function AnalyzerPage() {
 
     try {
       setSaveLoading(true);
-      const addr =
-        (draft as DraftDeal | null)?.address ??
-        (pdfMeta.property_address as string | null) ??
-        null;
       await saveDeal(
         {
-          address: addr,
-          draft_input: draft
-            ? (draft as unknown as Record<string, unknown>)
-            : {
-                source: "manual",
-                url: null,
-                address: pdfMeta.property_address ?? null,
-                purchase_price:   { value: pdfMeta.purchase_price   ?? null, confidence: "HIGH", source: "manual" },
-                arv:              { value: pdfMeta.arv              ?? null, confidence: "HIGH", source: "manual" },
-                rehab_budget:     { value: pdfMeta.rehab_budget     ?? null, confidence: "HIGH", source: "manual" },
-                est_monthly_rent: { value: pdfMeta.est_monthly_rent ?? null, confidence: "HIGH", source: "manual" },
-                closing_cost_pct: closingCostPct / 100,
-                selling_cost_pct: sellingCostPct / 100,
-                holding_months: holdingMonths,
-                annual_interest_rate: annualInterestRate / 100,
-                loan_to_cost_pct: loanToCostPct / 100,
-                required_profit_margin_pct: requiredProfitMarginPct / 100,
-                notes: [],
-                signals: [],
-              },
+          address: analysisSnapshot.meta.property_address,
+          draft_input: analysisSnapshot.draftInput as unknown as Record<
+            string,
+            unknown
+          >,
           analysis_result: result as unknown as Record<string, unknown>,
         },
         token
@@ -611,76 +629,6 @@ function AnalyzerPage() {
       </div>
     </div>
   );
-
-  // 3g — Meta passed to AnalysisResult for PDF. Address flow uses addressInput.
-  const pdfMeta = useMemo(() => {
-    const addr = (draft as any)?.address ?? null;
-
-    const usingDraft = !!draft;
-
-    const purchase = usingDraft
-      ? (draft?.purchase_price?.value ?? null)
-      : purchasePrice;
-    const arvVal = usingDraft ? (draft?.arv?.value ?? null) : arv;
-    const rehabVal = usingDraft
-      ? (draft?.rehab_budget?.value ?? null)
-      : rehabBudget;
-
-    const rentVal = usingDraft
-      ? (draft?.est_monthly_rent?.value ?? null)
-      : monthlyRent === "" || Number(monthlyRent) <= 0
-      ? null
-      : monthlyRent;
-
-    return {
-      // identity
-      listing_url: activeTab === "url" ? (listingUrl?.trim() || null) : null,
-      property_address:
-        (activeTab === "address" ? addressInput.trim() || null : null) ??
-        addr ??
-        manualAddress.trim() ??
-        null,
-
-      // deal snapshot
-      purchase_price: purchase,
-      arv: arvVal,
-      rehab_budget: rehabVal,
-      est_monthly_rent: rentVal,
-
-      // Exact assumptions used in underwriting. Percentage values are converted
-      // to display form for the memo and lender report metadata.
-      closing_cost_pct: draft
-        ? draft.closing_cost_pct * 100
-        : closingCostPct,
-      selling_cost_pct: draft
-        ? draft.selling_cost_pct * 100
-        : sellingCostPct,
-      holding_months: draft ? draft.holding_months : holdingMonths,
-      interest_rate_pct: draft
-        ? draft.annual_interest_rate * 100
-        : annualInterestRate,
-      ltc_pct: draft ? draft.loan_to_cost_pct * 100 : loanToCostPct,
-      required_profit_margin_pct: draft
-        ? draft.required_profit_margin_pct * 100
-        : requiredProfitMarginPct,
-    };
-  }, [
-    draft,
-    activeTab,
-    addressInput,
-    listingUrl,
-    manualAddress,
-    purchasePrice,
-    arv,
-    rehabBudget,
-    monthlyRent,
-    closingCostPct,
-    sellingCostPct,
-    holdingMonths,
-    annualInterestRate,
-    loanToCostPct,
-    requiredProfitMarginPct,
-  ]);
 
   return (
     <div className="min-h-screen bg-[#0f1115] text-slate-100">
@@ -1428,7 +1376,7 @@ function AnalyzerPage() {
         {/* =========================
             Results
            ========================= */}
-        {result && (
+        {result && analysisSnapshot && (
           <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-3">
             <div className="mt-4">
               <div className="flex items-center gap-2 px-3">
@@ -1440,7 +1388,7 @@ function AnalyzerPage() {
                 </span>
               </div>
               <div className="mt-3">
-                <AnalysisResult result={result} meta={pdfMeta} />
+                <AnalysisResult result={result} meta={analysisSnapshot.meta} />
               </div>
 
               {/* Save Deal — visible only when signed in */}
