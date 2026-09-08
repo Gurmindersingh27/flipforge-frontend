@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { AnalyzeResponse, Strategy, Verdict } from "./lib/types";
+import type { AnalysisMeta } from "./lib/analysisSnapshot";
 import { generateNegotiationScript } from "./lib/api";
 import DealKillerSummary from "./components/DealKillerSummary";
 import InvestorActionPlan from "./components/InvestorActionPlan";
@@ -7,7 +8,7 @@ import InvestorActionPlan from "./components/InvestorActionPlan";
 interface Props {
   result: AnalyzeResponse;
   // Optional meta from App/page.tsx so the PDF can show URL/address/hold/LTC/rate/carry.
-  meta?: Record<string, any>;
+  meta?: Readonly<AnalysisMeta>;
 }
 
 const API_BASE = (
@@ -377,7 +378,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       const data = await generateNegotiationScript({
         result,
         seller_ask_price: null,
-        property_address: (meta?.property_address as string | undefined) ?? null,
+        property_address: meta?.property_address ?? null,
       });
       setScript(data.negotiation_script);
     } catch (e: any) {

@@ -4,7 +4,7 @@
 ---
 
 ## Last Updated
-2026-09-02
+2026-09-08
 
 ---
 
@@ -26,7 +26,8 @@ Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Inve
 6. User decides whether to offer, negotiate, verify, or walk away.
 
 **Current product state:**
-- Underwriting Controls v1 is implemented and PM-approved for a frontend PR on `codex/underwriting-controls-v1`. This frontend-only integrity build makes all existing transaction-cost, financing, holding, LTC, and required-margin inputs editable and ensures the same assumptions drive both manual and draft/address analysis. Deployment and production QA remain pending.
+- Snapshot Integrity v1 is implemented and validated on `codex/analysis-snapshot-integrity-v1`. Every successful result now carries a detached, immutable copy of the exact submitted deal and assumptions; memo/PDF/script/save consumers no longer read mutable form or stale draft state. PR, merge, deployment, and signed-in production QA are pending.
+- Underwriting Controls v1 is merged in frontend PR #59 (merge commit `7278934`) and deployed. This frontend-only integrity build makes all existing transaction-cost, financing, holding, LTC, and required-margin inputs editable and ensures the same assumptions drive both manual and draft/address analysis. The public production bundle contains the controls and Assumptions Used block; signed-in visual QA remains pending.
 - Bold Premium Investor one-page analyzer shipped through v1.1 (frontend PRs #49, #50, #51, #52 — all merged).
 - Demo Readiness / Lender Credibility Polish v1A COMPLETE (frontend PR #54, merged 2026-07-16, commit 18622b9) — breakpoint prominence + surgical lender-memo copy polish. Production deployment completed; production smoke test passed 2026-07-16 (see Production QA entry below).
 - Lender demo integrity fixes COMPLETE (frontend PRs #56 + #57, merged 2026-07-31) — production-tested against the locked demo set (see Production QA entry below). Both are surgical frontend-only fixes: no backend, engine, schema, AnalyzeRequest, API-contract, type, dependency, scoring, confidence, risk-logic, or five-zone-hierarchy changes.
@@ -182,33 +183,32 @@ Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Inve
 ### Not Done / Blocked
 - [x] Tighten CORS from * to https://flipforge-frontend.vercel.app
   - Code in app/main.py allows the Vercel domain + localhost dev origins; CLAUDE.md updated to match the code (2026-07-12)
-- [ ] Add minimal GitHub Actions CI
-  - Frontend: TypeScript + build check (tsc --noEmit && vite build)
-  - Backend: import/startup check for FastAPI app
-  - Not urgent but should be done soon
+- [x] Add minimal frontend GitHub Actions CI — Snapshot Integrity v1 adds `npm test` + `npm run build` on pull requests to `main`
+- [ ] Add minimal backend GitHub Actions CI — import/startup check for FastAPI app
 - [ ] Do NOT start AIM / cars / furniture / non-real-estate expansion
 
 ### Next Session Goal
-**Underwriting Controls v1 release and production QA, then real-deal usage**
+**Snapshot Integrity v1 release and production QA, then real-deal usage**
 
-The PM approved one narrow exception to the previous no-feature hold: remove the manual-flow assumption integrity gap before using FlipForge for outside deal reviews. The implementation and diff are approved for commit, push, and frontend PR creation.
+Underwriting Controls v1 is merged and deployed. The PM approved Snapshot Integrity v1 as the final code gate for this validation cycle so every memo, PDF, negotiation script, and saved deal remains tied to the exact inputs that produced its result.
 
 **Current release state:**
-- Branch: `codex/underwriting-controls-v1`
-- Changed product files: `src/App.tsx`, `src/AnalysisResult.tsx`, `src/components/DealPage.tsx`
+- Branch: `codex/analysis-snapshot-integrity-v1`
+- Changed product files: `src/App.tsx`, `src/AnalysisResult.tsx`, new `src/lib/analysisSnapshot.ts`
+- Tests/CI: new `tests/analysisSnapshot.test.ts`, new `.github/workflows/frontend-ci.yml`, `package.json` test script
 - Documentation: `PROJECT_STATE.md`
 - No backend, engine, schema, API-contract, shared-type, dependency, PDF-service, RentCast, or Anthropic changes
-- Frontend production build passes
+- 22 snapshot tests and the frontend production build pass
 - Locked demo API results remain: obvious PASS → PASS; corrected offer → BUY; clean deal → BUY
-- Assumption sensitivity confirmed: changing hold, rate, LTC, costs, and required margin changes project cost, profit, and/or Max Safe Offer
-- Repo-wide lint still reports the same 12 pre-existing errors; no lint cleanup is included in this scope
-- PM diff review complete; branch approved for commit, push, and PR creation
-- No deployment or production QA yet
+- Manual and draft sensitivity confirmed: changing hold/rate changes project cost, profit, Max Safe Offer, confidence, and (for the Addison case) verdict
+- Repo-wide lint reports 10 pre-existing errors; this scope introduces zero and removes two old `any` findings with the typed snapshot metadata
+- PM approved implementation, commit, push, PR, merge, deployment, and verification
+- Local browser execution is blocked by the workspace Chromium security policy; signed-in production visual QA remains required
 
 **Next actions:**
-1. Commit, push, and open the approved frontend PR.
-2. After merge: production QA both manual and draft/address flows, including the Assumptions Used block and saved-deal reopen behavior.
-3. Then return to commercial validation: screen public listings, deliver five free outside deal reviews, and let repeated real-user questions determine the next feature.
+1. Commit, push, open, verify, and merge the approved frontend PR.
+2. Verify the Vercel deployment, then perform signed-in production QA for manual and draft/address flows, including post-analysis edits, PDF metadata, and saved-deal reopen behavior.
+3. Then stop coding and return to commercial validation: screen nine more public listings, obtain five outside deal submissions, and let repeated real-user questions determine any future feature.
 
 Union Point is not a validation gate. Its construction scope and actual costs are unresolved; use it later as a rehab-calibration data point once real pricing and execution exist.
 
@@ -1020,3 +1020,37 @@ Two surgical, frontend-only integrity fixes found during Demo Conversion Readine
 - Attempted local browser QA through the available cloud browser, but loopback access was blocked by the browser client. Temporary QA-only auth mock and Vite alias were removed completely; neither appears in the final diff. Production visual QA remains required after merge.
 
 **Current stop point:** implementation and validation are complete on `codex/underwriting-controls-v1`. PM reviewed the diff and approved commit, push, and PR creation. Deployment and production QA remain separate post-merge steps.
+
+---
+
+## Session 2026-09-08 — Analysis Snapshot Integrity v1
+
+**Why this build was approved:** The API result was stable after analysis, but the Investor Memo metadata was recomputed from live form and draft state. Editing a price, assumption, address, or URL after analysis could therefore change the displayed assumptions and PDF payload without recalculating the result. A stale draft could also leak into a later manual result or saved deal. That made one artifact contain numbers from two different deal states.
+
+**Implemented locally:**
+- Added one snapshot boundary for both analysis paths. The exact normalized request/draft and property identity are copied before the request and committed beside the result only after a successful response.
+- Memo metadata, lender-report metadata, negotiation-script property address, and saved-deal input now read from the successful analysis snapshot instead of mutable UI state.
+- Manual results always save a manual snapshot; draft/address results always save their submitted draft snapshot. Later edits cannot cross-contaminate either flow.
+- Blank/zero/negative rent remains normalized to omitted/null in both memo metadata and saved draft input.
+- Snapshot objects, nested data points, notes, and signals are runtime-frozen after being detached from source state.
+- Starting a new fetch, lookup, analysis, or resume clears the prior result snapshot and stale save-success state.
+- Added a dependency-free Node test suite and frontend pull-request CI (`npm test` then `npm run build`).
+
+**Files:** `src/App.tsx`, `src/AnalysisResult.tsx`, new `src/lib/analysisSnapshot.ts`, new `tests/analysisSnapshot.test.ts`, `package.json`, new `.github/workflows/frontend-ci.yml`, `PROJECT_STATE.md`.
+
+**Explicitly unchanged:** backend source, `app/analysis_engine.py`, `AnalyzeRequest`, response schemas, API routes, `src/lib/types.ts`, dependencies, scoring, confidence formulas, risk logic, stress scenarios, PDF service, RentCast, Anthropic, and the five-zone memo hierarchy.
+
+**Validation completed before PR:**
+- `npm test`: PASS — 22/22 snapshot tests.
+- `npm run build`: PASS — TypeScript and Vite production build, 114 modules.
+- `git diff --check`: PASS.
+- `npm run lint`: 10 pre-existing repository errors remain; this scope adds zero and removes two old `any` errors by replacing untyped memo metadata.
+- Live `/api/analyze` locked set:
+  - S1 $185K / $240K / $45K → PASS; Max Safe Offer $137,700; net profit -$25,100; confidence 12.
+  - S2 $135K / $240K / $45K → BUY; Max Safe Offer $137,700; net profit $28,650; confidence 86.
+  - S3 $200K / $345K / $50K / rent omitted → BUY; Max Safe Offer $212,300; net profit $50,150; confidence 93.
+- Live manual sensitivity, $150K / $270K / $50K: 6 months at 10% → project cost $235,100, net $34,900, Max Safe Offer $155,600, confidence 88; 12 months at 14% → project cost $251,300, net $18,700, Max Safe Offer $141,200, confidence 52.
+- Live draft/finalize sensitivity, Addison inputs $90K / $190K / $60K: 6 months at 10% → BUY, project cost $174,650, net $15,350, Max Safe Offer $85,300; 12 months at 14% → PASS, project cost $186,800, net $3,200, Max Safe Offer $75,200.
+- Browser launch was attempted with both agent-browser and Playwright Chromium. The workspace denied Chromium's required socket operation (`Operation not permitted`). The temporary auth mock/Vite alias was removed completely and is absent from the diff. No visual claim is made from this environment.
+
+**Current stop point:** implementation and non-visual validation are complete on `codex/analysis-snapshot-integrity-v1`. PM approved commit, push, PR, merge, deployment, and verification. Signed-in production visual QA remains a release check, not a reason to add more code.
