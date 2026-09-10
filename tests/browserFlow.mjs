@@ -106,6 +106,7 @@ try {
   assert.equal(await evaluate(`(${scopeInput("Unit cost 1")}).value`), "50000");
   checks.push("Scope persists through saved-deal reload");
   await click("a", "Resume Deal");
+  await until(`location.pathname === '/' && Boolean(${scopeInput("Unit cost 1")}) && !(${scopeInput("Unit cost 1")}).matches(':disabled')`);
   await scoped("Unit cost 1", "67000"); await scoped("Basis 1", "quote");
   await click("button", "Generate Investor Memo");
   await until(`document.body.textContent.includes('Each quoted item needs a source and quote date.')`);
@@ -131,7 +132,8 @@ try {
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
   await screenshot("mobile-saved.png");
   assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
-  await click("a", "Resume Deal"); await until(`Boolean(${scopeInput("Unit cost 1")})`);
+  await click("a", "Resume Deal");
+  await until(`location.pathname === '/' && Boolean(${scopeInput("Unit cost 1")}) && !(${scopeInput("Unit cost 1")}).matches(':disabled')`); await until(`Boolean(${scopeInput("Unit cost 1")})`);
   assert.equal(await evaluate(`(${scopeInput("Unit cost 1")}).value`), "67000");
   await screenshot("mobile-editor.png");
   assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
