@@ -152,7 +152,7 @@ function DealsList() {
                     </Link>
                     <Link
                       to="/"
-                      state={{ resumeDraft: deal.draft_input }}
+                      state={{ resumeDraft: deal.draft_input, resumeDeal: deal }}
                       className="text-xs text-white/50 hover:text-white/80 transition-colors"
                     >
                       Resume
