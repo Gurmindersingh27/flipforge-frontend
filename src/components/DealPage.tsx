@@ -3,6 +3,8 @@ import { useParams, Link } from "react-router-dom";
 import { useAuth, SignedIn, SignedOut, SignInButton } from "@clerk/clerk-react";
 import { getDeal } from "../lib/api";
 import AnalysisResult from "../AnalysisResult";
+import RehabScopeEditor from "./RehabScopeEditor";
+import RevisionComparison from "./RevisionComparison";
 import ShieldHeader from "./ShieldHeader";
 import type { SavedDeal, DraftDeal, AnalyzeResponse } from "../lib/types";
 
@@ -11,7 +13,7 @@ function fmt(n: number | null | undefined, prefix = "$"): string {
   return `${prefix}${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
-function DealView({ deal }: { deal: SavedDeal }) {
+function DealView({ deal, previous, comparisonError }: { deal: SavedDeal; previous: SavedDeal | null; comparisonError: string }) {
   const draft = deal.draft_input as DraftDeal | null;
   const result = deal.analysis_result as unknown as AnalyzeResponse;
 
@@ -43,7 +45,7 @@ function DealView({ deal }: { deal: SavedDeal }) {
           {draft ? (
             <Link
               to="/"
-              state={{ resumeDraft: draft }}
+              state={{ resumeDraft: draft, resumeDeal: deal }}
               className="rounded-xl px-3 py-1.5 text-xs font-semibold border border-indigo-500/40 bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 transition-colors"
             >
               Resume Deal
@@ -86,6 +88,11 @@ function DealView({ deal }: { deal: SavedDeal }) {
         </div>
       </div>
 
+      <RehabScopeEditor scope={deal.rehab_scope ?? null} readOnly />
+      {deal.parent_deal_id && <Link to={`/deal/${deal.parent_deal_id}`} className="text-sm text-amber-200 underline">Open previous version #{deal.parent_deal_id}</Link>}
+      {comparisonError && <p role="alert" className="text-sm text-rose-300">{comparisonError}</p>}
+      {previous && <RevisionComparison previous={previous} current={deal} />}
+      <p className="text-xs text-white/60">Screening estimate. Holding costs model loan interest; separate taxes, insurance, utilities, financing points and draw timing are not modeled.</p>
       {/* Results — rendered from saved analysis_result, no re-run */}
       <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
         <ShieldHeader result={result} />
@@ -107,6 +114,8 @@ function DealLoader() {
   const { id } = useParams<{ id: string }>();
   const { getToken } = useAuth();
   const [deal, setDeal] = useState<SavedDeal | null>(null);
+  const [previous, setPrevious] = useState<SavedDeal | null>(null);
+  const [comparisonError, setComparisonError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
 
@@ -115,6 +124,8 @@ function DealLoader() {
     async function load() {
       setLoading(true);
       setError("");
+      setPrevious(null);
+      setComparisonError("");
       const token = await getToken().catch(() => null);
       if (!token) {
         if (!cancelled) {
@@ -126,6 +137,14 @@ function DealLoader() {
       try {
         const data = await getDeal(Number(id), token);
         if (!cancelled) setDeal(data);
+        if (data.parent_deal_id) {
+          try {
+            const prior = await getDeal(data.parent_deal_id, token);
+            if (!cancelled) setPrevious(prior);
+          } catch {
+            if (!cancelled) setComparisonError("The current deal loaded, but the previous version could not be loaded for comparison.");
+          }
+        }
       } catch (e: unknown) {
         if (!cancelled) {
           const msg = e instanceof Error ? e.message : "Failed to load deal.";
@@ -161,7 +180,7 @@ function DealLoader() {
     );
   }
 
-  return <DealView deal={deal} />;
+  return <DealView deal={deal} previous={previous} comparisonError={comparisonError} />;
 }
 
 export default function DealPage() {

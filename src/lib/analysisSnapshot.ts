@@ -1,4 +1,5 @@
-import type { AnalyzeRequest, DraftDeal } from "./types";
+import type { AnalyzeRequest, DraftDeal, RehabScope } from "./types";
+import { captureScope } from "./rehabScope.ts";
 
 const DEFAULTS = {
   closingCostPct: 0.03,
@@ -12,6 +13,9 @@ const DEFAULTS = {
 export interface AnalysisIdentity {
   listingUrl?: string | null;
   propertyAddress?: string | null;
+  rehabScope?: RehabScope | null;
+  parentDealId?: number | null;
+  revisionNote?: string;
 }
 
 export interface AnalysisMeta {
@@ -34,6 +38,9 @@ export interface AnalysisSnapshot {
   readonly source: "manual" | "draft";
   readonly meta: Readonly<AnalysisMeta>;
   readonly draftInput: Readonly<DraftDeal>;
+  readonly rehabScope: RehabScope | null;
+  readonly parentDealId: number | null;
+  readonly revisionNote: string;
 }
 
 function cleanText(value: string | null | undefined): string | null {
@@ -131,6 +138,9 @@ function snapshotFromDraft(
     source,
     meta: Object.freeze(meta),
     draftInput: freezeDraft(draftInput),
+    rehabScope: captureScope(identity.rehabScope),
+    parentDealId: identity.parentDealId ?? null,
+    revisionNote: identity.revisionNote?.trim() ?? "",
   });
 }
 

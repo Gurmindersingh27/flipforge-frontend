@@ -171,10 +171,33 @@ export interface NegotiationScriptResponse {
 // Saved Deals — persistence layer
 // =========================================================
 
+export interface RehabScopeItem {
+  id: string;
+  category: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unit_cost: number;
+  basis: "allowance" | "quote";
+  source: string;
+  quote_date: string | null;
+  notes: string;
+}
+
+export interface RehabScope {
+  version: 1;
+  items: RehabScopeItem[];
+  contingency_pct: number;
+  notes: string;
+}
+
 export interface SaveDealRequest {
   address?: string | null;
   draft_input?: Record<string, unknown> | null;
   analysis_result: Record<string, unknown>;
+  rehab_scope?: RehabScope | null;
+  parent_deal_id?: number | null;
+  revision_note?: string;
 }
 
 export interface SavedDeal {
@@ -184,6 +207,9 @@ export interface SavedDeal {
   draft_input?: Record<string, unknown> | null;
   analysis_result: Record<string, unknown>;
   created_at: string; // ISO 8601
+  rehab_scope?: RehabScope | null;
+  parent_deal_id?: number | null;
+  revision_note?: string;
 }
 
 // =========================================================

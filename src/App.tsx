@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { useAuth, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import AnalysisResult from "./AnalysisResult";
 import DealsPage from "./components/DealsPage";
 import DealPage from "./components/DealPage";
+import RehabScopeEditor from "./components/RehabScopeEditor";
+import RevisionComparison from "./components/RevisionComparison";
+import { scopeTotals, scopeError } from "./lib/rehabScope";
+import type { RehabScope, SavedDeal } from "./lib/types";
 import RepairBudgetBuilder from "./components/RepairBudgetBuilder";
 import PhotoRehabAnalyzer from "./components/PhotoRehabAnalyzer";
 import WorkflowRail from "./components/WorkflowRail";
@@ -127,6 +131,14 @@ function AnalyzerPage() {
   const [analysisSnapshot, setAnalysisSnapshot] =
     useState<AnalysisSnapshot | null>(null);
   const [isResumed, setIsResumed] = useState(false);
+  const [draftScope, setDraftScope] = useState<RehabScope | null>(null);
+  const [manualScope, setManualScope] = useState<RehabScope | null>(null);
+  const [previousDeal, setPreviousDeal] = useState<SavedDeal | null>(null);
+  const [manualPreviousDeal, setManualPreviousDeal] = useState<SavedDeal | null>(null);
+  const [comparisonDeal, setComparisonDeal] = useState<SavedDeal | null>(null);
+  const [revisionNote, setRevisionNote] = useState("");
+  const [savedId, setSavedId] = useState<number | null>(null);
+  const activeSnapshot = useRef<AnalysisSnapshot | null>(null);
 
   // 3c — Address enrichment flow
   const [activeTab, setActiveTab] = useState<"address" | "url">("address");
@@ -137,7 +149,7 @@ function AnalyzerPage() {
   const location = useLocation();
 
   useEffect(() => {
-    const state = location.state as { resumeDraft?: unknown } | null;
+    const state = location.state as { resumeDraft?: unknown; resumeDeal?: SavedDeal } | null;
     const incoming = state?.resumeDraft;
 
     if (
@@ -147,6 +159,9 @@ function AnalyzerPage() {
     ) return;
 
     const resumeDraft = incoming as DraftDeal;
+    setPreviousDeal(state?.resumeDeal ?? null);
+    setDraftScope(state?.resumeDeal?.rehab_scope ? structuredClone(state.resumeDeal.rehab_scope) : null);
+    setRevisionNote("");
 
     const VALID_CONFIDENCE = new Set(["HIGH", "MEDIUM", "LOW", "MISSING"]);
     const fixDp = (dp: any): any =>
@@ -211,6 +226,7 @@ function AnalyzerPage() {
     setAnalyzeError("");
     setResult(null);
     setAnalysisSnapshot(null);
+    activeSnapshot.current = null;
     setSaveLoading(false);
     setSaveError("");
     setSaveSuccess(false);
@@ -245,9 +261,13 @@ function AnalyzerPage() {
     setMissingFields([]);
     setResult(null);
     setAnalysisSnapshot(null);
+    activeSnapshot.current = null;
     setSaveError("");
     setSaveSuccess(false);
     setIsResumed(false);
+    setPreviousDeal(null);
+    setDraftScope(null);
+    setRevisionNote("");
 
     if (!listingUrl.trim()) {
       setDraftError("Paste a listing URL first.");
@@ -275,9 +295,13 @@ function AnalyzerPage() {
     setMissingFields([]);
     setResult(null);
     setAnalysisSnapshot(null);
+    activeSnapshot.current = null;
     setSaveError("");
     setSaveSuccess(false);
     setIsResumed(false);
+    setPreviousDeal(null);
+    setDraftScope(null);
+    setRevisionNote("");
 
     const trimmed = addressInput.trim();
     if (!trimmed) {
@@ -335,6 +359,7 @@ function AnalyzerPage() {
     setMissingFields([]);
     setResult(null);
     setAnalysisSnapshot(null);
+    activeSnapshot.current = null;
     setSaveError("");
     setSaveSuccess(false);
 
@@ -351,6 +376,8 @@ function AnalyzerPage() {
     }
 
     try {
+      const scopeIssue = scopeError(draftScope, draft.rehab_budget.value);
+      if (scopeIssue) throw new Error(scopeIssue);
       setAnalyzeLoading(true);
       // Treat a non-positive draft rent as "no rent" (omitted), without mutating draft state.
       const normalizedDraft =
@@ -362,6 +389,7 @@ function AnalyzerPage() {
             }
           : draft;
       const snapshot = createDraftAnalysisSnapshot(normalizedDraft, {
+        rehabScope: draftScope, parentDealId: previousDeal?.id ?? null, revisionNote,
         listingUrl:
           normalizedDraft.source === "rentcast"
             ? null
@@ -388,7 +416,9 @@ function AnalyzerPage() {
       setMissingFields([]);
       setAnalyzeError("");
       setAnalysisSnapshot(snapshot);
+      activeSnapshot.current = snapshot;
       setResult(res.result);
+      setComparisonDeal(previousDeal);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to finalize/analyze.";
       setAnalyzeError(msg);
@@ -426,6 +456,7 @@ function AnalyzerPage() {
     setError("");
     setResult(null);
     setAnalysisSnapshot(null);
+    activeSnapshot.current = null;
     setSaveError("");
     setSaveSuccess(false);
 
@@ -434,6 +465,8 @@ function AnalyzerPage() {
       return;
     }
 
+    const scopeIssue = scopeError(manualScope, rehabBudget);
+    if (scopeIssue) { setError(scopeIssue); return; }
     const payload: AnalyzeRequest = {
       purchase_price: purchasePrice,
       arv,
@@ -448,6 +481,7 @@ function AnalyzerPage() {
         monthlyRent === "" || Number(monthlyRent) <= 0 ? null : monthlyRent,
     };
     const snapshot = createManualAnalysisSnapshot(payload, {
+      rehabScope: manualScope, parentDealId: manualPreviousDeal?.id ?? null,
       listingUrl: activeTab === "url" ? listingUrl : null,
       propertyAddress:
         activeTab === "address" ? addressInput : manualAddress,
@@ -457,7 +491,9 @@ function AnalyzerPage() {
       setLoading(true);
       const res = await analyzeDeal(payload);
       setAnalysisSnapshot(snapshot);
+      activeSnapshot.current = snapshot;
       setResult(res);
+      setComparisonDeal(manualPreviousDeal);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to analyze deal.";
       setError(msg);
@@ -467,7 +503,7 @@ function AnalyzerPage() {
   }
 
   async function onSaveDeal() {
-    if (!result || !analysisSnapshot) return;
+    if (!result || !analysisSnapshot || saveLoading) return;
     setSaveError("");
     setSaveSuccess(false);
 
@@ -479,9 +515,12 @@ function AnalyzerPage() {
 
     try {
       setSaveLoading(true);
-      await saveDeal(
+      const saved = await saveDeal(
         {
           address: analysisSnapshot.meta.property_address,
+          rehab_scope: analysisSnapshot.rehabScope,
+          parent_deal_id: analysisSnapshot.parentDealId,
+          revision_note: analysisSnapshot.revisionNote,
           draft_input: analysisSnapshot.draftInput as unknown as Record<
             string,
             unknown
@@ -490,6 +529,10 @@ function AnalyzerPage() {
         },
         token
       );
+      if (activeSnapshot.current !== analysisSnapshot) return;
+      setSavedId(saved.id);
+      if (analysisSnapshot.source === "manual") setManualPreviousDeal(saved);
+      else setPreviousDeal(saved);
       setSaveSuccess(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to save deal.";
@@ -855,8 +898,9 @@ function AnalyzerPage() {
                     Upload property photos. AI estimates visible condition and a
                     rehab cost range.
                   </div>
+                  {draftScope && <p className="mt-2 text-xs text-amber-200/80">Applying a photo estimate replaces this itemized scope with a lump-sum planning allowance.</p>}
                   <PhotoRehabAnalyzer
-                    onApply={(v) => setDraftDpNumber("rehab_budget", v)}
+                    onApply={(v) => { setDraftScope(null); setDraftDpNumber("rehab_budget", v); }}
                   />
                 </div>
                 <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-4">
@@ -867,12 +911,20 @@ function AnalyzerPage() {
                     Build a line-item rehab estimate by hand across nine
                     categories.
                   </div>
-                  <RepairBudgetBuilder
-                    onApply={(v) => setDraftDpNumber("rehab_budget", v)}
-                  />
+                  {!draftScope && <RepairBudgetBuilder
+                    onApply={(v, scope) => { setDraftScope(scope); setDraftDpNumber("rehab_budget", v); }}
+                  />}
+                  <RehabScopeEditor scope={draftScope} budget={draft.rehab_budget.value ?? 0} onChange={scope => {
+                    setDraftScope(scope);
+                    if (scope) setDraftDpNumber("rehab_budget", scopeTotals(scope).total);
+                  }} />
                 </div>
               </div>
 
+              {previousDeal && <label className="mt-4 block text-sm text-white/70">
+                Revision note — compared with saved deal #{previousDeal.id}
+                <textarea aria-label="Revision note" value={revisionNote} maxLength={2000} onChange={e => setRevisionNote(e.target.value)} className="mt-2 w-full rounded-xl border border-white/15 bg-slate-950 p-3" placeholder="What changed after the walkthrough or quote?" />
+              </label>}
               {/* =========================
                   Step 3 — Deal Assumptions (Deal Numbers / Financing & Holding / Investor Criteria)
                  ========================= */}
@@ -967,6 +1019,8 @@ function AnalyzerPage() {
                   <input
                     type="number"
                     value={draft.rehab_budget?.value ?? ""}
+                    readOnly={draftScope !== null}
+                    title={draftScope ? "Edit the itemized scope to change this total." : undefined}
                     onChange={(e) =>
                       setDraftDpNumber(
                         "rehab_budget",
@@ -1234,6 +1288,7 @@ function AnalyzerPage() {
         {showLegacy && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
           <div className="text-sm font-semibold text-white">Manual Entry</div>
+          {manualPreviousDeal && <p className="mt-2 text-xs text-amber-200/80">The next saved analysis will be a new revision of deal #{manualPreviousDeal.id}. <a href="/" className="underline">Start a separate deal</a></p>}
           <div className="mt-1 text-xs text-white/55">
             Analyze without address lookup — enter the numbers directly.
           </div>
@@ -1258,7 +1313,8 @@ function AnalyzerPage() {
                 Upload property photos. AI estimates visible condition and a
                 rehab cost range.
               </div>
-              <PhotoRehabAnalyzer onApply={(mid) => setRehabBudget(mid)} />
+              {manualScope && <p className="mt-2 text-xs text-amber-200/80">Applying a photo estimate replaces this itemized scope with a lump-sum planning allowance.</p>}
+              <PhotoRehabAnalyzer onApply={(mid) => { setManualScope(null); setRehabBudget(mid); }} />
             </div>
             <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-4">
               <div className="text-sm font-bold text-white">
@@ -1267,7 +1323,11 @@ function AnalyzerPage() {
               <div className="mt-1 text-xs text-white/55">
                 Build a line-item rehab estimate by hand across nine categories.
               </div>
-              <RepairBudgetBuilder onApply={(mid) => setRehabBudget(mid)} />
+              {!manualScope && <RepairBudgetBuilder onApply={(mid, scope) => { setManualScope(scope); setRehabBudget(mid); }} />}
+              <RehabScopeEditor scope={manualScope} budget={rehabBudget} onChange={scope => {
+                setManualScope(scope);
+                if (scope) setRehabBudget(scopeTotals(scope).total);
+              }} />
             </div>
           </div>
 
@@ -1316,6 +1376,8 @@ function AnalyzerPage() {
               <input
                 type="number"
                 value={rehabBudget}
+                readOnly={manualScope !== null}
+                title={manualScope ? "Edit the itemized scope to change this total." : undefined}
                 onChange={(e) => setRehabBudget(Number(e.target.value))}
                 className="w-full rounded-lg bg-slate-900 border border-white/10 px-3 py-2"
               />
@@ -1388,7 +1450,14 @@ function AnalyzerPage() {
                 </span>
               </div>
               <div className="mt-3">
+                <p className="mb-3 text-xs text-white/60">This memo uses the submitted inputs. Later edits take effect only after generating a new memo. Holding costs model loan interest; separate taxes, insurance, utilities, financing points and draw timing are not modeled.</p>
                 <AnalysisResult result={result} meta={analysisSnapshot.meta} />
+                <RehabScopeEditor scope={analysisSnapshot.rehabScope} readOnly />
+                {comparisonDeal && analysisSnapshot.parentDealId === comparisonDeal.id && <RevisionComparison previous={comparisonDeal} current={{
+                  draft_input: analysisSnapshot.draftInput as unknown as Record<string, unknown>,
+                  analysis_result: result as unknown as Record<string, unknown>,
+                  rehab_scope: analysisSnapshot.rehabScope, revision_note: analysisSnapshot.revisionNote,
+                }} />}
               </div>
 
               {/* Save Deal — visible only when signed in */}
@@ -1404,14 +1473,14 @@ function AnalyzerPage() {
                       ? "Saving…"
                       : saveSuccess
                       ? "Saved!"
-                      : "Save Deal"}
+                      : analysisSnapshot.parentDealId ? "Save New Revision" : "Save Deal"}
                   </button>
                   {saveSuccess && (
                     <Link
-                      to="/deals"
+                      to={savedId ? `/deal/${savedId}` : "/deals"}
                       className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
                     >
-                      View in My Deals →
+                      View saved version →
                     </Link>
                   )}
                   {saveError && (

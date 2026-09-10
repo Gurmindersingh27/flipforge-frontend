@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { RehabScope } from "../lib/types";
 
 type Level = 0 | 1 | 2 | 3;
 
@@ -25,7 +26,7 @@ const CATEGORIES: Category[] = [
 ];
 
 interface RepairBudgetBuilderProps {
-  onApply: (value: number) => void;
+  onApply: (value: number, scope: RehabScope) => void;
 }
 
 function fmt(n: number): string {
@@ -259,7 +260,18 @@ export default function RepairBudgetBuilder({ onApply }: RepairBudgetBuilderProp
         <button
           type="button"
           onClick={() => {
-            onApply(Math.round(totalMid));
+            const scope: RehabScope = {
+              version: 1, contingency_pct: pct, notes: "Planning allowances from the built-in estimator; confirm scope and pricing.",
+              items: CATEGORIES.flatMap((cat, i) => selections[i] === 0 ? [] : [{
+                id: crypto.randomUUID(), category: cat.label,
+                description: `${LEVEL_LABELS[selections[i]]} scope allowance`,
+                quantity: cat.type === "per-bath" ? bathroomCount : cat.type === "per-sqft" ? sqft : 1,
+                unit: cat.type === "per-bath" ? "bath" : cat.type === "per-sqft" ? "sqft" : "allowance",
+                unit_cost: (cat.levels[selections[i]][0] + cat.levels[selections[i]][1]) / 2,
+                basis: "allowance", source: "Built-in planning estimate", quote_date: null, notes: "",
+              }]),
+            };
+            onApply(Math.round(totalMid), scope);
             setOpen(false);
           }}
           className="rounded-xl px-4 py-2 text-sm font-semibold bg-[#E8C547] text-slate-900 shadow-sm shadow-[#E8C547]/20 hover:bg-[#d4b33e] active:scale-95 transition-all duration-150"
@@ -270,7 +282,7 @@ export default function RepairBudgetBuilder({ onApply }: RepairBudgetBuilderProp
 
       {/* Disclaimer */}
       <p className="mt-3 text-[11px] text-white/30 leading-relaxed">
-        Estimates based on Southeast US contractor pricing, 2026. Planning tool only — verify with a licensed contractor before finalizing.
+        Built-in planning allowances. These are not verified local quotes. Confirm the scope and pricing with your contractor.
       </p>
     </div>
   );

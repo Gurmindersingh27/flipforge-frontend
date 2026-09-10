@@ -1054,3 +1054,15 @@ Two surgical, frontend-only integrity fixes found during Demo Conversion Readine
 - Browser launch was attempted with both agent-browser and Playwright Chromium. The workspace denied Chromium's required socket operation (`Operation not permitted`). The temporary auth mock/Vite alias was removed completely and is absent from the diff. No visual claim is made from this environment.
 
 **Current stop point:** implementation and non-visual validation are complete on `codex/analysis-snapshot-integrity-v1`. PM approved commit, push, PR, merge, deployment, and verification. Signed-in production visual QA remains a release check, not a reason to add more code.
+
+## 2026-09-10 — Rehab Budget + Revisions v1
+
+PR #60 is already merged (c11d3de); the earlier pending release entry is stale. User approved building the next budget/revision workflow despite unproven commercial demand. Five real pilot users and paid repeat use remain business tests, not completed milestones.
+
+Implemented on codex/rehab-budget-revisions-v1: persistent itemized scopes, estimate/quote basis with source/date, contingency, notes, immutable scope snapshots, linked saved revisions, and previous/current comparisons. Repair builder selections become editable scope. Existing saved deals remain usable. Both manual and resumed draft paths preserve their submitted scope; editing after analysis does not mutate the saved snapshot. Recalculating after a save links to that saved version. New photo estimates explicitly replace itemized scope with a lump-sum allowance. No retained photos, hosted intake, outreach sending, billing or full carrying-cost model is included.
+
+Backend PR #18 adds the companion table and optional fields. Its 11 tests and CI pass. Frontend shared types mirror the backend. Deploy backend first and confirm OpenAPI includes rehab_scope/parent_deal_id before releasing this frontend.
+
+Local verification: 29 frontend tests pass, production build passes, diff check passes, same 10 pre-existing lint errors. React review found no added hook/dependency or label issues in the new components. Local Chromium cannot run in this container. A dependency-free CDP browser workflow is added to CI, using the runner's Chrome, isolated auth/database fixtures, and backend commit 784f4cf075162fc85e2efe3b1a241053922f9d5e. Its result is pending at this commit. Fixtures are generated in a temporary directory and never shipped in the production bundle.
+
+Release status: backend PR open, merge blocked by automatic approval review requiring explicit merge/deployment authorization. Frontend PR preparation in progress. No claim of production deployment or signed-in production visual QA. Pilot outreach/intake and laptop QA checklist prepared separately; no messages sent. No underwriting engine, AnalyzeRequest, PDF service, runtime dependencies, or paid-provider calls changed.
