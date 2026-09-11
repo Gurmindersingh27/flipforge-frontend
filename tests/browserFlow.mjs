@@ -112,6 +112,7 @@ try {
   await until(`document.body.textContent.includes('Each quoted item needs a source and quote date.')`);
   checks.push("Incomplete quote blocked in UI");
   await scoped("Source 1", "Contractor fixture"); await scoped("Quote date 1", "2026-09-10");
+  await scoped("Notes 1", "Disposal excluded; owner allowance requires confirmation.");
   await fill(labelInput("Holding Months"), "8");
   await fill(`document.querySelector('[aria-label="Revision note"]')`, "Quotes + two months");
   await click("button", "Generate Investor Memo");
@@ -128,6 +129,8 @@ try {
   assert.deepEqual(await api(`/api/deals/${first.id}`), first);
   checks.push("Draft flow saves $67K quoted scope + 8 months, links the parent, lowers offer/profit and preserves original");
   await click("a", "View saved version →"); await until(`Boolean(document.querySelector('[aria-label="Revision comparison"]'))`);
+  await until(`document.querySelector('[aria-label="Scope evidence changes"]')?.textContent.includes('Disposal excluded; owner allowance requires confirmation.')`);
+  checks.push("Saved comparison displays the recorded exclusion evidence");
   await screenshot("desktop-saved.png");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
   await screenshot("mobile-saved.png");
@@ -138,6 +141,21 @@ try {
   await screenshot("mobile-editor.png");
   assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
   checks.push("Saved comparison and restored editor fit 390px viewport");
+  await scoped("Notes 1", "Disposal now included after contractor confirmation. Price unchanged.");
+  await click("button", "Generate Investor Memo");
+  await until(`Boolean(${byText("button", "Save New Revision")})`);
+  await click("button", "Save New Revision"); await until(`Boolean(${byText("button", "Saved!")})`);
+  const third = (await api("/api/deals"))[0];
+  assert.equal(third.parent_deal_id, second.id);
+  assert.equal(third.analysis_result.net_profit, second.analysis_result.net_profit);
+  assert.equal(third.analysis_result.max_safe_offer, second.analysis_result.max_safe_offer);
+  assert.deepEqual(await api(`/api/deals/${second.id}`), second);
+  await click("a", "View saved version →");
+  await until(`document.querySelector('[aria-label="Scope evidence changes"]')?.textContent.includes('Disposal now included after contractor confirmation. Price unchanged.')`);
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Scope evidence changes"]').textContent.includes('Disposal excluded; owner allowance requires confirmation.')`));
+  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  await screenshot("mobile-evidence-change.png");
+  checks.push("Cost-neutral revision shows both exclusion passages, preserves economics and previous record, and fits mobile");
   assert.deepEqual(errors, []);
   checks.push("No browser runtime exceptions");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result }, null, 2));

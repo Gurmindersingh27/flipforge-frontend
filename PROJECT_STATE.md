@@ -1066,3 +1066,31 @@ Backend PR #18 adds the companion table and optional fields. Its 11 tests and CI
 Local verification: 29 frontend tests pass, production build passes, diff check passes, same 10 pre-existing lint errors. React review found no added hook/dependency or label issues in the new components. Local Chromium cannot run in this container. A dependency-free CDP browser workflow is added to CI, using the runner's Chrome, isolated auth/database fixtures, and backend commit 784f4cf075162fc85e2efe3b1a241053922f9d5e. Its result is pending at this commit. Fixtures are generated in a temporary directory and never shipped in the production bundle.
 
 Release status: backend PR open, merge blocked by automatic approval review requiring explicit merge/deployment authorization. Frontend PR preparation in progress. No claim of production deployment or signed-in production visual QA. Pilot outreach/intake and laptop QA checklist prepared separately; no messages sent. No underwriting engine, AnalyzeRequest, PDF service, runtime dependencies, or paid-provider calls changed.
+
+## 2026-09-11 — Release closeout (supersedes historical pending status)
+
+Fresh remote checks confirm backend PR #18 merged at `efe27e032ef85dd130ec267e9166ce878fcdc1cc` and frontend PR #61 merged at `0e56e784efbc41cc840c6bd1e1e18a6212eca92b`, backend first. Frontend #59 and #60 remain completed. The earlier automatic approval block was resolved by the user's subsequent authorization; both merged PR descriptions were corrected. No completed feature is being rebuilt.
+
+Fresh public checks passed September 11 at 03:23 UTC. A production build of the frontend merge, using only the two public build values shipped in the browser, exactly matched BOTH deployed assets byte-for-byte:
+- JS `/assets/index-Byz3X__K.js`: SHA-256 `5d23368faf73982df1f513a9b429ec3103e941210af80fc2f6cc0ed9e80bc109`.
+- CSS `/assets/index-CHMAGN1q.css`: SHA-256 `a7056cda05939ab0c12cbed148adb1597d710bf78877f19edc3ff3f1a7bb256d`.
+- API health returned `{"status":"ok"}`. Live OpenAPI includes RehabScope/RehabScopeItem and all three scope/revision fields on save/read contracts. Production-origin CORS preflight passed. Unauthenticated GET /api/deals returned 403; its body was not read.
+- Live S1/S2/S3 returned PASS/BUY/BUY; maximum offers $137,700/$137,700/$212,300; net profits -$25,100/$28,650/$50,150; confidence 12/86/93. Complete common inputs: close .03, sell .08, hold 6, rate .10, LTC .90, required return .12, rent null. Purchase/ARV/rehab respectively: 185000/240000/45000; 135000/240000/45000; 200000/345000/50000.
+
+GitHub also reports Vercel success for the frontend merge. Direct Vercel team API access was not retried. Initial local HTTP timeouts were transient; subsequent public checks succeeded. No production sign-in, credentials, 2FA, auth bypass, saved write, provider-backed request, or deployment was performed.
+
+Prior regression evidence remains 29 frontend tests, 11 backend tests and the Chrome → frontend → backend → isolated SQLite workflow (frontend run 34529580917; backend run 34527748723). These historical suites were not silently recounted as new tests.
+
+Still outstanding: Gurminder's signed-in production save/reopen/revise workflow, actual runtime database persistence/backups/restore, and deployed provider usage limits. Source inspection confirms the repo defaults to relative SQLite and render.yaml does not declare a disk/database; that is NOT proof the live service lacks separately configured storage. Provider-backed routes lack application-level authentication in reviewed code; CORS is not usage enforcement. No paid users, real outside submissions or repeat-use traction have been established.
+
+Added `tests/productionSmoke.mjs` and `.github/workflows/release-verification.yml` to make the public check repeatable. The script uses only native Node APIs and existing build dependencies; it writes an evidence JSON even on failure. Run from a clean checkout of the intended frontend release after npm ci. The workflow checks out production source separately from its checker, runs for changes to the checker and on manual dispatch, and uploads results. It performs three stateless analysis requests, never a saved-deal write. It does not test signed-in browser behavior. New workflow publication/CI is pending at this local record.
+
+## 2026-09-11 — Scope evidence comparison improvement
+
+The previous comparison noticed item changes but displayed only category, line price and latest provenance. A cost-neutral change to exclusions/specification could be invisible in the summary. Added a structured diff of description, quantity/unit/rate, basis, contractor, date and exact notes; shows previous/current passages, changed budget notes and optional monthly rent. Reordering item/object keys does not invent changes. Add/remove labels refer to itemization, not verified scope coverage.
+
+Files: src/lib/revisionDiff.ts, src/components/RevisionComparison.tsx, tests/revisionDiff.test.ts, tests/browserFlow.mjs, PROJECT_STATE.md. No shared types, engine, saved records, snapshots, API or dependencies changed. Browser CI remains pinned to the already deployed backend contract; the parallel backend experiment changes no runtime behavior.
+
+Local verification: 37 frontend tests PASS (29 existing + 8 meaningful evidence regressions), production build PASS (118 modules), same 10 pre-existing lint errors; no new lint errors. Extended browser regression saves a cost-neutral third revision, asserts both exclusion passages, unchanged modeled economics, unchanged prior record and mobile layout. That new browser run is pending publication/CI at this entry.
+
+Frontend PR #62 contains the public checker, closeout record and this improvement; it is a draft for review, not merged or deployed. Full Quote Review + Missing Scope v1 remains unbuilt in the production UI. The backend branch contains an explicitly synthetic manual-review CLI experiment; real quote-pair validation and structured review persistence remain outstanding.
