@@ -1,0 +1,42 @@
+name: Public release verification
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - tests/productionSmoke.mjs
+      - .github/workflows/release-verification.yml
+  workflow_dispatch:
+    inputs:
+      frontend_ref:
+        description: Frontend commit or ref expected on the production domain
+        required: true
+        default: main
+permissions:
+  contents: read
+jobs:
+  public-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: checks
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.frontend_ref || 'main' }}
+          path: production-source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: production-source/package-lock.json
+      - run: npm ci
+        working-directory: production-source
+      - name: Verify public assets and API without signing in
+        run: node ../checks/tests/productionSmoke.mjs
+        working-directory: production-source
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-release-evidence
+          path: production-source/release-evidence
