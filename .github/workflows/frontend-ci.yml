@@ -2,7 +2,7 @@ name: Frontend CI
 
 on:
   pull_request:
-    branches: [main, codex/release-closeout-20260911]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
