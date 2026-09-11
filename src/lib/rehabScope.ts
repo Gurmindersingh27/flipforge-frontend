@@ -1,5 +1,35 @@
 import type { RehabScope, RehabScopeItem } from "./types.ts";
 
+export const SCOPE_CATEGORY_SUGGESTIONS = [
+  "Kitchen", "Bathrooms", "Flooring", "Paint / Drywall", "Roof", "HVAC",
+  "Electrical", "Plumbing", "Windows / Exterior", "Demo / Disposal",
+  "Permits / Fees", "General conditions",
+] as const;
+
+// Selection and both kinds of provenance changes are explicit. Never mutate a saved scope.
+export function stampQuote(scope: RehabScope, source: string, date: string, ids: string[], options: {
+  convertAllowances?: boolean; replaceQuoteDetails?: boolean;
+} = {}): RehabScope {
+  const contractor = source.trim();
+  if (!contractor || contractor.length > 500) throw new Error("Enter a contractor / source of 1–500 characters.");
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) throw new Error("Enter a valid quote date.");
+  if (!ids.length || new Set(ids).size !== ids.length || ids.some(id => !scope.items.some(item => item.id === id))) {
+    throw new Error("Select the current scope lines that belong to this quote.");
+  }
+  const selected = scope.items.filter(item => ids.includes(item.id));
+  if (selected.some(item => item.basis === "allowance") && !options.convertAllowances) {
+    throw new Error("Confirm that the selected planning allowances are now supported by this contractor quote.");
+  }
+  if (selected.some(item => item.basis === "quote" && (
+    (item.source.trim() && item.source.trim() !== contractor) || (item.quote_date && item.quote_date !== date)
+  )) && !options.replaceQuoteDetails) {
+    throw new Error("Confirm replacement of existing source / date on the selected quoted lines.");
+  }
+  return { ...scope, items: scope.items.map(item => ids.includes(item.id)
+    ? { ...item, basis: "quote", source: contractor, quote_date: date } : item) };
+}
+
 export function lineTotal(item: RehabScopeItem): number {
   return Math.round((item.quantity * item.unit_cost + Number.EPSILON) * 100) / 100;
 }
