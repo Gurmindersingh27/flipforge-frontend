@@ -60,6 +60,27 @@ const labelInput = text => `(${byText("label", text)})?.parentElement.querySelec
 const scopeInput = label => `document.querySelector('section[aria-label="Itemized rehab scope"] [aria-label=${JSON.stringify(label)}]')`;
 const scoped = (label, value) => fill(scopeInput(label), value);
 const api = async path => { const res = await fetch(`http://127.0.0.1:8000${path}`); assert.equal(res.status, 200); return res.json(); };
+const inputByAria = label => `document.querySelector('[aria-label=${JSON.stringify(label)}]')`;
+async function toggle(label) { await evaluate(`(${inputByAria(label)}).click()`); }
+async function resumeSaved(id) {
+  await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${id}` });
+  await click("a", "Resume Deal");
+  await until(`location.pathname === '/' && Boolean(${scopeInput("Unit cost 1")}) && !(${scopeInput("Unit cost 1")}).matches(':disabled')`);
+}
+async function saveRevision(note) {
+  await fill(inputByAria("Revision note"), note);
+  await click("button", "Generate Investor Memo");
+  await until(`Boolean(${byText("button", "Save New Revision")})`);
+  await click("button", "Save New Revision");
+  await until(`Boolean(${byText("button", "Saved!")})`);
+  return (await api("/api/deals"))[0];
+}
+async function enterQuoteDetails(source, date) {
+  await click("summary", "Apply quote details to selected lines");
+  await fill(inputByAria("Bulk quote contractor"), source);
+  await fill(inputByAria("Bulk quote date"), date);
+  await toggle("Select quote line 1");
+}
 async function screenshot(name) {
   const { cssContentSize } = await cdp("Page.getLayoutMetrics");
   const { data } = await cdp("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width: cssContentSize.width, height: cssContentSize.height, scale: 1 } });
@@ -156,9 +177,165 @@ try {
   assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
   await screenshot("mobile-evidence-change.png");
   checks.push("Cost-neutral revision shows both exclusion passages, preserves economics and previous record, and fits mobile");
+
+  // Build two quoted alternatives from one itemized baseline, using only the UI to write records.
+  await resumeSaved(first.id);
+  await scoped("Category 1", "Kitchen"); await scoped("Unit cost 1", "20000");
+  await scoped("Description 1", "Kitchen planning scope");
+  await click("button", "Add scope item");
+  await scoped("Category 2", "Roof"); await scoped("Unit cost 2", "12000");
+  await scoped("Source 2", "Owner roof allowance"); await scoped("Notes 2", "Retained roof allowance.");
+  await scoped("Scope contingency", "10");
+  await fill(labelInput("Holding Months"), "7");
+  const baseline = await saveRevision("Itemized bid baseline fixture");
+  assert.equal(baseline.draft_input.rehab_budget.value, 35200);
+  assert.equal(baseline.draft_input.holding_months, 7);
+  await click("a", "View saved version →"); await click("button", "Compare bids");
+  await until(`Boolean(${byText("a", `baseline #${baseline.id}`)})`);
+  assert.equal(await evaluate(`(${byText("a", `baseline #${baseline.id}`)}).getAttribute('href')`), `/deal/${baseline.id}`);
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Bid comparison"]').textContent.includes('Resume baseline #${baseline.id}')`));
+
+  await resumeSaved(baseline.id);
+  await scoped("Unit cost 1", "14000");
+  await scoped("Notes 1", "Disposal excluded. Owner to arrange.");
+  await click("button", "Add scope item");
+  await scoped("Category 3", "Demo / Disposal"); await scoped("Unit cost 3", "6500");
+  await scoped("Notes 3", "Reviewer demo allowance; confirm final scope.");
+  await enterQuoteDetails("Builder A fixture", "2026-09-11");
+  await click("button", "Apply quote details");
+  await until(`document.body.textContent.includes('Confirm that the selected planning allowances')`);
+  assert.equal(await evaluate(`(${scopeInput("Basis 1")}).value`), "allowance");
+  await toggle("Confirm allowance conversion");
+  await scoped("Unit cost 1", "14001");
+  assert.equal(await evaluate(`(${inputByAria("Confirm allowance conversion")}).checked`), false);
+  await click("button", "Apply quote details");
+  assert.equal(await evaluate(`(${scopeInput("Basis 1")}).value`), "allowance");
+  await scoped("Unit cost 1", "14000");
+  await toggle("Confirm allowance conversion"); await click("button", "Apply quote details");
+  await until(`(${scopeInput("Basis 1")}).value === 'quote'`);
+  assert.equal(await evaluate(`(${scopeInput("Source 2")}).value`), "Owner roof allowance");
+  assert.equal(await evaluate(`(${scopeInput("Basis 2")}).value`), "allowance");
+  const bidA = await saveRevision("Bid A fixture");
+  assert.equal(bidA.parent_deal_id, baseline.id);
+  assert.equal(bidA.draft_input.rehab_budget.value, 35750);
+  assert.equal(bidA.rehab_scope.items[0].source, "Builder A fixture");
+  assert.equal(bidA.rehab_scope.items[2].basis, "allowance");
+  checks.push("Bulk quote stamping requires price consent, invalidates it after a price edit and preserves unselected roof and demo allowances");
+
+  await resumeSaved(baseline.id);
+  await scoped("Unit cost 1", "18000"); await scoped("Notes 1", "Disposal included. Finish materials excluded.");
+  await click("button", "Add scope item"); await scoped("Category 3", "Finishes"); await scoped("Unit cost 3", "1300");
+  await scoped("Notes 3", "Reviewer finish allowance; selection pending.");
+  await enterQuoteDetails("Builder B fixture", "2026-09-11");
+  await toggle("Confirm allowance conversion"); await click("button", "Apply quote details");
+  const bidB = await saveRevision("Bid B fixture");
+  assert.equal(bidB.parent_deal_id, baseline.id);
+  assert.equal(bidB.draft_input.rehab_budget.value, 34430);
+  assert.ok(bidB.analysis_result.net_profit > bidA.analysis_result.net_profit);
+  await click("a", "View saved version →"); await click("button", "Compare bids");
+  await until(`Boolean(${byText("a", `baseline #${baseline.id}`)})`);
+  await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${baseline.id}` });
+  await click("button", "Compare bids");
+  await until(`Boolean(${inputByAria("Bid A saved version")})`);
+  assert.equal(await evaluate(`(${byText("a", `baseline #${baseline.id}`)}).getAttribute('href')`), `/deal/${baseline.id}`);
+  const discovered = await evaluate(`Array.from((${inputByAria("Bid A saved version")}).options).map(option=>Number(option.value))`);
+  assert.deepEqual(discovered.sort((a,b)=>a-b), [bidA.id,bidB.id].sort((a,b)=>a-b));
+  await fill(inputByAria("Bid A saved version"), String(bidA.id));
+  await fill(inputByAria("Bid B saved version"), String(bidB.id));
+  await until(`Boolean(document.querySelector('[aria-label="Bid A impact"]'))`);
+  const comparisonText = await evaluate(`document.querySelector('[aria-label="Bid comparison"]').textContent`);
+  for (const value of ["Disposal excluded. Owner to arrange.", "Disposal included. Finish materials excluded.", "Not separately itemized", "$35,750.00", "$34,430.00"]) assert.ok(comparisonText.includes(value), value);
+  for (const [label, bid] of [["Bid A", bidA], ["Bid B", bidB]]) {
+    const savedText = await evaluate(`document.querySelector('[aria-label="${label} impact"]').textContent`);
+    for (const value of [bid.analysis_result.max_safe_offer, bid.analysis_result.net_profit]) {
+      assert.ok(savedText.includes(value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 })));
+    }
+  }
+  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  await screenshot("bid-impact-mobile.png");
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await screenshot("bid-impact-desktop.png");
+  checks.push("Two saved sibling bids compare exact quote evidence, allowances, retained costs, totals and canonical deal impact at 390px and desktop");
+  checks.push("A revised baseline discovers both quoted children with its updated 7-month assumptions, not its 6-month parent");
+
+  await resumeSaved(baseline.id);
+  await enterQuoteDetails("Builder same-price fixture", "2026-09-11");
+  await toggle("Confirm allowance conversion"); await click("button", "Apply quote details");
+  const samePrice = await saveRevision("Quote matches original allowance fixture");
+  assert.equal(samePrice.rehab_scope.items[0].unit_cost, 20000);
+  assert.equal(samePrice.parent_deal_id, baseline.id);
+  await click("a", "View saved version →"); await click("button", "Compare bids");
+  await fill(inputByAria("Bid A saved version"), String(bidA.id));
+  await fill(inputByAria("Bid B saved version"), String(samePrice.id));
+  const confirmSamePrice = `Confirm Bid B amount for ${samePrice.rehab_scope.items[0].id}`;
+  await until(`Boolean(${inputByAria(confirmSamePrice)})`);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Bid B impact"]'))`), false);
+  assert.equal(await evaluate(`Boolean(${byText("a", "Continue with Bid B")})`), false);
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  await screenshot("bid-carried-allowance-review.png");
+  await toggle(confirmSamePrice);
+  await until(`Boolean(document.querySelector('[aria-label="Bid B impact"]'))`);
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Bid B impact"]').textContent.includes('$20,000.00')`));
+  await toggle(confirmSamePrice);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Bid B impact"]'))`), false);
+  await toggle(confirmSamePrice);
+  await fill(inputByAria("Bid B saved version"), String(bidB.id));
+  await fill(inputByAria("Bid B saved version"), String(samePrice.id));
+  assert.equal(await evaluate(`(${inputByAria(confirmSamePrice)}).checked`), false);
+  await toggle(confirmSamePrice); await click("button", "Refresh saved bids");
+  await fill(inputByAria("Bid A saved version"), String(bidA.id));
+  await fill(inputByAria("Bid B saved version"), String(samePrice.id));
+  assert.equal(await evaluate(`(${inputByAria(confirmSamePrice)}).checked`), false);
+  await toggle(confirmSamePrice); await cdp("Page.reload"); await click("button", "Compare bids");
+  await fill(inputByAria("Bid A saved version"), String(bidA.id));
+  await fill(inputByAria("Bid B saved version"), String(samePrice.id));
+  assert.equal(await evaluate(`(${inputByAria(confirmSamePrice)}).checked`), false);
+  assert.deepEqual(await api(`/api/deals/${samePrice.id}`), samePrice);
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  checks.push("A relabeled allowance blocks bid impact until the exact unchanged price is confirmed; unchecking, changing bids, refresh and reload reset confirmation without saved writes");
+
+  await resumeSaved(baseline.id);
+  await scoped("Unit cost 1", "18000");
+  await enterQuoteDetails("Builder mismatch fixture", "2026-09-11");
+  await toggle("Confirm allowance conversion"); await click("button", "Apply quote details");
+  await fill(labelInput("Holding Months"), "8");
+  const mismatch = await saveRevision("Different holding period fixture");
+  await click("a", "View saved version →"); await click("button", "Compare bids");
+  await fill(inputByAria("Bid A saved version"), String(bidA.id));
+  await fill(inputByAria("Bid B saved version"), String(mismatch.id));
+  await until(`document.querySelector('[aria-label="Bid comparison"] [role="alert"]')?.textContent.includes('Holding months: baseline 7 · Bid A 7 · Bid B 8')`);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Bid A impact"]'))`), false);
+  assert.equal(await evaluate(`Boolean(${byText("a", "Continue with Bid B")})`), false);
+  await screenshot("bid-assumption-mismatch.png");
+  checks.push("A sibling with different holding months is blocked from bid-only impact and continuation");
+
+  await fill(inputByAria("Bid B saved version"), String(bidB.id));
+  await click("a", "Continue with Bid B");
+  await until(`location.pathname === '/' && Boolean(${scopeInput("Unit cost 1")}) && !(${scopeInput("Unit cost 1")}).matches(':disabled')`);
+  assert.equal(await evaluate(`(${scopeInput("Source 1")}).value`), "Builder B fixture");
+  await enterQuoteDetails("Builder B fixture", "2026-09-12");
+  await click("button", "Apply quote details");
+  await until(`document.body.textContent.includes('Confirm replacement of existing source / date')`);
+  assert.equal(await evaluate(`(${scopeInput("Quote date 1")}).value`), "2026-09-11");
+  await toggle("Confirm quote details replacement"); await click("button", "Apply quote details");
+  const selected = await saveRevision("Selected Bid B; quote date reconfirmed fixture");
+  assert.equal(selected.parent_deal_id, bidB.id);
+  assert.equal(selected.rehab_scope.items[0].quote_date, "2026-09-12");
+  assert.equal(selected.analysis_result.net_profit, bidB.analysis_result.net_profit);
+  assert.equal(selected.analysis_result.max_safe_offer, bidB.analysis_result.max_safe_offer);
+  for (const record of [first, baseline, bidA, bidB, samePrice]) assert.deepEqual(await api(`/api/deals/${record.id}`), record);
+  await click("a", "View saved version →"); await cdp("Page.reload");
+  await until(`(${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
+  checks.push("Continuing Bid B creates its child; confirmed provenance changes reopen correctly and all prior records stay unchanged");
+  await click("button", "Compare bids");
+  await click("button", `Start new bids from this version #${selected.id}`);
+  await until(`Boolean(${byText("a", `baseline #${selected.id}`)})`);
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Bid comparison"]').textContent.includes('Resume baseline #${selected.id}')`));
+  checks.push("A quoted revision can explicitly start a new baseline before it has any quoted children");
   assert.deepEqual(errors, []);
   checks.push("No browser runtime exceptions");
-  writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result }, null, 2));
+  writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));
   console.log(JSON.stringify({ result: "PASS", checks }));
 } catch (error) {
   console.error(error);
