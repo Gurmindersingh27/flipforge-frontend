@@ -6,7 +6,7 @@
 ## Last Updated
 2026-09-11
 
-Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Main remains `0e56e784efbc41cc840c6bd1e1e18a6212eca92b`; PRs #62 and #63 are drafts, unmerged and not deployed to production.
+Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Main remains `0e56e784efbc41cc840c6bd1e1e18a6212eca92b`; PRs #62 and #63 are drafts, unmerged and not deployed to production. Both reviewed heads have passing CI; see `docs/RELEASE_READINESS_2026-09-11.md` for the release sequence. Keep routine progress in the repo/conversation; the PM does not want repeated tracker exports.
 
 ---
 
@@ -28,7 +28,7 @@ Property → Photos/Rehab Intelligence → Deal Assumptions → Analyze → Inve
 6. User decides whether to offer, negotiate, verify, or walk away.
 
 **Current product state:**
-- Snapshot Integrity v1 is implemented and validated on `codex/analysis-snapshot-integrity-v1`. Every successful result now carries a detached, immutable copy of the exact submitted deal and assumptions; memo/PDF/script/save consumers no longer read mutable form or stale draft state. PR, merge, deployment, and signed-in production QA are pending.
+- Snapshot Integrity v1 is merged through PR #60 and included in the publicly verified #61 production build. Every successful result carries a detached, immutable copy of the exact submitted deal and assumptions; memo/PDF/script/save consumers no longer read mutable form or stale draft state. The latest personal signed-in production workflow remains pending.
 - Underwriting Controls v1 is merged in frontend PR #59 (merge commit `7278934`) and deployed. This frontend-only integrity build makes all existing transaction-cost, financing, holding, LTC, and required-margin inputs editable and ensures the same assumptions drive both manual and draft/address analysis. The public production bundle contains the controls and Assumptions Used block; signed-in visual QA remains pending.
 - Bold Premium Investor one-page analyzer shipped through v1.1 (frontend PRs #49, #50, #51, #52 — all merged).
 - Demo Readiness / Lender Credibility Polish v1A COMPLETE (frontend PR #54, merged 2026-07-16, commit 18622b9) — breakpoint prominence + surgical lender-memo copy polish. Production deployment completed; production smoke test passed 2026-07-16 (see Production QA entry below).
@@ -1118,3 +1118,13 @@ Frontend PR #62 contains the public checker, closeout record and this improvemen
 - Exact fix files: `src/lib/bidComparison.ts`, `src/components/BidComparison.tsx`, `src/components/DealPage.tsx`, `src/lib/rehabScope.ts`, `src/components/RehabScopeEditor.tsx`, `tests/bidComparison.test.ts`, `tests/browserFlow.mjs`, `PROJECT_STATE.md`. No runtime/backend/shared-contract/authentication/dependency changes.
 - Local unit validation: 67 tests passed (58 prior + 9 focused cases). Production build passed; lint remains at ten pre-existing errors in unchanged files, and the existing CSS import warning remains. Browser cases now include a revised baseline with seven holding months versus its parent's six, candidate discovery from both baseline and bid pages, equal-price review/reset behavior, explicit new-baseline selection and unchanged prior records. Fresh CI at the published correction head is required before merge; the successful original run does not validate these edits.
 - #63 remains stacked on #62. The existing extra CI base-branch trigger is needed while stacked; remove it when retargeting to main, then verify the resulting PR base and checks. No merge or production deployment was performed. Full Quote Review and customer validation remain outstanding.
+
+## Review clearance and release preparation — 2026-09-11
+
+Fresh checks confirm #62 remains at `35e5014a52811d5490363e34ee08c94098dad890` and corrected #63 at `ed16dfa993fcf5e1ff2a62ccae69ee201382766e`, still stacked, draft and unmerged. Main is unchanged. Claude's second review reports no blocking defects; this is not a formal GitHub approval or PM release authorization. Independently checked CI run `34603166605` passed both jobs at the corrected #63 head, including 67 unit tests, build and the 15-check Chrome/API/isolated-database workflow. Local Chrome remains unavailable. Earlier public production verification covers main/#61, not these draft PRs.
+
+Keep both reviewed heads intact. `docs/RELEASE_READINESS_2026-09-11.md` records the exact merge-commit, production-check, retarget and CI-cleanup sequence for PM approval. It also records R1/R2 navigation limitations and R3 inherited-provenance limits; none is being silently fixed or claimed resolved. No extra feature work is needed before the reviewed release. Full Quote Review remains proposed.
+
+`docs/PILOT_DATA_HANDLING.md` is a proposed manual procedure for founder adoption, not an activated privacy policy or software access-control change. Quotes are optional for the first session; retain no source documents by default. Operator access and notification commitments require a private operational process. No outreach, enrollment, real repeat use, payment or signed-in production verification is claimed. The PM prefers routine updates in the repo/conversation rather than repeated tracker exports.
+
+This documentation branch changes only PROJECT_STATE.md and the two named documents. Application code, workflows, backend, contracts, owner checks and saved records are unchanged. The reviewed #62/#63 branches remain unchanged; release authorization is still pending.
