@@ -25,7 +25,7 @@ export default function RehabScopeEditor({ scope, budget = 0, onChange, readOnly
   const totals = scopeTotals(scope);
   const error = scopeError(scope);
   function updateItem(id: string, patch: Partial<RehabScopeItem>) {
-    if (patch.basis !== undefined || patch.source !== undefined || patch.quote_date !== undefined) resetConsent();
+    resetConsent();
     onChange?.({ ...scope!, items: scope!.items.map(item => item.id === id ? { ...item, ...patch } : item) });
   }
   function addItem() {
@@ -56,13 +56,13 @@ export default function RehabScopeEditor({ scope, budget = 0, onChange, readOnly
         <datalist id={categoryListId}>{SCOPE_CATEGORY_SUGGESTIONS.map(category => <option key={category} value={category} />)}</datalist>
         <details className="rounded-xl border border-white/15 p-3">
           <summary className="cursor-pointer text-sm font-medium text-amber-200">Apply quote details to selected lines</summary>
-          <p className="mt-3 text-xs text-white/60">Select the lines below that this quote covers. Other lines keep their own sources and estimate basis.</p>
+          <p className="mt-3 text-xs text-white/60">Select the lines below that this quote covers. Quantities and prices carry over unchanged. Enter the contractor's quoted quantities and prices first; applying a name and date does not supply a price. Other lines keep their own sources and estimate basis.</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <label className="text-xs text-white/60">Contractor / source<input aria-label="Bulk quote contractor" className={field} value={contractor} maxLength={500} onChange={e => { setContractor(e.target.value); resetConsent(); }} /></label>
             <label className="text-xs text-white/60">Quote date<input aria-label="Bulk quote date" type="date" className={field} value={quoteDate} onChange={e => { setQuoteDate(e.target.value); resetConsent(); }} /></label>
           </div>
           <p className="mt-3 text-xs text-white/70">{selected.length} line{selected.length === 1 ? "" : "s"} selected.</p>
-          {selected.some(item => item.basis === "allowance") && <label className="mt-3 flex items-start gap-2 text-xs text-white/80"><input type="checkbox" aria-label="Confirm allowance conversion" checked={convertAllowances} onChange={e => setConvertAllowances(e.target.checked)} />These selected allowances are now supported by this contractor quote. Replace their planning sources.</label>}
+          {selected.some(item => item.basis === "allowance") && <label className="mt-3 flex items-start gap-2 text-xs text-white/80"><input type="checkbox" aria-label="Confirm allowance conversion" checked={convertAllowances} onChange={e => setConvertAllowances(e.target.checked)} />I checked the contractor quote: each selected allowance's current quantity, unit price and total match it. Keep these amounts unchanged and replace their planning sources.</label>}
           {selected.some(item => item.basis === "quote" && ((item.source.trim() && item.source.trim() !== contractor.trim()) || (item.quote_date && item.quote_date !== quoteDate))) && <label className="mt-3 flex items-start gap-2 text-xs text-white/80"><input type="checkbox" aria-label="Confirm quote details replacement" checked={replaceQuoteDetails} onChange={e => setReplaceQuoteDetails(e.target.checked)} />Replace existing contractor / date on these selected quoted lines.</label>}
           <button type="button" disabled={!selected.length} onClick={applyQuoteDetails} className="mt-3 rounded-lg border border-amber-400/40 px-3 py-2 text-sm text-amber-200 disabled:opacity-40">Apply quote details</button>
           {stampMessage && <p role="status" className="mt-2 text-xs text-amber-100">{stampMessage}</p>}

@@ -19,7 +19,7 @@ export function stampQuote(scope: RehabScope, source: string, date: string, ids:
   }
   const selected = scope.items.filter(item => ids.includes(item.id));
   if (selected.some(item => item.basis === "allowance") && !options.convertAllowances) {
-    throw new Error("Confirm that the selected planning allowances are now supported by this contractor quote.");
+    throw new Error("Confirm that the selected planning allowances match the contractor's quoted quantities and prices. Amounts carry over unchanged; edit them first if they differ from the quote.");
   }
   if (selected.some(item => item.basis === "quote" && (
     (item.source.trim() && item.source.trim() !== contractor) || (item.quote_date && item.quote_date !== date)

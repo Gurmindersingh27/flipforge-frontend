@@ -186,9 +186,14 @@ try {
   await scoped("Category 2", "Roof"); await scoped("Unit cost 2", "12000");
   await scoped("Source 2", "Owner roof allowance"); await scoped("Notes 2", "Retained roof allowance.");
   await scoped("Scope contingency", "10");
+  await fill(labelInput("Holding Months"), "7");
   const baseline = await saveRevision("Itemized bid baseline fixture");
   assert.equal(baseline.draft_input.rehab_budget.value, 35200);
-  assert.equal(baseline.draft_input.holding_months, 6);
+  assert.equal(baseline.draft_input.holding_months, 7);
+  await click("a", "View saved version →"); await click("button", "Compare bids");
+  await until(`Boolean(${byText("a", `baseline #${baseline.id}`)})`);
+  assert.equal(await evaluate(`(${byText("a", `baseline #${baseline.id}`)}).getAttribute('href')`), `/deal/${baseline.id}`);
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Bid comparison"]').textContent.includes('Resume baseline #${baseline.id}')`));
 
   await resumeSaved(baseline.id);
   await scoped("Unit cost 1", "14000");
@@ -200,6 +205,12 @@ try {
   await click("button", "Apply quote details");
   await until(`document.body.textContent.includes('Confirm that the selected planning allowances')`);
   assert.equal(await evaluate(`(${scopeInput("Basis 1")}).value`), "allowance");
+  await toggle("Confirm allowance conversion");
+  await scoped("Unit cost 1", "14001");
+  assert.equal(await evaluate(`(${inputByAria("Confirm allowance conversion")}).checked`), false);
+  await click("button", "Apply quote details");
+  assert.equal(await evaluate(`(${scopeInput("Basis 1")}).value`), "allowance");
+  await scoped("Unit cost 1", "14000");
   await toggle("Confirm allowance conversion"); await click("button", "Apply quote details");
   await until(`(${scopeInput("Basis 1")}).value === 'quote'`);
   assert.equal(await evaluate(`(${scopeInput("Source 2")}).value`), "Owner roof allowance");
@@ -209,7 +220,7 @@ try {
   assert.equal(bidA.draft_input.rehab_budget.value, 35750);
   assert.equal(bidA.rehab_scope.items[0].source, "Builder A fixture");
   assert.equal(bidA.rehab_scope.items[2].basis, "allowance");
-  checks.push("Bulk quote stamping requires allowance consent and preserves unselected roof and demo allowances");
+  checks.push("Bulk quote stamping requires price consent, invalidates it after a price edit and preserves unselected roof and demo allowances");
 
   await resumeSaved(baseline.id);
   await scoped("Unit cost 1", "18000"); await scoped("Notes 1", "Disposal included. Finish materials excluded.");
@@ -222,6 +233,13 @@ try {
   assert.equal(bidB.draft_input.rehab_budget.value, 34430);
   assert.ok(bidB.analysis_result.net_profit > bidA.analysis_result.net_profit);
   await click("a", "View saved version →"); await click("button", "Compare bids");
+  await until(`Boolean(${byText("a", `baseline #${baseline.id}`)})`);
+  await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${baseline.id}` });
+  await click("button", "Compare bids");
+  await until(`Boolean(${inputByAria("Bid A saved version")})`);
+  assert.equal(await evaluate(`(${byText("a", `baseline #${baseline.id}`)}).getAttribute('href')`), `/deal/${baseline.id}`);
+  const discovered = await evaluate(`Array.from((${inputByAria("Bid A saved version")}).options).map(option=>Number(option.value))`);
+  assert.deepEqual(discovered.sort((a,b)=>a-b), [bidA.id,bidB.id].sort((a,b)=>a-b));
   await fill(inputByAria("Bid A saved version"), String(bidA.id));
   await fill(inputByAria("Bid B saved version"), String(bidB.id));
   await until(`Boolean(document.querySelector('[aria-label="Bid A impact"]'))`);
@@ -238,6 +256,44 @@ try {
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await screenshot("bid-impact-desktop.png");
   checks.push("Two saved sibling bids compare exact quote evidence, allowances, retained costs, totals and canonical deal impact at 390px and desktop");
+  checks.push("A revised baseline discovers both quoted children with its updated 7-month assumptions, not its 6-month parent");
+
+  await resumeSaved(baseline.id);
+  await enterQuoteDetails("Builder same-price fixture", "2026-09-11");
+  await toggle("Confirm allowance conversion"); await click("button", "Apply quote details");
+  const samePrice = await saveRevision("Quote matches original allowance fixture");
+  assert.equal(samePrice.rehab_scope.items[0].unit_cost, 20000);
+  assert.equal(samePrice.parent_deal_id, baseline.id);
+  await click("a", "View saved version →"); await click("button", "Compare bids");
+  await fill(inputByAria("Bid A saved version"), String(bidA.id));
+  await fill(inputByAria("Bid B saved version"), String(samePrice.id));
+  const confirmSamePrice = `Confirm Bid B amount for ${samePrice.rehab_scope.items[0].id}`;
+  await until(`Boolean(${inputByAria(confirmSamePrice)})`);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Bid B impact"]'))`), false);
+  assert.equal(await evaluate(`Boolean(${byText("a", "Continue with Bid B")})`), false);
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  await screenshot("bid-carried-allowance-review.png");
+  await toggle(confirmSamePrice);
+  await until(`Boolean(document.querySelector('[aria-label="Bid B impact"]'))`);
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Bid B impact"]').textContent.includes('$20,000.00')`));
+  await toggle(confirmSamePrice);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Bid B impact"]'))`), false);
+  await toggle(confirmSamePrice);
+  await fill(inputByAria("Bid B saved version"), String(bidB.id));
+  await fill(inputByAria("Bid B saved version"), String(samePrice.id));
+  assert.equal(await evaluate(`(${inputByAria(confirmSamePrice)}).checked`), false);
+  await toggle(confirmSamePrice); await click("button", "Refresh saved bids");
+  await fill(inputByAria("Bid A saved version"), String(bidA.id));
+  await fill(inputByAria("Bid B saved version"), String(samePrice.id));
+  assert.equal(await evaluate(`(${inputByAria(confirmSamePrice)}).checked`), false);
+  await toggle(confirmSamePrice); await cdp("Page.reload"); await click("button", "Compare bids");
+  await fill(inputByAria("Bid A saved version"), String(bidA.id));
+  await fill(inputByAria("Bid B saved version"), String(samePrice.id));
+  assert.equal(await evaluate(`(${inputByAria(confirmSamePrice)}).checked`), false);
+  assert.deepEqual(await api(`/api/deals/${samePrice.id}`), samePrice);
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  checks.push("A relabeled allowance blocks bid impact until the exact unchanged price is confirmed; unchecking, changing bids, refresh and reload reset confirmation without saved writes");
 
   await resumeSaved(baseline.id);
   await scoped("Unit cost 1", "18000");
@@ -248,7 +304,7 @@ try {
   await click("a", "View saved version →"); await click("button", "Compare bids");
   await fill(inputByAria("Bid A saved version"), String(bidA.id));
   await fill(inputByAria("Bid B saved version"), String(mismatch.id));
-  await until(`document.querySelector('[aria-label="Bid comparison"] [role="alert"]')?.textContent.includes('Holding months: baseline 6 · Bid A 6 · Bid B 8')`);
+  await until(`document.querySelector('[aria-label="Bid comparison"] [role="alert"]')?.textContent.includes('Holding months: baseline 7 · Bid A 7 · Bid B 8')`);
   assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Bid A impact"]'))`), false);
   assert.equal(await evaluate(`Boolean(${byText("a", "Continue with Bid B")})`), false);
   await screenshot("bid-assumption-mismatch.png");
@@ -268,13 +324,18 @@ try {
   assert.equal(selected.rehab_scope.items[0].quote_date, "2026-09-12");
   assert.equal(selected.analysis_result.net_profit, bidB.analysis_result.net_profit);
   assert.equal(selected.analysis_result.max_safe_offer, bidB.analysis_result.max_safe_offer);
-  for (const record of [first, baseline, bidA, bidB]) assert.deepEqual(await api(`/api/deals/${record.id}`), record);
+  for (const record of [first, baseline, bidA, bidB, samePrice]) assert.deepEqual(await api(`/api/deals/${record.id}`), record);
   await click("a", "View saved version →"); await cdp("Page.reload");
   await until(`(${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
   checks.push("Continuing Bid B creates its child; confirmed provenance changes reopen correctly and all prior records stay unchanged");
+  await click("button", "Compare bids");
+  await click("button", `Start new bids from this version #${selected.id}`);
+  await until(`Boolean(${byText("a", `baseline #${selected.id}`)})`);
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Bid comparison"]').textContent.includes('Resume baseline #${selected.id}')`));
+  checks.push("A quoted revision can explicitly start a new baseline before it has any quoted children");
   assert.deepEqual(errors, []);
   checks.push("No browser runtime exceptions");
-  writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, mismatch, selected } }, null, 2));
+  writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));
   console.log(JSON.stringify({ result: "PASS", checks }));
 } catch (error) {
   console.error(error);

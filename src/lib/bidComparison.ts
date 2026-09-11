@@ -35,11 +35,33 @@ function assumptions(deal: SavedDeal): { label: string; value: number | string |
   ];
 }
 
-export function bidCandidates(context: SavedDeal, deals: SavedDeal[]): SavedDeal[] {
-  const baselineId = context.parent_deal_id ?? context.id;
-  return [...new Map(deals.filter(deal => deal.id !== baselineId && deal.user_id === context.user_id
-    && deal.parent_deal_id === baselineId && deal.rehab_scope?.items.some(item => item.basis === "quote"))
+export function bidCandidates(baseline: SavedDeal, deals: SavedDeal[]): SavedDeal[] {
+  return [...new Map(deals.filter(deal => deal.id !== baseline.id && deal.user_id === baseline.user_id
+    && deal.parent_deal_id === baseline.id && deal.rehab_scope?.items.some(item => item.basis === "quote"))
     .map(deal => [deal.id, deal])).values()].sort((a, b) => b.id - a.id);
+}
+
+export function resolveBidBaseline(context: SavedDeal, deals: SavedDeal[], previous: SavedDeal | null = null): SavedDeal | null {
+  // Any saved revision can become a baseline. Its quoted children take precedence over its own parent.
+  if (bidCandidates(context, deals).length || !context.parent_deal_id
+    || !context.rehab_scope?.items.some(item => item.basis === "quote")) return context;
+  return [...deals, ...(previous ? [previous] : [])].find(deal => deal.id === context.parent_deal_id
+    && deal.user_id === context.user_id) ?? null;
+}
+
+function carriedAllowance(item: RehabScopeItem, baseline: SavedDeal) {
+  const prior = baseline.rehab_scope?.items.find(previous => previous.id === item.id);
+  return item.basis === "quote" && prior?.basis === "allowance" && lineTotal(item) === lineTotal(prior) ? prior : null;
+}
+
+function amountChecks(deal: SavedDeal, baseline: SavedDeal, label: string, confirmed: string[]) {
+  return (deal.rehab_scope?.items ?? []).flatMap(item => {
+    const prior = carriedAllowance(item, baseline);
+    if (!prior) return [];
+    // The acknowledgement applies only to this exact saved line and baseline, never a later edit.
+    const key = JSON.stringify([baseline.id, baseline.user_id, deal.id, deal.user_id, prior, item]);
+    return [{ key, label, dealId: deal.id, item, amount: lineTotal(item), confirmed: confirmed.includes(key) }];
+  });
 }
 
 function unchanged(item: RehabScopeItem, baseline: SavedDeal): boolean {
@@ -66,8 +88,9 @@ function summary(deal: SavedDeal, baseline: SavedDeal) {
   };
 }
 
-export function compareBidOptions(baseline: SavedDeal, left: SavedDeal, right: SavedDeal) {
+export function compareBidOptions(baseline: SavedDeal, left: SavedDeal, right: SavedDeal, confirmedAmounts: string[] = []) {
   const issues: string[] = [];
+  const checks = [...amountChecks(left, baseline, "Bid A", confirmedAmounts), ...amountChecks(right, baseline, "Bid B", confirmedAmounts)];
   if (left.id === right.id) issues.push("Choose two different saved bids.");
   if ([left, right].some(deal => deal.id === baseline.id || deal.parent_deal_id !== baseline.id)) {
     issues.push("Both bids must be saved directly from this same baseline.");
@@ -83,7 +106,8 @@ export function compareBidOptions(baseline: SavedDeal, left: SavedDeal, right: S
       else {
         const error = scopeError(deal.rehab_scope, finite(budget) ? budget : undefined);
         if (error) issues.push(`${label}: ${error}`);
-        if (label !== "Baseline" && !deal.rehab_scope.items.some(item => item.basis === "quote" && !unchanged(item, baseline))) {
+        if (label !== "Baseline" && !deal.rehab_scope.items.some(item => item.basis === "quote" && !unchanged(item, baseline)
+          && !checks.some(check => check.dealId === deal.id && check.item.id === item.id && !check.confirmed))) {
           issues.push(`${label}: record the new or changed contractor quote lines.`);
         }
       }
@@ -101,8 +125,11 @@ export function compareBidOptions(baseline: SavedDeal, left: SavedDeal, right: S
     return entry.value === undefined || a === undefined || b === undefined || a !== entry.value || b !== entry.value
       ? [{ label: entry.label, baseline: entry.value, left: a, right: b }] : [];
   });
-  if (differences.length) issues.push("Bid impact requires the same recorded property and non-rehab assumptions as the baseline. Resolve the differences below in a new version.");
-  if (issues.length) return { issues, differences, comparison: null };
+  if (differences.some(diff => diff.baseline === undefined)) {
+    issues.push("The baseline lacks recorded assumptions. Resume it, confirm the missing inputs, analyze and save a new baseline. Then create both bids from that new baseline; the historical record stays unchanged.");
+  } else if (differences.length) issues.push("Bid impact requires the same recorded property and non-rehab assumptions as the baseline. Resolve the differences below in a new version.");
+  if (checks.some(check => !check.confirmed)) issues.push("Some quoted lines carry the same amount as a baseline planning allowance. Confirm each amount against its contractor quote below before comparing.");
+  if (issues.length) return { issues, differences, amountChecks: checks, comparison: null };
 
   const key = (item: RehabScopeItem) => text(item.category).toLowerCase();
   const all = [...left.rehab_scope!.items, ...right.rehab_scope!.items];
@@ -115,5 +142,5 @@ export function compareBidOptions(baseline: SavedDeal, left: SavedDeal, right: S
       right: { items: b, total: b.length ? amount(b) : null },
     };
   });
-  return { issues, differences, comparison: { left: summary(left, baseline), right: summary(right, baseline), categories } };
+  return { issues, differences, amountChecks: checks, comparison: { left: summary(left, baseline), right: summary(right, baseline), categories } };
 }

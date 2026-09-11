@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SavedDeal, RehabScope } from "../src/lib/types.ts";
 import { createManualAnalysisSnapshot } from "../src/lib/analysisSnapshot.ts";
-import { newScope, scopeTotals } from "../src/lib/rehabScope.ts";
-import { bidCandidates, compareBidOptions } from "../src/lib/bidComparison.ts";
+import { newScope, scopeTotals, stampQuote } from "../src/lib/rehabScope.ts";
+import { bidCandidates, compareBidOptions, resolveBidBaseline } from "../src/lib/bidComparison.ts";
 
 function fixture() {
   const scope = newScope(20000);
@@ -111,6 +111,7 @@ test('unknown historical assumptions are not silently replaced with defaults', (
   delete baseline.draft_input!.holding_months;
   assert.equal(compareBidOptions(baseline, a, b).comparison, null);
   assert.equal(compareBidOptions(baseline, a, b).differences[0].baseline, undefined);
+  assert.match(compareBidOptions(baseline, a, b).issues.join(' '), /save a new baseline.*both bids from that new baseline/);
 });
 test('non-positive rent follows the existing omitted-rent convention', () => {
   const { baseline, a, b } = fixture();
@@ -152,5 +153,103 @@ test('candidate discovery includes only this owner’s quoted siblings and dedup
   const unquoted = { ...baseline, id: 6, parent_deal_id: baseline.id };
   const all = [baseline, a, b, otherOwner, grandchild, unquoted, b];
   assert.deepEqual(bidCandidates(baseline, all).map(deal => deal.id), [3, 2]);
-  assert.deepEqual(bidCandidates(a, all).map(deal => deal.id), [3, 2]);
+  assert.deepEqual(bidCandidates(a, all).map(deal => deal.id), [5]);
+});
+
+test('a revised baseline discovers its quoted children instead of the grandparent’s versions', () => {
+  const { baseline, a, b } = fixture();
+  const grandparent = { ...structuredClone(baseline), id: 10 };
+  baseline.id = 20; baseline.parent_deal_id = 10;
+  baseline.draft_input!.holding_months = 8;
+  a.id = 21; b.id = 22; a.parent_deal_id = 20; b.parent_deal_id = 20;
+  a.draft_input!.holding_months = 8; b.draft_input!.holding_months = 8;
+  const records = [grandparent, baseline, a, b], before = structuredClone(records);
+  for (const page of [baseline, a, b]) {
+    const resolved = resolveBidBaseline(page, records, grandparent)!;
+    assert.equal(resolved.id, 20);
+    assert.deepEqual(bidCandidates(resolved, records).map(deal => deal.id), [22, 21]);
+    assert.deepEqual(compareBidOptions(resolved, a, b).issues, []);
+  }
+  assert.equal(compareBidOptions(grandparent, a, b).comparison, null);
+  assert.deepEqual(records, before);
+});
+test('a new unquoted revised baseline remains the starting point before any bids exist', () => {
+  const { baseline } = fixture();
+  const parent = { ...baseline, id: 10 };
+  baseline.parent_deal_id = 10;
+  assert.equal(resolveBidBaseline(baseline, [parent], parent), baseline);
+  assert.deepEqual(bidCandidates(baseline, [parent]), []);
+});
+test('quoted children take precedence even when their baseline is itself a quote', () => {
+  const { baseline, a, b } = fixture();
+  const child = { ...b, id: 4, parent_deal_id: a.id };
+  assert.equal(resolveBidBaseline(a, [baseline, a, b, child], baseline), a);
+  assert.deepEqual(bidCandidates(a, [baseline, a, b, child]), [child]);
+});
+test('baseline resolution rejects foreign parents and children and never guesses a missing parent', () => {
+  const { baseline, a, b } = fixture();
+  const foreignParent = { ...baseline, user_id: 'other-owner' };
+  const foreignChild = { ...b, id: 4, parent_deal_id: a.id, user_id: 'other-owner' };
+  assert.equal(resolveBidBaseline(a, [a, b, foreignParent, foreignChild], foreignParent), null);
+  assert.equal(resolveBidBaseline(a, [a, b], baseline), baseline);
+});
+
+function samePriceFixture() {
+  const records = fixture();
+  for (const bid of [records.a, records.b]) {
+    bid.rehab_scope = stampQuote(structuredClone(records.baseline.rehab_scope!), `Builder ${bid.id}`, '2026-09-11', ['kitchen'], { convertAllowances: true });
+    (bid.draft_input!.rehab_budget as { value: number }).value = scopeTotals(bid.rehab_scope).total;
+  }
+  return records;
+}
+test('only relabeled allowances do not qualify as quoted prices without exact amount confirmation', () => {
+  const { baseline, a, b } = samePriceFixture();
+  const result = compareBidOptions(baseline, a, b);
+  assert.equal(result.comparison, null);
+  assert.equal(result.amountChecks.length, 2);
+  assert.ok(result.amountChecks.every(check => !check.confirmed && check.amount === 20000));
+  assert.match(result.issues.join(' '), /Bid A: record the new or changed contractor quote lines/);
+  assert.match(result.issues.join(' '), /Bid B: record the new or changed contractor quote lines/);
+});
+test('legitimate quotes equal to allowances can be explicitly confirmed without changing any price or record', () => {
+  const records = samePriceFixture(), before = structuredClone(records);
+  const { baseline, a, b } = records;
+  const keys = compareBidOptions(baseline, a, b).amountChecks.map(check => check.key);
+  assert.equal(compareBidOptions(baseline, a, b, [keys[0]]).comparison, null);
+  const reviewed = compareBidOptions(baseline, a, b, keys);
+  assert.deepEqual(reviewed.issues, []);
+  assert.equal(reviewed.comparison!.left.quoted, 20000);
+  assert.equal(reviewed.comparison!.left.total, 35200);
+  assert.deepEqual(records, before);
+  assert.equal(compareBidOptions(baseline, a, b).comparison, null, 'confirmation is not persisted');
+});
+test('one genuinely changed price does not hide another line carrying an unconfirmed allowance', () => {
+  const { baseline, a, b } = fixture();
+  a.rehab_scope!.items[1] = { ...a.rehab_scope!.items[1], basis: 'quote', source: 'Roofer', quote_date: '2026-09-11' };
+  const result = compareBidOptions(baseline, a, b);
+  assert.equal(result.comparison, null);
+  assert.equal(result.amountChecks[0].item.id, 'roof');
+  assert.doesNotMatch(result.issues.join(' '), /Bid A: record the new or changed/);
+});
+test('confirmation is invalidated by changed saved line evidence, baseline evidence or bid identity', () => {
+  const original = samePriceFixture();
+  const keys = compareBidOptions(original.baseline, original.a, original.b).amountChecks.map(check => check.key);
+  for (const field of ['source', 'quote_date', 'notes', 'description'] as const) {
+    const { baseline, a, b } = structuredClone(original);
+    a.rehab_scope!.items[0][field] = field === 'quote_date' ? '2026-09-12' : 'Changed';
+    assert.equal(compareBidOptions(baseline, a, b, keys).comparison, null, field);
+  }
+  const { baseline, a, b } = structuredClone(original);
+  baseline.rehab_scope!.items[0].notes = 'Changed baseline evidence';
+  assert.equal(compareBidOptions(baseline, a, b, keys).comparison, null);
+  a.id = 99;
+  assert.equal(compareBidOptions(original.baseline, a, b, keys).comparison, null);
+});
+test('same line total still needs review after changing quantity and unit price', () => {
+  const { baseline, a, b } = samePriceFixture();
+  a.rehab_scope!.items[0].quantity = 2;
+  a.rehab_scope!.items[0].unit_cost = 10000;
+  const result = compareBidOptions(baseline, a, b);
+  assert.equal(result.comparison, null);
+  assert.equal(result.amountChecks[0].amount, 20000);
 });

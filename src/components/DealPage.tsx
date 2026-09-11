@@ -93,7 +93,7 @@ function DealView({ deal, previous, comparisonError }: { deal: SavedDeal; previo
       {deal.parent_deal_id && <Link to={`/deal/${deal.parent_deal_id}`} className="text-sm text-amber-200 underline">Open previous version #{deal.parent_deal_id}</Link>}
       {comparisonError && <p role="alert" className="text-sm text-rose-300">{comparisonError}</p>}
       {previous && <RevisionComparison previous={previous} current={deal} />}
-      <BidComparison key={deal.id} context={deal} baseline={deal.parent_deal_id ? previous : deal} />
+      <BidComparison key={deal.id} context={deal} previous={previous} />
       <p className="text-xs text-white/60">Screening estimate. Holding costs model loan interest; separate taxes, insurance, utilities, financing points and draw timing are not modeled.</p>
       {/* Results — rendered from saved analysis_result, no re-run */}
       <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">

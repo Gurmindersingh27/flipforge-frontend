@@ -4,7 +4,9 @@
 ---
 
 ## Last Updated
-2026-09-08
+2026-09-11
+
+Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Main remains `0e56e784efbc41cc840c6bd1e1e18a6212eca92b`; PRs #62 and #63 are drafts, unmerged and not deployed to production.
 
 ---
 
@@ -1105,3 +1107,14 @@ Frontend PR #62 contains the public checker, closeout record and this improvemen
 - Local validation: 58 frontend tests passed (37 prior + 6 stamping + 15 comparison). Production build passed with the existing CSS import warning. The browser flow now covers both quote options, explicit stamping consent, different-hold rejection, mobile comparison, selected-bid continuation and immutable earlier records. Its CI result must be checked at the published PR head before merge; no local Chrome executable is available here.
 - No backend, shared types/API, frozen AnalyzeRequest, engine, authentication, snapshot capture, dependency or provider changes. Backend #19 remains a separate synthetic manual-review experiment.
 - This is saved-budget comparison, not full Quote Review + Missing Scope persistence, document parsing or a scope-completeness guarantee. Unknown work is not priced by this view; full explicit coverage-resolution records remain future scope. No pilot enrollment, payment or customer validation is established. Signed-in production QA and live storage/backups/provider limits remain separate checks.
+
+## Bid Impact review corrections — 2026-09-11
+
+- Claude reviewed #62 at `35e5014` with no reported merge blockers and #63 at `8c3d49f` with two reproduced defects. On that original #63 head, GitHub confirms browser and test/build CI run `34561981765` succeeded. Reviewer access limits did not mean the run was absent. The passing original test did not exercise the baseline page or an unchanged allowance price; those gaps are now covered.
+- D1: candidate discovery now uses an explicit baseline. The current version's quoted children take precedence, including when that baseline is itself a revision. Unquoted revisions with no bids retain their own baseline. A quoted version can explicitly start new bids from itself before any children exist. Parent and child resolution remains owner-scoped; a missing parent is not guessed. No baseline link is asserted before saved records load.
+- D2: bulk conversion explicitly says quantities and prices carry over and must match the contractor quote. Item edits invalidate consent. A quote retaining a baseline allowance's line total is flagged and cannot qualify as a new quote line or unlock comparison until the user explicitly confirms that exact amount against its source/date. All such lines must be confirmed even when another quote price changed. A legitimate equal-price quote is allowed after confirmation; changing a price is not proof of provenance.
+- Amount confirmations are temporary, bound to exact saved line/baseline identity and evidence. Unchecking, changing selections, refresh or reload resets them. They do not write saved data, authenticate documents or create durable quote-review records.
+- Missing baseline assumptions now instruct the user to confirm inputs, save a new baseline and create both bids from that baseline; historical omissions cannot be repaired by editing an unrelated sibling.
+- Exact fix files: `src/lib/bidComparison.ts`, `src/components/BidComparison.tsx`, `src/components/DealPage.tsx`, `src/lib/rehabScope.ts`, `src/components/RehabScopeEditor.tsx`, `tests/bidComparison.test.ts`, `tests/browserFlow.mjs`, `PROJECT_STATE.md`. No runtime/backend/shared-contract/authentication/dependency changes.
+- Local unit validation: 67 tests passed (58 prior + 9 focused cases). Production build passed; lint remains at ten pre-existing errors in unchanged files, and the existing CSS import warning remains. Browser cases now include a revised baseline with seven holding months versus its parent's six, candidate discovery from both baseline and bid pages, equal-price review/reset behavior, explicit new-baseline selection and unchanged prior records. Fresh CI at the published correction head is required before merge; the successful original run does not validate these edits.
+- #63 remains stacked on #62. The existing extra CI base-branch trigger is needed while stacked; remove it when retargeting to main, then verify the resulting PR base and checks. No merge or production deployment was performed. Full Quote Review and customer validation remain outstanding.
