@@ -42,6 +42,7 @@ export default function SampleDealDemo() {
           <dl className="mt-5">
             <dt className="text-sm text-slate-300">Max safe offer · modeled</dt>
             <dd data-sample-metric="max_safe_offer" className="mt-1 text-4xl font-bold tracking-tight text-amber-300 sm:text-5xl">{dollars.format(scenario.result.max_safe_offer)}</dd>
+            <dd className="mt-2 text-sm text-slate-300">Targets a {scenario.input.required_profit_margin_pct * 100}% return on modeled total cost.</dd>
             <dd className="mt-2 text-sm text-slate-300">{offerDrop > 0 ? `${dollars.format(offerDrop)} lower than the original estimate` : "Based on the original estimate"}</dd>
             <dt className="mt-6 border-t border-white/10 pt-5 text-sm text-slate-300">Estimated profit at the {dollars.format(scenario.input.purchase_price)} purchase price</dt>
             <dd data-sample-metric="net_profit" className="mt-1 text-2xl font-semibold text-white">{dollars.format(scenario.result.net_profit)}</dd>
