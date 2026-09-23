@@ -139,8 +139,10 @@ try {
   await screenshot("sample-mobile.png");
   await cdp("Page.reload");
   await until(`${metric("max_safe_offer")} === '$155,600'`);
+  await cdp("Page.bringToFront");
   await evaluate(`(${inputByAria(SAMPLE_SCENARIOS[1].label)}).focus()`);
-  await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+  assert.ok(await evaluate(`document.activeElement === (${inputByAria(SAMPLE_SCENARIOS[1].label)})`));
+  await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" });
   await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
   await until(`${metric("max_safe_offer")} === '$139,000'`);
   checks.push("Sample fits mobile, resets on reload and supports keyboard selection");
