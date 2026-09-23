@@ -5,6 +5,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import assert from "node:assert/strict";
+import { SAMPLE_SCENARIOS } from "../src/lib/sampleDeal.ts";
 
 const root = process.cwd();
 const backend = resolve(process.env.BACKEND_DIR ?? "../flipforge-backend");
@@ -12,6 +13,7 @@ const temp = mkdtempSync(join(tmpdir(), "flipforge-browser-"));
 const artifacts = resolve("browser-artifacts");
 mkdirSync(artifacts, { recursive: true });
 const children = [], errors = [], checks = [];
+const browserApiRequests = [];
 let socket, sequence = 0, sessionId;
 const pending = new Map();
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -89,7 +91,8 @@ async function screenshot(name) {
 
 try {
   writeFileSync(join(temp, "fixture.py"), `import os\nos.environ['DATABASE_URL'] = ${JSON.stringify(`sqlite:///${temp}/fixture.db`)}\nos.environ['CLERK_JWKS_URL'] = ''\nfrom app.main import app\nfrom app.auth import get_current_user_id\napp.dependency_overrides[get_current_user_id] = lambda: 'browser-fixture'\n`);
-  writeFileSync(join(temp, "clerk.ts"), `const auth={getToken:async()=>"browser-fixture",isSignedIn:true,isLoaded:true};export const useAuth=()=>auth;export const SignedIn=({children})=>children;export const SignedOut=()=>null;export const ClerkProvider=({children})=>children;export const UserButton=()=>null;export const SignInButton=({children})=>children;export const SignUpButton=({children})=>children;`);
+  // Signed-out selection exists only in this temporary fixture, never in production.
+  writeFileSync(join(temp, "clerk.ts"), `const signedIn=!new URLSearchParams(location.search).has('fixtureSignedOut');const auth={getToken:async()=>"browser-fixture",isSignedIn:signedIn,isLoaded:true};export const useAuth=()=>auth;export const SignedIn=({children})=>signedIn?children:null;export const SignedOut=({children})=>signedIn?null:children;export const ClerkProvider=({children})=>children;export const UserButton=()=>null;export const SignInButton=({children})=>children;export const SignUpButton=({children})=>children;`);
   writeFileSync(join(temp, "vite.mjs"), `import base from ${JSON.stringify(join(root, "vite.config.ts"))};export default {...base,root:${JSON.stringify(root)},resolve:{alias:{'@clerk/clerk-react':${JSON.stringify(join(temp, "clerk.ts"))}}},server:{host:'127.0.0.1',port:5173,strictPort:true,fs:{allow:[${JSON.stringify(root)},${JSON.stringify(temp)}]}}};`);
   start(process.env.PYTHON ?? "python", ["-m", "uvicorn", "fixture:app", "--host", "127.0.0.1", "--port", "8000"], { PYTHONPATH: `${backend}:${temp}` });
   start(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "--config", join(temp, "vite.mjs"), "--configLoader", "native"], { VITE_API_BASE_URL: "http://127.0.0.1:8000" });
@@ -102,13 +105,54 @@ try {
     const msg = JSON.parse(event.data);
     if (msg.id) { const waiter = pending.get(msg.id); if (!waiter) return; pending.delete(msg.id); msg.error ? waiter.reject(new Error(JSON.stringify(msg.error))) : waiter.resolve(msg.result); }
     if (msg.method === "Runtime.exceptionThrown") errors.push(JSON.stringify(msg.params.exceptionDetails));
+    if (msg.method === "Network.requestWillBeSent" && new URL(msg.params.request.url).origin === "http://127.0.0.1:8000") browserApiRequests.push(msg.params.request.url);
   };
   const { targetId } = await cdp("Target.createTarget", { url: "about:blank" }, false);
   ({ sessionId } = await cdp("Target.attachToTarget", { targetId, flatten: true }, false));
-  await cdp("Page.enable"); await cdp("Runtime.enable");
+  await cdp("Page.enable"); await cdp("Runtime.enable"); await cdp("Network.enable");
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  const beforeSample = await api("/api/deals");
+  await cdp("Page.navigate", { url: "http://127.0.0.1:5173/?fixtureSignedOut=1" });
+  await until(`Boolean(document.querySelector('section[aria-label="Sample deal"]'))`);
+  const money = value => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+  const metric = key => `document.querySelector('[data-sample-metric="${key}"]')?.textContent`;
+  for (const scenario of SAMPLE_SCENARIOS) {
+    const response = await fetch("http://127.0.0.1:8000/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(scenario.input) });
+    assert.equal(response.status, 200);
+    const canonical = await response.json();
+    for (const [key, expected] of Object.entries(scenario.result)) assert.equal(canonical[key], expected, `${scenario.id}: preset differs from engine`);
+    await toggle(scenario.label);
+    await until(`${metric("max_safe_offer")} === ${JSON.stringify(money(canonical.max_safe_offer))}`);
+    assert.equal(await evaluate(metric("net_profit")), money(canonical.net_profit));
+    assert.equal(await evaluate(`(${inputByAria(scenario.label)}).getAttribute('aria-pressed')`), "true");
+    if (scenario.id !== "estimate") assert.ok(await evaluate(`document.querySelector('#sample-deal-results').textContent.includes(${JSON.stringify(`${money(scenario.input.purchase_price - canonical.max_safe_offer)} above the modeled offer ceiling`)})`));
+  }
+  checks.push("All three signed-out presets match the real API and show their offer/profit impact");
+  assert.equal(await evaluate(`Boolean(${byText("button", "Generate Investor Memo")})`), false);
+  await click("summary", "Sample assumptions and limits");
+  assert.ok(await evaluate(`document.querySelector('section[aria-label="Sample deal"] details').open`));
+  assert.ok(await evaluate(`document.querySelector('section[aria-label="Sample deal"]').textContent.includes('Fictional deal')`));
+  assert.ok(await evaluate(`document.querySelector('section[aria-label="Sample deal"]').textContent.includes('Taxes, insurance, utilities, lender fees and draw timing are not separately modeled.')`));
+  await screenshot("sample-desktop.png");
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  await screenshot("sample-mobile.png");
+  await cdp("Page.reload");
+  await until(`${metric("max_safe_offer")} === '$155,600'`);
+  await cdp("Page.bringToFront");
+  await evaluate(`(${inputByAria(SAMPLE_SCENARIOS[1].label)}).focus()`);
+  assert.ok(await evaluate(`document.activeElement === (${inputByAria(SAMPLE_SCENARIOS[1].label)})`));
+  await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" });
+  await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+  await until(`${metric("max_safe_offer")} === '$139,000'`);
+  checks.push("Sample fits mobile, resets on reload and supports keyboard selection");
+  assert.deepEqual(browserApiRequests, [], "Public sample must not call the backend");
+  assert.deepEqual(await api("/api/deals"), beforeSample);
+  checks.push("Signed-out sample makes no browser API requests or saved-record changes");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/" });
   await click("button", "Analyze without address lookup ↓");
+  assert.equal(await evaluate(`Boolean(document.querySelector('section[aria-label="Sample deal"]'))`), false);
   for (const [label, value] of [["Purchase Price", "150000"], ["ARV", "270000"], ["Rehab Budget", "50000"], ["Est. Monthly Rent (optional)", ""]]) await fill(labelInput(label), value);
   await click("button", "Start itemized budget");
   await click("button", "Generate Investor Memo");

@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, basename } from 'node:path';
+import { SAMPLE_SCENARIOS } from '../src/lib/sampleDeal.ts';
 
 const frontend = 'https://flipforge-frontend.vercel.app';
 const backend = 'https://flipforge-backend.onrender.com';
@@ -102,6 +103,22 @@ try {
     assert.equal(result.net_profit, profit, `${name}: profit`);
     assert.equal(result.confidence_score, confidence, `${name}: confidence`);
     check(`Live locked scenario ${name}`, { input, result: { verdict, offer, profit, confidence } });
+  }
+  // Compare the public presets with production, independently of the backend
+  // revision pinned by browser CI. Do not lock the disputed BUY labels here.
+  for (const scenario of SAMPLE_SCENARIOS) {
+    const result = await (await request(`${backend}/api/analyze`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Origin: frontend },
+      body: JSON.stringify(scenario.input),
+    })).json();
+    for (const [field, expected] of Object.entries(scenario.result)) {
+      assert.equal(result[field], expected, `Public sample ${scenario.id}: live ${field} differs from displayed preset`);
+    }
+    check(`Live public sample ${scenario.id}`, {
+      input: scenario.input, expected: scenario.result,
+      result: { max_safe_offer: result.max_safe_offer, net_profit: result.net_profit,
+        total_project_cost: result.total_project_cost, verdict: result.overall_verdict },
+    });
   }
   const protectedResponse = await fetch(`${backend}/api/deals`, { signal: AbortSignal.timeout(45000), redirect: 'error' });
   // Never read/log a body if the boundary unexpectedly fails.

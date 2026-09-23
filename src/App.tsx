@@ -12,6 +12,7 @@ import RepairBudgetBuilder from "./components/RepairBudgetBuilder";
 import PhotoRehabAnalyzer from "./components/PhotoRehabAnalyzer";
 import WorkflowRail from "./components/WorkflowRail";
 import InvestorMemoPreview from "./components/InvestorMemoPreview";
+import SampleDealDemo from "./components/SampleDealDemo";
 import { analyzeDeal, draftFromUrl, enrichAddress, finalizeAndAnalyze, saveDeal } from "./lib/api";
 import {
   createDraftAnalysisSnapshot,
@@ -1504,30 +1505,30 @@ function AnalyzerPage() {
       </div>
       </SignedIn>
       <SignedOut>
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
-          <div className="text-center">
+        <div className="mx-auto flex max-w-5xl flex-col items-center gap-8 px-3 py-8 sm:px-6 sm:py-12">
+          <div className="max-w-2xl text-center">
             <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
               Risk-first deal underwriting
             </div>
-            <div className="mt-3 font-serif-display text-2xl font-bold text-white">
-              Upload the house. Know the rehab.{" "}
-              <span className="text-amber-400">Know the offer.</span>
-            </div>
-            <div className="mt-3 text-sm text-white/60">
-              Sign in or create an account to generate your first Investor Memo.
-            </div>
+            <h1 className="mt-3 font-serif-display text-3xl font-bold leading-tight text-white sm:text-5xl">
+              Know what to offer.{" "}<span className="text-amber-400">See what changes it.</span>
+            </h1>
+            <p className="mt-4 text-base leading-relaxed text-slate-300">See how a bigger rehab bill or a longer project changes your numbers. Try the sample below. No account needed.</p>
           </div>
-          <div className="flex items-center gap-3">
+          <SampleDealDemo />
+          <div className="text-center">
+            <p className="text-lg font-semibold text-white">Bring your next deal.</p>
+            <p className="mt-2 text-sm text-slate-300">Enter your numbers, save an analysis and compare contractor options as the scope changes.</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <SignUpButton mode="modal">
+              <button type="button" className="rounded-lg bg-amber-400 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-300 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-300">Analyze your own deal</button>
+            </SignUpButton>
             <SignInButton mode="modal">
               <button className="rounded-lg px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors">
                 Sign In
               </button>
             </SignInButton>
-            <SignUpButton mode="modal">
-              <button className="rounded-lg px-4 py-2 text-sm font-semibold border border-white/[0.15] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors">
-                Create Account
-              </button>
-            </SignUpButton>
           </div>
         </div>
       </SignedOut>
