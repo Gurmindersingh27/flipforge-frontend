@@ -98,9 +98,9 @@ function DealsList() {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-white/50">
-            <th className="py-3 pr-4">Address</th>
-            <th className="py-3 pr-4">Profit</th>
-            <th className="py-3 pr-4">ROI</th>
+            <th className="py-3 pr-4">Deal / version</th>
+            <th className="py-3 pr-4">Est. profit</th>
+            <th className="py-3 pr-4">Annualized ROI</th>
             <th className="py-3 pr-4">Verdict</th>
             <th className="py-3 pr-4">Max Offer</th>
             <th className="py-3 pr-4">Date</th>
@@ -114,16 +114,28 @@ function DealsList() {
             const roi = r?.annualized_roi as number | null;
             const verdict = (r?.overall_verdict as string) ?? "—";
             const maxOffer = r?.max_safe_offer as number | null;
+            const draftAddress = deal.draft_input?.address;
+            const address = deal.address?.trim()
+              || (typeof draftAddress === "string" ? draftAddress.trim() : "");
 
             return (
               <tr
                 key={deal.id}
                 className="border-b border-white/5 hover:bg-white/5 transition-colors"
               >
-                <td className="py-3 pr-4 text-white/90 max-w-[200px] truncate">
-                  {deal.address
-                    ?? (deal.draft_input as any)?.address
-                    ?? <span className="text-white/40">No address</span>}
+                <td className="py-3 pr-4 text-white/90 min-w-[180px] max-w-[240px]">
+                  <div className="truncate" title={address || undefined}>
+                    {address || `Untitled deal #${deal.id}`}
+                  </div>
+                  <div className="mt-1 text-xs text-white/60">
+                    Version #{deal.id}
+                    {deal.parent_deal_id != null && (
+                      <> · From <Link to={`/deal/${deal.parent_deal_id}`} className="underline hover:text-white">#{deal.parent_deal_id}</Link></>
+                    )}
+                  </div>
+                  {deal.revision_note?.trim() && (
+                    <div className="mt-1 text-xs text-white/60 break-words">{deal.revision_note}</div>
+                  )}
                 </td>
                 <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmt(profit)}</td>
                 <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmtPct(roi)}</td>
@@ -146,6 +158,7 @@ function DealsList() {
                   <div className="flex items-center gap-3">
                     <Link
                       to={`/deal/${deal.id}`}
+                      aria-label={`Open saved version ${deal.id}`}
                       className="text-xs text-white/50 hover:text-white/80 transition-colors"
                     >
                       Open
@@ -153,9 +166,10 @@ function DealsList() {
                     <Link
                       to="/"
                       state={{ resumeDraft: deal.draft_input, resumeDeal: deal }}
+                      aria-label={`Create revision from version ${deal.id}`}
                       className="text-xs text-white/50 hover:text-white/80 transition-colors"
                     >
-                      Resume
+                      Create revision
                     </Link>
                   </div>
                 </td>
@@ -193,9 +207,14 @@ export default function DealsPage() {
       <div className="mx-auto max-w-5xl px-6 py-8">
         <div className="mb-6">
           <div className="text-lg font-semibold text-white">My Saved Deals</div>
-          <div className="mt-1 text-xs text-white/50">
-            Deals are stored per account. Sign in to view yours.
-          </div>
+          <SignedIn>
+            <p className="mt-2 text-sm text-white/70">
+              Open a saved version to review it. Choose Create revision to update its numbers or scope, then analyze and save a new version. The original stays unchanged.
+            </p>
+            <p className="mt-2 text-xs text-white/50">
+              Figures and verdicts reflect the analysis saved with each version. Annualized ROI scales the modeled return to one year; it is not a guaranteed return.
+            </p>
+          </SignedIn>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
