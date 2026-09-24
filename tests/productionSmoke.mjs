@@ -104,8 +104,9 @@ try {
     assert.equal(result.confidence_score, confidence, `${name}: confidence`);
     check(`Live locked scenario ${name}`, { input, result: { verdict, offer, profit, confidence } });
   }
-  // Compare the public presets with production, independently of the backend
-  // revision pinned by browser CI. Do not lock the disputed BUY labels here.
+  // Check production independently of browser CI's backend pin, including the
+  // released required-return verdict policy (backend PR #20).
+  const sampleVerdicts = { estimate: 'BUY', quote: 'CONDITIONAL', delay: 'CONDITIONAL' };
   for (const scenario of SAMPLE_SCENARIOS) {
     const result = await (await request(`${backend}/api/analyze`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Origin: frontend },
@@ -114,6 +115,8 @@ try {
     for (const [field, expected] of Object.entries(scenario.result)) {
       assert.equal(result[field], expected, `Public sample ${scenario.id}: live ${field} differs from displayed preset`);
     }
+    assert.ok(Object.hasOwn(sampleVerdicts, scenario.id), `Missing verdict expectation: ${scenario.id}`);
+    assert.equal(result.overall_verdict, sampleVerdicts[scenario.id], `Public sample ${scenario.id}: live verdict`);
     check(`Live public sample ${scenario.id}`, {
       input: scenario.input, expected: scenario.result,
       result: { max_safe_offer: result.max_safe_offer, net_profit: result.net_profit,
