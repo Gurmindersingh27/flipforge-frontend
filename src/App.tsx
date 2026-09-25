@@ -13,7 +13,7 @@ import PhotoRehabAnalyzer from "./components/PhotoRehabAnalyzer";
 import WorkflowRail from "./components/WorkflowRail";
 import InvestorMemoPreview from "./components/InvestorMemoPreview";
 import SampleDealDemo from "./components/SampleDealDemo";
-import { analyzeDeal, draftFromUrl, enrichAddress, finalizeAndAnalyze, saveDeal } from "./lib/api";
+import { analyzeDeal, draftFromUrl, enrichAddress, finalizeAndAnalyze, saveDeal, UnconfirmedSaveError } from "./lib/api";
 import {
   createDraftAnalysisSnapshot,
   createManualAnalysisSnapshot,
@@ -106,6 +106,15 @@ function enrichResponseToDraft(
   };
 }
 
+function SlowRequestNotice({ message }: { message: string }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSlow(true), 8_000);
+    return () => clearTimeout(timer);
+  }, []);
+  return slow ? <p role="status" className="mt-2 text-sm text-white/70">{message}</p> : null;
+}
+
 function AnalyzerPage() {
   const { getToken } = useAuth();
 
@@ -113,6 +122,8 @@ function AnalyzerPage() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState<string>("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveUnconfirmed, setSaveUnconfirmed] = useState(false);
+  const saveInFlight = useRef(false);
 
   // =========================
   // Phase 2 — URL + DraftDeal
@@ -231,6 +242,7 @@ function AnalyzerPage() {
     setSaveLoading(false);
     setSaveError("");
     setSaveSuccess(false);
+    setSaveUnconfirmed(false);
     setLoading(false);
     setError("");
 
@@ -265,6 +277,7 @@ function AnalyzerPage() {
     activeSnapshot.current = null;
     setSaveError("");
     setSaveSuccess(false);
+    setSaveUnconfirmed(false);
     setIsResumed(false);
     setPreviousDeal(null);
     setDraftScope(null);
@@ -299,6 +312,7 @@ function AnalyzerPage() {
     activeSnapshot.current = null;
     setSaveError("");
     setSaveSuccess(false);
+    setSaveUnconfirmed(false);
     setIsResumed(false);
     setPreviousDeal(null);
     setDraftScope(null);
@@ -363,6 +377,7 @@ function AnalyzerPage() {
     activeSnapshot.current = null;
     setSaveError("");
     setSaveSuccess(false);
+    setSaveUnconfirmed(false);
 
     if (!draft) {
       setAnalyzeError("Fetch a draft first.");
@@ -460,6 +475,7 @@ function AnalyzerPage() {
     activeSnapshot.current = null;
     setSaveError("");
     setSaveSuccess(false);
+    setSaveUnconfirmed(false);
 
     if (!canAnalyze) {
       setError("Please enter valid Purchase Price, ARV, and Rehab Budget.");
@@ -504,18 +520,21 @@ function AnalyzerPage() {
   }
 
   async function onSaveDeal() {
-    if (!result || !analysisSnapshot || saveLoading) return;
+    if (!result || !analysisSnapshot || saveInFlight.current || saveSuccess || saveUnconfirmed) return;
+    // Lock before token retrieval so rapid clicks cannot submit two saves.
+    saveInFlight.current = true;
+    setSaveLoading(true);
     setSaveError("");
     setSaveSuccess(false);
-
-    const token = await getToken().catch(() => null);
-    if (!token) {
-      setSaveError("Could not retrieve auth token. Are you signed in?");
-      return;
-    }
+    setSaveUnconfirmed(false);
 
     try {
-      setSaveLoading(true);
+      const token = await getToken().catch(() => null);
+      if (activeSnapshot.current !== analysisSnapshot) return;
+      if (!token) {
+        setSaveError("Could not retrieve auth token. Are you signed in?");
+        return;
+      }
       const saved = await saveDeal(
         {
           address: analysisSnapshot.meta.property_address,
@@ -536,9 +555,12 @@ function AnalyzerPage() {
       else setPreviousDeal(saved);
       setSaveSuccess(true);
     } catch (e: unknown) {
+      if (activeSnapshot.current !== analysisSnapshot) return;
       const msg = e instanceof Error ? e.message : "Failed to save deal.";
+      setSaveUnconfirmed(e instanceof UnconfirmedSaveError);
       setSaveError(msg);
     } finally {
+      saveInFlight.current = false;
       setSaveLoading(false);
     }
   }
@@ -867,8 +889,9 @@ function AnalyzerPage() {
           )}
 
           {(draftError || enrichError) && (
-            <div className="mt-3 text-sm text-red-400">{draftError || enrichError}</div>
+            <div role="alert" className="mt-3 text-sm text-red-400">{draftError || enrichError}</div>
           )}
+          {draftLoading && <SlowRequestNotice message="Fetching the listing is taking longer than usual. Keep this page open; the request can take up to two minutes." />}
 
           {isSourceBlocked && (
             <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
@@ -1239,8 +1262,9 @@ function AnalyzerPage() {
               )}
 
               {analyzeError && (
-                <div className="mt-3 text-sm text-red-400">{analyzeError}</div>
+                <div role="alert" className="mt-3 text-sm text-red-400">{analyzeError}</div>
               )}
+              {analyzeLoading && <SlowRequestNotice message="Still generating your memo. Keep this page open; the request can take up to two minutes." />}
 
               {/* Step 4 — Generate Investor Memo */}
               <div className="mt-6 mb-3 flex items-center gap-2">
@@ -1425,8 +1449,9 @@ function AnalyzerPage() {
               {loading ? "Generating Investor Memo…" : "Generate Investor Memo"}
             </button>
 
-            {error && <div className="text-sm text-red-400">{error}</div>}
+            {error && <div role="alert" className="text-sm text-red-400">{error}</div>}
           </div>
+          {loading && <SlowRequestNotice message="Still generating your memo. Keep this page open; the request can take up to two minutes." />}
 
           {verdictReason && (
             <div className="mt-3 text-xs text-white/60">
@@ -1467,15 +1492,18 @@ function AnalyzerPage() {
                   <button
                     type="button"
                     onClick={onSaveDeal}
-                    disabled={saveLoading || saveSuccess}
+                    disabled={saveLoading || saveSuccess || saveUnconfirmed}
                     className="rounded-xl px-4 py-2 text-sm font-semibold border border-white/[0.25] bg-white/[0.08] text-white hover:bg-white/[0.12] transition-colors disabled:bg-white/[0.04] disabled:text-white/40 disabled:border-white/[0.08] disabled:cursor-not-allowed"
                   >
                     {saveLoading
                       ? "Saving…"
                       : saveSuccess
                       ? "Saved!"
+                      : saveUnconfirmed
+                      ? "Save unconfirmed"
                       : analysisSnapshot.parentDealId ? "Save New Revision" : "Save Deal"}
                   </button>
+                  {saveLoading && <SlowRequestNotice message="Still waiting for save confirmation. Keep this page open to avoid sending the same save again." />}
                   {saveSuccess && (
                     <Link
                       to={savedId ? `/deal/${savedId}` : "/deals"}
@@ -1485,8 +1513,9 @@ function AnalyzerPage() {
                     </Link>
                   )}
                   {saveError && (
-                    <span className="text-xs text-red-400">{saveError}</span>
+                    <span role="alert" className="text-xs text-red-400">{saveError}</span>
                   )}
+                  {saveUnconfirmed && <Link to="/deals" className="text-sm text-amber-300 underline">Check Saved Deals</Link>}
                 </SignedIn>
                 <SignedOut>
                   <SignInButton mode="modal">

@@ -92,7 +92,7 @@ async function screenshot(name) {
 try {
   writeFileSync(join(temp, "fixture.py"), `import os\nos.environ['DATABASE_URL'] = ${JSON.stringify(`sqlite:///${temp}/fixture.db`)}\nos.environ['CLERK_JWKS_URL'] = ''\nfrom app.main import app\nfrom app.auth import get_current_user_id\napp.dependency_overrides[get_current_user_id] = lambda: 'browser-fixture'\n`);
   // Signed-out selection exists only in this temporary fixture, never in production.
-  writeFileSync(join(temp, "clerk.ts"), `const signedIn=!new URLSearchParams(location.search).has('fixtureSignedOut');const auth={getToken:async()=>"browser-fixture",isSignedIn:signedIn,isLoaded:true};export const useAuth=()=>auth;export const SignedIn=({children})=>signedIn?children:null;export const SignedOut=({children})=>signedIn?null:children;export const ClerkProvider=({children})=>children;export const UserButton=()=>null;export const SignInButton=({children})=>children;export const SignUpButton=({children})=>children;`);
+  writeFileSync(join(temp, "clerk.ts"), `const signedIn=!new URLSearchParams(location.search).has('fixtureSignedOut');const auth={getToken:async()=>{const fixture=window.authFixture;if(fixture){fixture.calls++;await new Promise(resolve=>setTimeout(resolve,fixture.delayMs));}return "browser-fixture";},isSignedIn:signedIn,isLoaded:true};export const useAuth=()=>auth;export const SignedIn=({children})=>signedIn?children:null;export const SignedOut=({children})=>signedIn?null:children;export const ClerkProvider=({children})=>children;export const UserButton=()=>null;export const SignInButton=({children})=>children;export const SignUpButton=({children})=>children;`);
   writeFileSync(join(temp, "vite.mjs"), `import base from ${JSON.stringify(join(root, "vite.config.ts"))};export default {...base,root:${JSON.stringify(root)},resolve:{alias:{'@clerk/clerk-react':${JSON.stringify(join(temp, "clerk.ts"))}}},server:{host:'127.0.0.1',port:5173,strictPort:true,fs:{allow:[${JSON.stringify(root)},${JSON.stringify(temp)}]}}};`);
   start(process.env.PYTHON ?? "python", ["-m", "uvicorn", "fixture:app", "--host", "127.0.0.1", "--port", "8000"], { PYTHONPATH: `${backend}:${temp}` });
   start(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "--config", join(temp, "vite.mjs"), "--configLoader", "native"], { VITE_API_BASE_URL: "http://127.0.0.1:8000" });
@@ -457,6 +457,197 @@ try {
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: recoveryFixture });
   assert.deepEqual(await api("/api/deals"), recordsBeforeList);
   checks.push("List/detail timeout and 403 recovery require a user retry; stalled response bodies time out, auth is retained, and all saved records remain unchanged");
+
+  // Test-only fault injection for first-use requests. Only the isolated test
+  // backend can receive writes; URL drafts are fixtures and never scrape a site.
+  const { identifier: analyzerFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", { source: `
+    if (new URLSearchParams(location.search).has('requestFixture')) {
+      const nativeFetch = window.fetch.bind(window);
+      const nativeTimeout = window.setTimeout.bind(window);
+      window.requestFixture = null;
+      window.setTimeout = (callback, ms, ...args) => nativeTimeout(callback, ms === 8000 ? 50 : ms === 120000 ? 1600 : ms, ...args);
+      window.fetch = async (input, init = {}) => {
+        const url = new URL(input, location.href);
+        const fixture = window.requestFixture;
+        if (!fixture || url.origin !== 'http://127.0.0.1:8000' || url.pathname !== fixture.path || init.method !== 'POST') return nativeFetch(input, init);
+        fixture.calls++;
+        fixture.payloads.push(JSON.parse(init.body));
+        fixture.authenticated.push(new Headers(init.headers).get('Authorization') === 'Bearer browser-fixture');
+        const mode = fixture.mode;
+        const stalledBody = status => new Response(new ReadableStream({ start(controller) {
+          if (init.signal.aborted) controller.error(init.signal.reason);
+          else init.signal.addEventListener('abort', () => controller.error(init.signal.reason), { once: true });
+        }}), { status, headers: { 'Content-Type': 'application/json' } });
+        if (mode === 'headers') return new Promise((resolve, reject) => {
+          if (init.signal.aborted) reject(init.signal.reason);
+          else init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+        });
+        if (mode === 'body') return stalledBody(200);
+        if (mode === 'forbidden-body') return stalledBody(403);
+        if (mode === 'forbidden') return new Response('Forbidden fixture', { status: 403 });
+        if (mode === 'server-error') return new Response('Server error fixture', { status: 500 });
+        if (mode === 'missing-id') return Response.json({});
+        if (mode === 'missing-flat') return Response.json({ missing_fields: ['purchase_price'] }, { status: 422 });
+        if (mode === 'missing-nested') return Response.json({ detail: { missing_fields: ['purchase_price'] } }, { status: 422 });
+        if (mode.startsWith('committed-')) {
+          const response = await nativeFetch(input, init);
+          if (!response.ok) throw new Error('Fixture save failed');
+          fixture.saved = await response.json();
+          if (mode === 'committed-body') return stalledBody(200);
+          if (mode === 'committed-network') throw new TypeError('Failed to fetch');
+          return new Response('{', { headers: { 'Content-Type': 'application/json' } });
+        }
+        if (mode === 'slow') await new Promise(resolve => nativeTimeout(resolve, 650));
+        if (url.pathname === '/api/draft-from-url') return Response.json({ draft: fixture.draft });
+        return nativeFetch(input, init);
+      };
+    }
+  ` });
+  const configureRequest = (path, mode) => evaluate(`window.requestFixture = ${JSON.stringify({ path, mode, calls: 0, payloads: [], authenticated: [], draft: first.draft_input })}`);
+  const hasStatus = text => `Array.from(document.querySelectorAll('[role="status"]')).some(e=>e.textContent.includes(${JSON.stringify(text)}))`;
+  const hasAlert = text => `Array.from(document.querySelectorAll('[role="alert"]')).some(e=>e.textContent.includes(${JSON.stringify(text)}))`;
+  async function openManual(mode) {
+    await cdp("Page.navigate", { url: "http://127.0.0.1:5173/?requestFixture=1" });
+    await click("button", "Analyze without address lookup ↓");
+    for (const [label, value] of [["Purchase Price", "150000"], ["ARV", "270000"], ["Rehab Budget", "50000"], ["Est. Monthly Rent (optional)", ""]]) await fill(labelInput(label), value);
+    await configureRequest("/api/analyze", mode);
+  }
+  async function openUrl(mode) {
+    await cdp("Page.navigate", { url: "http://127.0.0.1:5173/?requestFixture=1" });
+    await click("button", "URL");
+    await fill(`document.querySelector('input[placeholder="https://..."]')`, "https://example.test/fixture");
+    await configureRequest("/api/draft-from-url", mode);
+  }
+  async function openDraft(mode) {
+    await openUrl("pass");
+    await click("button", "Fetch Draft");
+    await until(`Boolean(${byText("button", "Generate Investor Memo")})`);
+    await configureRequest("/api/finalize-and-analyze", mode);
+  }
+  async function noReplay() {
+    assert.equal(await evaluate("window.requestFixture.calls"), 1);
+    await pause(250);
+    assert.equal(await evaluate("window.requestFixture.calls"), 1, "Request must not replay automatically");
+  }
+  for (const prepare of [openManual, openDraft]) {
+    await prepare("slow");
+    await click("button", "Generate Investor Memo");
+    await until(hasStatus("Still generating your memo"));
+    await until(`Boolean(${byText("button", "Save Deal")})`);
+    await noReplay();
+    assert.equal(await evaluate(hasStatus("Still generating your memo")), false);
+    for (const mode of ["headers", "body"]) {
+      await prepare(mode);
+      await click("button", "Generate Investor Memo");
+      await until(hasStatus("Still generating your memo"));
+      await until(hasAlert("Analysis took too long"));
+      assert.equal(await evaluate(`(${labelInput("Purchase Price")}).value`), "150000");
+      assert.equal(await evaluate(`Boolean(${byText("button", "Save Deal")})`), false);
+      assert.equal(await evaluate(hasStatus("Still generating your memo")), false);
+      await noReplay();
+      await evaluate("window.requestFixture.mode = 'pass'");
+      await click("button", "Generate Investor Memo");
+      await until(`Boolean(${byText("button", "Save Deal")})`);
+      assert.equal(await evaluate("window.requestFixture.calls"), 2);
+      assert.equal(await evaluate(hasAlert("Analysis took too long")), false);
+    }
+  }
+  checks.push("Manual and draft analysis explain slow responses, bound headers and bodies, retain inputs, and retry only on a user action");
+  for (const mode of ["missing-flat", "missing-nested"]) {
+    await openDraft(mode);
+    await click("button", "Generate Investor Memo");
+    await until(hasAlert("Missing: Purchase Price"));
+    assert.equal(await evaluate(`Boolean(${byText("button", "Save Deal")})`), false);
+    await noReplay();
+  }
+  for (const mode of ["slow", "headers", "body"]) {
+    await openUrl(mode);
+    await click("button", "Fetch Draft");
+    await until(hasStatus("Fetching the listing is taking longer"));
+    if (mode !== "slow") {
+      await until(hasAlert("Fetching the draft took too long"));
+      assert.equal(await evaluate(`document.querySelector('input[placeholder="https://..."]').value`), "https://example.test/fixture");
+      await noReplay();
+      await evaluate("window.requestFixture.mode = 'pass'");
+      await click("button", "Fetch Draft");
+    }
+    await until(`Boolean(${byText("button", "Generate Investor Memo")})`);
+    assert.equal(await evaluate(hasStatus("Fetching the listing is taking longer")), false);
+  }
+  assert.deepEqual(await api("/api/deals"), recordsBeforeList);
+  checks.push("Both 422 missing-field shapes remain supported; URL drafts explain delays, time out, and recover without any saved writes");
+
+  await openManual("pass");
+  await click("button", "Generate Investor Memo");
+  await until(`Boolean(${byText("button", "Save Deal")})`);
+  await configureRequest("/api/deals/save", "slow");
+  await evaluate("window.authFixture = { calls: 0, delayMs: 300 }");
+  await evaluate(`(()=>{const button=${byText("button", "Save Deal")};button.click();button.click();})()`);
+  await until(hasStatus("Still waiting for save confirmation"));
+  await fill(labelInput("Rehab Budget"), "67000");
+  await until(`Boolean(${byText("button", "Saved!")})`);
+  await noReplay();
+  assert.equal(await evaluate("window.authFixture.calls"), 1);
+  assert.ok(await evaluate("window.requestFixture.authenticated.every(Boolean)"));
+  assert.equal(await evaluate(hasStatus("Still waiting for save confirmation")), false);
+  const delayedSave = (await api("/api/deals"))[0];
+  assert.equal(delayedSave.draft_input.rehab_budget.value, 50000);
+  assert.equal(delayedSave.analysis_result.net_profit, 34900);
+  assert.equal((await api("/api/deals")).length, recordsBeforeList.length + 1);
+  checks.push("Slow saves show progress, lock before token retrieval, send one authenticated write despite rapid clicks, and retain the analyzed snapshot");
+
+  for (const mode of ["headers", "body", "committed-body", "committed-network", "committed-invalid", "missing-id", "server-error", "forbidden", "forbidden-body"]) {
+    const beforeSave = await api("/api/deals");
+    await openManual("pass");
+    await click("button", "Generate Investor Memo");
+    await until(`Boolean(${byText("button", "Save Deal")})`);
+    await configureRequest("/api/deals/save", mode);
+    await click("button", "Save Deal");
+    if (mode === "headers" || mode.endsWith("body")) await until(hasStatus("Still waiting for save confirmation"));
+    if (mode.startsWith("forbidden")) {
+      await until(hasAlert("Save deal error 403"));
+      assert.equal(await evaluate(`(${byText("button", "Save Deal")}).disabled`), false);
+      assert.equal(await evaluate(`Boolean(${byText("a", "Check Saved Deals")})`), false);
+    } else {
+      await until(hasAlert("This deal may already be saved"));
+      assert.ok(await evaluate(`(${byText("button", "Save unconfirmed")}).disabled`));
+      assert.ok(await evaluate(`Boolean(${byText("a", "Check Saved Deals")})`));
+      await click("button", "Save unconfirmed");
+    }
+    await noReplay();
+    assert.equal(await evaluate(`Boolean(${byText("button", "Saved!")})`), false);
+    assert.equal(await evaluate(hasStatus("Still waiting for save confirmation")), false);
+    assert.ok(await evaluate("window.requestFixture.authenticated.every(Boolean)"));
+    assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
+    const saved = await evaluate("window.requestFixture.saved");
+    const afterSave = await api("/api/deals");
+    assert.equal(afterSave.length, beforeSave.length + (saved ? 1 : 0));
+    if (saved) {
+      assert.equal(saved.analysis_result.net_profit, 34900);
+      await click("a", "Check Saved Deals");
+      await until(`Boolean(${inputByAria(`Open saved version ${saved.id}`)})`);
+      assert.equal(await evaluate(hasStatus("Still waiting for save confirmation")), false);
+    }
+    for (const record of beforeSave) assert.deepEqual(await api(`/api/deals/${record.id}`), record);
+  }
+  checks.push("Lost save confirmations never report success or replay; committed records are found through Saved Deals, while 403 rejections remain distinct and existing records stay intact");
+
+  await openManual("pass");
+  await click("button", "Generate Investor Memo");
+  await until(`Boolean(${byText("button", "Save Deal")})`);
+  await configureRequest("/api/deals/save", "pass");
+  await evaluate("window.authFixture = { calls: 0, delayMs: 650 }");
+  const beforeAbandonedSave = await api("/api/deals");
+  await click("button", "Save Deal");
+  await fill(labelInput("Rehab Budget"), "67000");
+  await click("button", "Generate Investor Memo");
+  await until(`Boolean(${byText("button", "Save Deal")})`);
+  await pause(800);
+  assert.equal(await evaluate("window.requestFixture.calls"), 0);
+  assert.equal(await evaluate(`Boolean(${byText("button", "Saved!")})`), false);
+  assert.deepEqual(await api("/api/deals"), beforeAbandonedSave);
+  checks.push("Starting a new analysis during token retrieval cancels the obsolete save before any write");
+  await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: analyzerFixture });
   assert.deepEqual(errors, []);
   checks.push("No browser runtime exceptions");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));
