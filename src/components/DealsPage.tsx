@@ -37,19 +37,20 @@ function DealsList() {
   const [deals, setDeals] = useState<SavedDeal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
+  const [slow, setSlow] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    const slowTimer = setTimeout(() => { if (!cancelled) setSlow(true); }, 8_000);
     async function load() {
       setLoading(true);
       setError("");
-      const token = await getToken().catch(() => null);
-      if (!token) {
-        setError("Could not retrieve auth token.");
-        setLoading(false);
-        return;
-      }
+      setSlow(false);
       try {
+        const token = await getToken().catch(() => null);
+        if (!token) throw new Error("Could not retrieve auth token.");
+        if (cancelled) return;
         const data = await getDeals(token);
         if (!cancelled) setDeals(data);
       } catch (e: unknown) {
@@ -58,26 +59,34 @@ function DealsList() {
           setError(msg);
         }
       } finally {
+        clearTimeout(slowTimer);
         if (!cancelled) setLoading(false);
       }
     }
     load();
     return () => {
       cancelled = true;
+      clearTimeout(slowTimer);
     };
-  }, [getToken]);
+  }, [getToken, attempt]);
 
   if (loading) {
     return (
-      <div className="text-sm text-white/50 py-8 text-center">
+      <div role="status" className="text-sm text-white/50 py-8 text-center">
         Loading deals…
+        {slow && <p className="mt-2">This is taking longer than usual. Keep this page open while FlipForge connects.</p>}
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-sm text-red-400 py-8 text-center">{error}</div>
+      <div className="text-sm py-8 text-center">
+        <p role="alert" className="text-red-400">{error}</p>
+        <button type="button" onClick={() => setAttempt(value => value + 1)} className="mt-3 rounded-xl border border-white/20 px-4 py-2 text-white hover:bg-white/10">
+          Try again
+        </button>
+      </div>
     );
   }
 

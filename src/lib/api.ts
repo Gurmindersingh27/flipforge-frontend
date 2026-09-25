@@ -199,30 +199,37 @@ export async function saveDeal(
   return res.json();
 }
 
-export async function getDeals(token: string): Promise<SavedDeal[]> {
-  const res = await fetchWithTimeout(`${API_BASE_URL}/api/deals`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Get deals error ${res.status}: ${text || "(no body)"}`);
+// A first read may include service startup. Bound the whole response, including
+// its body, and leave retries to the user. Save requests do not use this helper.
+async function readSavedDeal<T>(path: string, token: string, errorLabel: string): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${errorLabel} ${res.status}: ${text || "(no body)"}`);
+    }
+    return await res.json();
+  } catch (error: unknown) {
+    if (controller.signal.aborted) {
+      throw new Error("Loading saved deals took too long. Try again.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
+}
 
-  return res.json();
+export async function getDeals(token: string): Promise<SavedDeal[]> {
+  return readSavedDeal<SavedDeal[]>("/api/deals", token, "Get deals error");
 }
 
 export async function getDeal(id: number, token: string): Promise<SavedDeal> {
-  const res = await fetchWithTimeout(`${API_BASE_URL}/api/deals/${id}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Get deal error ${res.status}: ${text || "(no body)"}`);
-  }
-
-  return res.json();
+  return readSavedDeal<SavedDeal>(`/api/deals/${id}`, token, "Get deal error");
 }
 
 // ---------------------------------------------------------------------------

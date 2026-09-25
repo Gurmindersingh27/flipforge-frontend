@@ -398,6 +398,65 @@ try {
   assert.equal(await evaluate(`(${scopeInput("Source 1")}).value`), "Builder B fixture");
   assert.deepEqual(await api("/api/deals"), recordsBeforeList);
   checks.push("Saved Deals identifies versions and parents, labels annualized ROI, fits mobile, and opens/resumes the selected snapshot without writes");
+
+  // Test-only browser injection. Compress the two UI/network timers, and stall
+  // reads before headers or during the body. No production auth or test hooks.
+  const { identifier: recoveryFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", { source: `
+    const mode = new URLSearchParams(location.search).get('readFixture');
+    if (mode) {
+      const nativeFetch = window.fetch.bind(window);
+      const nativeTimeout = window.setTimeout.bind(window);
+      const path = location.pathname === '/deals' ? '/api/deals' : '/api/deals/' + location.pathname.split('/').pop();
+      window.readFixture = { mode, calls: 0, authenticated: [] };
+      window.setTimeout = (callback, ms, ...args) => nativeTimeout(callback, ms === 8000 ? 50 : ms === 120000 ? 1200 : ms, ...args);
+      window.fetch = async (input, init = {}) => {
+        const url = new URL(input, location.href);
+        if (url.origin === 'http://127.0.0.1:8000' && url.pathname === path && (init.method || 'GET') === 'GET') {
+          const fixture = window.readFixture;
+          fixture.calls++;
+          fixture.authenticated.push(new Headers(init.headers).get('Authorization') === 'Bearer browser-fixture');
+          if (fixture.mode === 'slow') await new Promise(resolve => nativeTimeout(resolve, 500));
+          if (fixture.mode === 'headers') return new Promise((resolve, reject) => {
+            if (init.signal.aborted) reject(init.signal.reason);
+            else init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+          });
+          if (fixture.mode === 'body') return new Response(new ReadableStream({ start(controller) {
+            if (init.signal.aborted) controller.error(init.signal.reason);
+            else init.signal.addEventListener('abort', () => controller.error(init.signal.reason), { once: true });
+          }}), { headers: { 'Content-Type': 'application/json' } });
+          if (fixture.mode === 'forbidden') return new Response('Forbidden fixture', { status: 403 });
+        }
+        return nativeFetch(input, init);
+      };
+    }
+  ` });
+  await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals?readFixture=slow" });
+  await until(`document.querySelector('[role="status"]')?.textContent.includes('taking longer than usual')`);
+  await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[role="status"]'))`), false);
+  checks.push("A delayed saved list explains the wait and loads successfully without a retry");
+  for (const [route, mode] of [["/deals", "headers"], ["/deals", "body"], [`/deal/${selected.id}`, "headers"], ["/deals", "forbidden"]]) {
+    await cdp("Page.navigate", { url: `http://127.0.0.1:5173${route}?readFixture=${mode}` });
+    if (mode !== "forbidden") await until(`document.querySelector('[role="status"]')?.textContent.includes('taking longer than usual')`);
+    await until(`Boolean(${byText("button", "Try again")})`);
+    const errorText = await evaluate(`document.querySelector('[role="alert"]').textContent`);
+    assert.ok(errorText.includes(mode === "forbidden" ? "403" : "Loading saved deals took too long"));
+    assert.equal(await evaluate(`document.body.textContent.includes('No saved deals yet')`), false);
+    const calls = await evaluate("window.readFixture.calls");
+    await pause(300);
+    assert.equal(await evaluate("window.readFixture.calls"), calls, "No automatic retry after a failed read");
+    assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
+    await evaluate("window.readFixture.mode = 'pass'");
+    await click("button", "Try again");
+    if (route === "/deals") await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
+    else await until(`(${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
+    assert.equal(await evaluate("window.readFixture.calls"), calls + 1);
+    assert.ok(await evaluate("window.readFixture.authenticated.every(Boolean)"));
+    assert.equal(await evaluate(`Boolean(${byText("button", "Try again")})`), false);
+  }
+  await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: recoveryFixture });
+  assert.deepEqual(await api("/api/deals"), recordsBeforeList);
+  checks.push("List/detail timeout and 403 recovery require a user retry; stalled response bodies time out, auth is retained, and all saved records remain unchanged");
   assert.deepEqual(errors, []);
   checks.push("No browser runtime exceptions");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));
