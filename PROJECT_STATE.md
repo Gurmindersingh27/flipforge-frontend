@@ -1139,3 +1139,9 @@ Frontend PR #62 contains the public checker, closeout record and this improvemen
 - Local validation: production build and 67 existing unit tests pass; API lint and browser-script syntax pass. App.tsx retains its two existing explicit-any lint errors in the unchanged resume normalizer. The existing CSS import warning remains.
 - New browser regressions cover slow successes, stalled headers and bodies, manual retries, 422 shapes, authenticated saves, delayed token retrieval, and committed saves whose confirmations are lost. They run with isolated SQLite and temporary test-only auth/network fixtures, never production accounts or a real listing fetch. Published-head CI is pending at this local entry; consult the PR for the exact head and CI result.
 - Independent review and release of this new change remain pending. Signed-in production idle/revision/bid QA, actual Neon backup settings and restore, and provider usage budgets remain open. The Vargas invitation is drafted and the business contact verified; nothing was sent or scheduled, and no paying users or pilot enrollment are established.
+
+## Review follow-up - September 27, 2026
+
+- Claude approved PR #68 at `b82030ee4fbe1b3844890e1cd780da320c4f1c2f`, with a nonblocking recovery concern: navigating to Saved Deals could discard the unsaved analyzer form.
+- The unconfirmed-save link now opens Saved Deals in a separate tab with `noopener noreferrer`, explicitly labels that behavior, and tells users to return and regenerate the memo before saving if their deal is absent. No request, save, calculation, snapshot or ownership logic changed.
+- Updated the existing committed-save browser check to open the new tab, find the saved record, return to the original tab and verify its URL, rehab input and unconfirmed memo remain intact. Validation and independent review of the new head are pending; the prior approval does not cover this follow-up.

@@ -607,11 +607,11 @@ try {
     if (mode.startsWith("forbidden")) {
       await until(hasAlert("Save deal error 403"));
       assert.equal(await evaluate(`(${byText("button", "Save Deal")}).disabled`), false);
-      assert.equal(await evaluate(`Boolean(${byText("a", "Check Saved Deals")})`), false);
+      assert.equal(await evaluate(`Boolean(${byText("a", "Check Saved Deals (opens in a new tab)")})`), false);
     } else {
       await until(hasAlert("This deal may already be saved"));
       assert.ok(await evaluate(`(${byText("button", "Save unconfirmed")}).disabled`));
-      assert.ok(await evaluate(`Boolean(${byText("a", "Check Saved Deals")})`));
+      assert.ok(await evaluate(`Boolean(${byText("a", "Check Saved Deals (opens in a new tab)")})`));
       await click("button", "Save unconfirmed");
     }
     await noReplay();
@@ -624,13 +624,33 @@ try {
     assert.equal(afterSave.length, beforeSave.length + (saved ? 1 : 0));
     if (saved) {
       assert.equal(saved.analysis_result.net_profit, 34900);
-      await click("a", "Check Saved Deals");
+      const analyzerSession = sessionId;
+      const analyzerUrl = await evaluate("location.href");
+      const rehabBeforeCheck = await evaluate(`(${labelInput("Rehab Budget")}).value`);
+      const beforeTargets = (await cdp("Target.getTargets", {}, false)).targetInfos.map(target => target.targetId);
+      await cdp("Runtime.evaluate", { expression: `(${byText("a", "Check Saved Deals (opens in a new tab)")}).click()`, userGesture: true });
+      let savedDealsTab;
+      for (let i = 0; i < 80 && !savedDealsTab; i++) {
+        savedDealsTab = (await cdp("Target.getTargets", {}, false)).targetInfos.find(target =>
+          !beforeTargets.includes(target.targetId) && target.url === "http://127.0.0.1:5173/deals");
+        if (!savedDealsTab) await pause(200);
+      }
+      assert.ok(savedDealsTab, "Saved Deals must open in a separate tab");
+      ({ sessionId } = await cdp("Target.attachToTarget", { targetId: savedDealsTab.targetId, flatten: true }, false));
+      await cdp("Runtime.enable");
       await until(`Boolean(${inputByAria(`Open saved version ${saved.id}`)})`);
+      assert.equal(await evaluate("window.opener === null"), true);
+      await cdp("Target.closeTarget", { targetId: savedDealsTab.targetId }, false);
+      sessionId = analyzerSession;
+      assert.equal(await evaluate("location.href"), analyzerUrl);
+      assert.equal(await evaluate(`(${labelInput("Rehab Budget")}).value`), rehabBeforeCheck);
+      assert.ok(await evaluate(`(${byText("button", "Save unconfirmed")}).disabled`));
+      assert.ok(await evaluate("document.body.textContent.includes('If it is not there, return to this tab and generate the memo again to save.')"));
       assert.equal(await evaluate(hasStatus("Still waiting for save confirmation")), false);
     }
     for (const record of beforeSave) assert.deepEqual(await api(`/api/deals/${record.id}`), record);
   }
-  checks.push("Lost save confirmations never report success or replay; committed records are found through Saved Deals, while 403 rejections remain distinct and existing records stay intact");
+  checks.push("Lost save confirmations never report success or replay; committed records are found in a separate Saved Deals tab without losing analyzer inputs or the memo, while 403 rejections remain distinct and existing records stay intact");
 
   await openManual("pass");
   await click("button", "Generate Investor Memo");

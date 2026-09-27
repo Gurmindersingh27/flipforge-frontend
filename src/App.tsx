@@ -1515,7 +1515,10 @@ function AnalyzerPage() {
                   {saveError && (
                     <span role="alert" className="text-xs text-red-400">{saveError}</span>
                   )}
-                  {saveUnconfirmed && <Link to="/deals" className="text-sm text-amber-300 underline">Check Saved Deals</Link>}
+                  {saveUnconfirmed && <>
+                    <Link to="/deals" target="_blank" rel="noopener noreferrer" className="text-sm text-amber-300 underline">Check Saved Deals (opens in a new tab)</Link>
+                    <span className="text-xs text-amber-300">If it is not there, return to this tab and generate the memo again to save.</span>
+                  </>}
                 </SignedIn>
                 <SignedOut>
                   <SignInButton mode="modal">
