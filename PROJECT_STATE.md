@@ -4,9 +4,9 @@
 ---
 
 ## Last Updated
-2026-09-11
+2026-09-27
 
-Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Main remains `0e56e784efbc41cc840c6bd1e1e18a6212eca92b`; PRs #62 and #63 are drafts, unmerged and not deployed to production.
+Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Frontend main is `6b000a820e907781d7cf35da0cfa48c8720c2a72` (#68); backend main is `14a7dcedbe4ef2c914ea786122bdff88a2a5e35f` (#21). Saved-deal comparison is new branch work, pending review and release.
 
 ---
 
@@ -1152,3 +1152,14 @@ Frontend PR #62 contains the public checker, closeout record and this improvemen
 - Direct unauthenticated GET to production `/deals` returned HTTP 404 with Vercel `NOT_FOUND` on September 27 at 17:11 UTC. The prior 13-check release verification did not cover direct SPA routes. PR #68 is held, not merged.
 - Added the SPA fallback rewrite from Vercel's official Vite documentation in `vercel.json`. The public release checker now requires `/deals` and `/deal/1` to return the HTML app shell with matching asset references. These requests do not authenticate or read saved records.
 - The production checker is expected to fail against the old production deployment until the rewrite is reviewed and deployed. Local builds and Vite browser tests cannot establish Vercel rewrite behavior. Preview/live route verification and independent review of this new commit remain required; no production routing fix is claimed yet.
+
+
+## September 27, 2026 — release and recovery evidence; saved-deal comparison build
+
+- PR #68 was approved by Claude at `bbbf373f5293131c5e59880176280a24e08bde22`, merged as frontend main `6b000a820e907781d7cf35da0cfa48c8720c2a72`, and deployed. All 15 public production checks passed, including direct `/deals` and `/deal/1` app-shell routes and exact deployed asset hashes. These were public checks, not authenticated record reads. Earlier #68 held/pending entries are historical. Backend remains #21 at `14a7dce`.
+- Gurminder's signed-in screenshots showed deal #1 with profit $34,900, max safe offer $155,600, BUY and confidence 88. On September 27 he created the manual Neon production snapshot at 18:43:52 UTC (expires never), used multi-step restore into a separate branch, and queried saved_deals ID 1 there. The screenshot of the restored JSON matches those four values. This verifies one snapshot restore and record inspection, not scheduled backups or a production failover. Migrate connections and settings was not part of the drill. Signed-in 20+ minute idle recovery and full revision/bid QA remain pending.
+- User authorized another focused product improvement. Implemented side-by-side comparison of two or three selected saved versions in My Deals on `codex/saved-deal-comparison`. Selection is local to the mounted page, clears on reload, and uses the already-loaded owner-scoped records. It adds no requests or writes and does not persist a shortlist.
+- Comparison shows saved offer/profit/verdict/ROI/project cost, original inputs, six timing/financing/cost/return assumptions, version/parent identity, date and expandable revision note. Differing and missing assumptions are flagged from exact finite saved values; missing values never receive defaults. No automatic ranking, winner, recalculation, combined portfolio total, new underwriting policy, contract, backend, dependency, or provider call. Existing detailed scope/revision and contractor bid comparisons remain intact.
+- Seven new unit cases cover saved economics/order/immutability, missing legacy inputs, all six assumption differences, differences below display precision, malformed/nonfinite data, zero/negative/cents, and identity fallback. All 74 unit tests pass; production build passes with the existing CSS import warning; targeted lint and browser-script syntax pass. React review: pure derivation, event-driven selection, native labeled checkboxes, live selection count, keyboard-focusable scroll region, column/row headers; no effect-derived comparison state or extra fetching.
+- Browser regression added to the existing isolated Chrome/API/SQLite workflow for exact saved figures, mismatched holding periods, two/three selection and cap, removing/clearing, keyboard access, mobile containment, reload reset, and no additional requests/writes. Local Chrome is unavailable; published-head CI and independent Claude review remain pending at this entry. Not merged or deployed.
+- No investor messages sent or scheduled, paying users, or customer repeat-use validation. Vargas invitation is prepared; this feature is a product hypothesis, not evidence of demand.
