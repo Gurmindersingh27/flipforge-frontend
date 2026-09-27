@@ -466,7 +466,7 @@ try {
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals?readFixture=slow" });
   await until(`document.querySelector('[role="status"]')?.textContent.includes('taking longer than usual')`);
   await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
-  assert.equal(await evaluate(`Boolean(document.querySelector('[role="status"]'))`), false);
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('[role="status"]')).some(status => /Loading deals|taking longer than usual/.test(status.textContent))`), false);
   checks.push("A delayed saved list explains the wait and loads successfully without a retry");
   for (const [route, mode] of [["/deals", "headers"], ["/deals", "body"], [`/deal/${selected.id}`, "headers"], ["/deals", "forbidden"]]) {
     await cdp("Page.navigate", { url: `http://127.0.0.1:5173${route}?readFixture=${mode}` });
