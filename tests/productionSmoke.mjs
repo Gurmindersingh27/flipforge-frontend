@@ -44,6 +44,16 @@ try {
   const html = await (await request(`${frontend}/`)).text();
   const paths = assets(html);
   assert.ok(paths.some(p => p.endsWith('.js')) && paths.some(p => p.endsWith('.css')), 'Expected Vite JS/CSS assets');
+  // Direct requests exercise hosting rewrites, not Vite's local SPA fallback.
+  // These load only the public shell, never a signed-in saved-deal record.
+  for (const route of ['/deals', '/deal/1']) {
+    const response = await request(`${frontend}${route}`);
+    assert.ok(response.headers.get('content-type')?.includes('text/html'), `${route}: expected HTML`);
+    const routeHtml = await response.text();
+    assert.ok(routeHtml.includes('<div id="root"></div>'), `${route}: missing app root`);
+    assert.deepEqual(assets(routeHtml), paths, `${route}: different app assets`);
+    check('Direct saved-deal route serves the app shell', { route });
+  }
   const deployed = new Map(await Promise.all(paths.map(async path => [path, Buffer.from(await (await request(frontend + path)).arrayBuffer())])));
   const javascript = [...deployed].filter(([p]) => p.endsWith('.js')).map(([, bytes]) => bytes.toString()).join('\n');
   assert.ok(javascript.includes(backend), 'Production bundle must target the expected API');

@@ -49,40 +49,65 @@ async function fetchWithTimeout(
   }
 }
 
-// OLD — keep exactly as-is
+// First requests can include service startup. Keep the deadline active while
+// consuming the response body, and never replay requests automatically.
+async function withStartupDeadline<T>(
+  request: (signal: AbortSignal) => Promise<T>,
+  timeoutMessage: string
+): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const result = await request(controller.signal);
+    if (controller.signal.aborted) throw new Error(timeoutMessage);
+    return result;
+  } catch (error: unknown) {
+    if (controller.signal.aborted) throw new Error(timeoutMessage);
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function analyzeDeal(
   payload: AnalyzeRequest
 ): Promise<AnalyzeResponse> {
-  const res = await fetchWithTimeout(`${API_BASE_URL}/api/analyze`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  return withStartupDeadline(async (signal) => {
+    const res = await fetch(`${API_BASE_URL}/api/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`API error ${res.status}: ${text}`);
+    }
 
-  return res.json();
+    return await res.json();
+  }, "Analysis took too long. Your inputs are still here. Try generating the memo again.");
 }
 
 // NEW — Draft from URL
 export async function draftFromUrl(url: string): Promise<DraftDeal> {
-  const res = await fetchWithTimeout(`${API_BASE_URL}/api/draft-from-url`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
-  });
+  return withStartupDeadline(async (signal) => {
+    const res = await fetch(`${API_BASE_URL}/api/draft-from-url`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+      signal,
+    });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Draft API error ${res.status}: ${text}`);
-  }
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Draft API error ${res.status}: ${text}`);
+    }
 
-  // backend wraps { draft: DraftDeal }
-  const data: DraftFromUrlResponse = await res.json();
-  return data.draft;
+    // backend wraps { draft: DraftDeal }
+    const data: DraftFromUrlResponse = await res.json();
+    return data.draft;
+  }, "Fetching the draft took too long. Try Fetch Draft again or enter the numbers manually.");
 }
 
 // NEW — Finalize + Analyze (handles 422 missing_fields)
@@ -92,27 +117,33 @@ export async function finalizeAndAnalyze(
   | { ok: true; result: AnalyzeResponse }
   | { ok: false; missing_fields: string[] }
 > {
-  const res = await fetchWithTimeout(`${API_BASE_URL}/api/finalize-and-analyze`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(draft),
-  });
+  return withStartupDeadline(async (signal) => {
+    const res = await fetch(`${API_BASE_URL}/api/finalize-and-analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft),
+      signal,
+    });
 
-  const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch((error: unknown) => {
+      if (signal.aborted || res.ok) throw error;
+      return {};
+    });
 
-  if (res.status === 422) {
-    const missing =
-      (data?.missing_fields as string[] | undefined) ??
-      (data?.detail?.missing_fields as string[] | undefined) ??
-      [];
-    return { ok: false, missing_fields: Array.isArray(missing) ? missing : [] };
-  }
+    if (res.status === 422) {
+      const missing =
+        (data?.missing_fields as string[] | undefined) ??
+        (data?.detail?.missing_fields as string[] | undefined) ??
+        [];
+      return { ok: false as const, missing_fields: Array.isArray(missing) ? missing : [] };
+    }
 
-  if (!res.ok) {
-    throw new Error(`Finalize API error ${res.status}: ${JSON.stringify(data)}`);
-  }
+    if (!res.ok) {
+      throw new Error(`Finalize API error ${res.status}: ${JSON.stringify(data)}`);
+    }
 
-  return { ok: true, result: data as AnalyzeResponse };
+    return { ok: true as const, result: data as AnalyzeResponse };
+  }, "Analysis took too long. Your inputs are still here. Try generating the memo again.");
 }
 
 /**
@@ -178,25 +209,49 @@ export async function generateNegotiationScript(
 // Obtain via: const { getToken } = useAuth(); const token = await getToken();
 // ---------------------------------------------------------------------------
 
+export class UnconfirmedSaveError extends Error {
+  constructor() {
+    super("Save confirmation was not received. This deal may already be saved. Check Saved Deals before creating another version.");
+    this.name = "UnconfirmedSaveError";
+  }
+}
+
 export async function saveDeal(
   payload: SaveDealRequest,
   token: string
 ): Promise<SavedDeal> {
-  const res = await fetchWithTimeout(`${API_BASE_URL}/api/deals/save`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Save deal error ${res.status}: ${text || "(no body)"}`);
+  let rejectedStatus: number | null = null;
+  let rejectionBody = "";
+  try {
+    return await withStartupDeadline(async (signal) => {
+      const res = await fetch(`${API_BASE_URL}/api/deals/save`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+        signal,
+      });
+      if (!res.ok) {
+        // A client rejection is known not to be a successful save. A server
+        // failure or lost response cannot establish whether the write committed.
+        if (res.status >= 400 && res.status < 500) rejectedStatus = res.status;
+        rejectionBody = await res.text();
+        throw new Error("Save rejected");
+      }
+      const saved: SavedDeal = await res.json();
+      if (!saved || !Number.isInteger(saved.id) || saved.id <= 0) {
+        throw new UnconfirmedSaveError();
+      }
+      return saved;
+    }, "Save confirmation took too long.");
+  } catch {
+    if (rejectedStatus !== null) {
+      throw new Error(`Save deal error ${rejectedStatus}: ${rejectionBody || "(no body)"}`);
+    }
+    throw new UnconfirmedSaveError();
   }
-
-  return res.json();
 }
 
 // A first read may include service startup. Bound the whole response, including
