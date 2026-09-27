@@ -1145,3 +1145,10 @@ Frontend PR #62 contains the public checker, closeout record and this improvemen
 - Claude approved PR #68 at `b82030ee4fbe1b3844890e1cd780da320c4f1c2f`, with a nonblocking recovery concern: navigating to Saved Deals could discard the unsaved analyzer form.
 - The unconfirmed-save link now opens Saved Deals in a separate tab with `noopener noreferrer`, explicitly labels that behavior, and tells users to return and regenerate the memo before saving if their deal is absent. No request, save, calculation, snapshot or ownership logic changed.
 - Updated the existing committed-save browser check to open the new tab, find the saved record, return to the original tab and verify its URL, rehab input and unconfirmed memo remain intact. Validation and independent review of the new head are pending; the prior approval does not cover this follow-up.
+
+## Direct-route release blocker - September 27, 2026
+
+- Claude approved the code at `8b0c7f3ec589d40df9013e7cb1003f539f122b6b` subject to verifying direct `/deals` navigation on Vercel. Both frontend CI jobs passed at that head (run `36335099308`), including new-tab preservation.
+- Direct unauthenticated GET to production `/deals` returned HTTP 404 with Vercel `NOT_FOUND` on September 27 at 17:11 UTC. The prior 13-check release verification did not cover direct SPA routes. PR #68 is held, not merged.
+- Added the SPA fallback rewrite from Vercel's official Vite documentation in `vercel.json`. The public release checker now requires `/deals` and `/deal/1` to return the HTML app shell with matching asset references. These requests do not authenticate or read saved records.
+- The production checker is expected to fail against the old production deployment until the rewrite is reviewed and deployed. Local builds and Vite browser tests cannot establish Vercel rewrite behavior. Preview/live route verification and independent review of this new commit remain required; no production routing fix is claimed yet.
