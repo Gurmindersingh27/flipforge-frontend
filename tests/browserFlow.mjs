@@ -411,8 +411,9 @@ try {
   assert.ok(await evaluate(`(${inputByAria(`Compare saved version ${first.id}`)}).checked`));
   assert.equal(browserApiRequests.length, requestsBeforeComparison, "Comparison must not issue API requests");
   assert.deepEqual(await api("/api/deals"), recordsBeforeList);
+  const comparisonDocumentTime = await evaluate("performance.timeOrigin");
   await cdp("Page.reload");
-  await until(`Boolean(${inputByAria(`Compare saved version ${first.id}`)})`);
+  await until(`performance.timeOrigin !== ${comparisonDocumentTime} && Boolean(${inputByAria(`Compare saved version ${first.id}`)})`);
   assert.equal(await evaluate(`(${inputByAria(`Compare saved version ${first.id}`)}).checked`), false);
   checks.push("Saved-deal comparison shows exact saved economics, flags different assumptions, limits selection to three, supports keyboard and mobile, clears on reload, and never requests or writes data");
   const selectedRow = `(${inputByAria(`Create revision from version ${selected.id}`)}).closest('tr')`;
