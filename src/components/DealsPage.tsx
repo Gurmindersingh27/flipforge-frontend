@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth, SignedIn, SignedOut, SignInButton } from "@clerk/clerk-react";
 import { getDeals } from "../lib/api";
 import type { SavedDeal } from "../lib/types";
+import SavedDealComparison from "./SavedDealComparison";
 
 function fmt(n: unknown, prefix = "$"): string {
   if (n == null || typeof n !== "number") return "—";
@@ -39,6 +40,15 @@ function DealsList() {
   const [error, setError] = useState<string>("");
   const [slow, setSlow] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const selectedDeals = selectedIds.flatMap(id => {
+    const deal = deals.find(candidate => candidate.id === id);
+    return deal ? [deal] : [];
+  });
+
+  function toggleComparison(id: number) {
+    setSelectedIds(ids => ids.includes(id) ? ids.filter(value => value !== id) : ids.length < 3 ? [...ids, id] : ids);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -103,10 +113,20 @@ function DealsList() {
   }
 
   return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-1">
+        <div>
+          <p id="compare-deals-help" className="text-sm text-white/80">Select two or three saved versions to compare.</p>
+          <p role="status" className="mt-1 text-xs text-white/60">{selectedDeals.length} of 3 selected{selectedDeals.length === 3 ? ". Uncheck one to choose another." : ""}</p>
+        </div>
+        {selectedIds.length > 0 && <button type="button" onClick={() => setSelectedIds([])} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white hover:bg-white/10">Clear comparison</button>}
+      </div>
+      {selectedDeals.length >= 2 && <SavedDealComparison deals={selectedDeals} />}
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-white/50">
+            <th scope="col" className="py-3 pr-4">Compare</th>
             <th className="py-3 pr-4">Deal / version</th>
             <th className="py-3 pr-4">Est. profit</th>
             <th className="py-3 pr-4">Annualized ROI</th>
@@ -132,6 +152,9 @@ function DealsList() {
                 key={deal.id}
                 className="border-b border-white/5 hover:bg-white/5 transition-colors"
               >
+                <td className="py-3 pr-4">
+                  <input type="checkbox" aria-label={`Compare saved version ${deal.id}`} aria-describedby="compare-deals-help" checked={selectedIds.includes(deal.id)} disabled={selectedIds.length >= 3 && !selectedIds.includes(deal.id)} onChange={() => toggleComparison(deal.id)} className="h-5 w-5 accent-amber-300 disabled:opacity-40" />
+                </td>
                 <td className="py-3 pr-4 text-white/90 min-w-[180px] max-w-[240px]">
                   <div className="truncate" title={address || undefined}>
                     {address || `Untitled deal #${deal.id}`}
@@ -188,6 +211,7 @@ function DealsList() {
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
