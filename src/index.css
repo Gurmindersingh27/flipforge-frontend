@@ -40,3 +40,35 @@ h1 {
   font-size: 3.2em;
   line-height: 1.1;
 }
+
+
+/* Shared surfaces for the sample, analyzer and investor memo. */
+:root {
+  --ff-panel: #171a20;
+  --ff-raised: #20252e;
+  --ff-heading: #f3f0e8;
+  --ff-muted: #c1c7d0;
+}
+
+.ff-panel {
+  background-color: var(--ff-panel);
+  border: 1px solid rgb(255 255 255 / 0.07);
+}
+
+.ff-inset {
+  background-color: var(--ff-raised);
+}
+
+.ff-heading { color: var(--ff-heading); }
+.ff-kicker { color: var(--ff-muted); }
+
+.ff-step {
+  background-color: var(--ff-raised);
+  color: var(--ff-muted);
+}
+
+.ff-warning {
+  background-color: #302a20;
+  border-left: 3px solid #aa8748;
+  color: #e4cfa2;
+}

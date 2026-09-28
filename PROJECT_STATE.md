@@ -6,7 +6,7 @@
 ## Last Updated
 2026-09-27
 
-Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Frontend main is `811b1aa7b05b6a05659be3b3478b54f66a7d1f21` (#69); backend main is `14a7dcedbe4ef2c914ea786122bdff88a2a5e35f` (#21). Saved-deal comparison is live. The scoped public-sample visual and comparison-formatting changes below are branch work, pending independent review and release.
+Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Frontend main is `811b1aa7b05b6a05659be3b3478b54f66a7d1f21` (#69); backend main is `14a7dcedbe4ef2c914ea786122bdff88a2a5e35f` (#21). Saved-deal comparison is live. PR #70 is pending corrected-head review at `d385836515ef109104053d35d16ad08275adcadd`. The visual hierarchy pass below is a separate dependent branch, pending review and release.
 
 ---
 
@@ -1179,3 +1179,11 @@ Frontend PR #62 contains the public checker, closeout record and this improvemen
 - Claude approved `ff67eb5a9e0a34f458c8a54d8845e5c117064a2c`, with a recommended first-view correction: identical baseline bars hide the impact until a visitor clicks. That head passed CI run `36364779129`, including all 27 reported browser checks. Vercel preview built successfully but required sign-in for visual inspection; no sign-in was attempted.
 - The sample now starts on A higher rehab quote, showing the original $155,600 and selected $139,000 against the $150,000 purchase marker immediately. Browser regression checks both first-load and reload defaults, then uses the keyboard to select the original estimate. Sample figures, chart scale, API and saved data are unchanged.
 - The corrected head requires fresh CI and independent review before merge. User explicitly wants to continue building; a separate scoped visual design PR may follow, without conditioning work on outreach.
+
+
+## September 27, 2026 — restrained accents and simplified panels
+
+- User explicitly authorized continuing with the design work. Branch `codex/visual-hierarchy` is based on corrected PR #70 head `d385836515ef109104053d35d16ad08275adcadd`; #70 is not merged. Its corrected head passed both CI jobs in run `36365267925`. Review and merge #70 before this dependent change.
+- Scope: presentation in App, AnalysisResult, SampleDealDemo, WorkflowRail, InvestorMemoPreview and shared index.css styles. Neutral section labels and static step markers; warm-white hero/offer emphasis; charcoal main/raised surfaces; fewer nested frames around inputs and memo assumptions; a muted amber sample warning with an explicit Review purchase price heading. Gold actions, selected sample state, focus indicators and existing semantic status colors are retained.
+- Existing visual workflow remains presentational, not a guided onboarding flow. The memo's five-zone hierarchy, calculations, handlers, requests, inputs, sample presets, snapshots, saved data, ownership, schema and dependencies are unchanged. No new animation, decorative illustration or global selector override is added.
+- Local 74 tests and production build pass. Focused component lint passes; the existing nine global lint errors and CSS import warning remain. Browser CI is required on the published design head. Local Vite starts, but the cloud browser cannot access its loopback address (ERR_BLOCKED_BY_CLIENT). The Vercel preview requires sign-in. No visual inspection or real-account authentication is claimed; CI screenshots and independent review remain necessary.
