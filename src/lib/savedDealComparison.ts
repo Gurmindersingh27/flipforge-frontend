@@ -39,7 +39,7 @@ function valueFor(deal: SavedDeal, metric: Metric): number | string | null {
 function display(value: number | string | null, format: Format): string {
   if (value === null) return "Not recorded";
   if (typeof value === "string") return value;
-  if (format === "money") return value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+  if (format === "money") return value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 });
   if (format === "percent") return `${(value * 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
   return `${value.toLocaleString("en-US", { maximumFractionDigits: 2 })} months`;
 }

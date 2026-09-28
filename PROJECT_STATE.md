@@ -6,7 +6,7 @@
 ## Last Updated
 2026-09-27
 
-Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Frontend main is `6b000a820e907781d7cf35da0cfa48c8720c2a72` (#68); backend main is `14a7dcedbe4ef2c914ea786122bdff88a2a5e35f` (#21). Saved-deal comparison is new branch work, pending review and release.
+Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Frontend main is `811b1aa7b05b6a05659be3b3478b54f66a7d1f21` (#69); backend main is `14a7dcedbe4ef2c914ea786122bdff88a2a5e35f` (#21). Saved-deal comparison is live. The scoped public-sample visual and comparison-formatting changes below are branch work, pending independent review and release.
 
 ---
 
@@ -1163,3 +1163,12 @@ Frontend PR #62 contains the public checker, closeout record and this improvemen
 - Seven new unit cases cover saved economics/order/immutability, missing legacy inputs, all six assumption differences, differences below display precision, malformed/nonfinite data, zero/negative/cents, and identity fallback. All 74 unit tests pass; production build passes with the existing CSS import warning; targeted lint and browser-script syntax pass. React review: pure derivation, event-driven selection, native labeled checkboxes, live selection count, keyboard-focusable scroll region, column/row headers; no effect-derived comparison state or extra fetching.
 - Browser regression added to the existing isolated Chrome/API/SQLite workflow for exact saved figures, mismatched holding periods, two/three selection and cap, removing/clearing, keyboard access, mobile containment, reload reset, and no additional requests/writes. Local Chrome is unavailable; published-head CI and independent Claude review remain pending at this entry. Not merged or deployed.
 - No investor messages sent or scheduled, paying users, or customer repeat-use validation. Vargas invitation is prepared; this feature is a product hypothesis, not evidence of demand.
+
+
+## September 27, 2026 — sample offer visual and focused presentation changes
+
+- PR #69 was independently approved at `4f6416915ca7d9a796058260d4fbb007eb3832b2`, merged as `811b1aa7b05b6a05659be3b3478b54f66a7d1f21`, and deployed. All 15 public production checks passed; exact JS/CSS bytes and direct SPA routes matched. CI run `36343597697` passed both jobs. These are separate from signed-in production QA, which remains pending.
+- New branch `codex/sample-offer-visual`, based on that main, implements only three requested improvements: two labeled offer bars with purchase-price markers in the public fictional sample; a hero-level Analyze your own deal button using the existing Clerk signup modal action; and whole-dollar formatting in saved comparison while retaining two decimal places for fractional dollar values.
+- The chart reads existing preset offers, keeps an unchanged zero-based scale across all three scenarios, and prints exact currency values plus a labeled purchase-price legend. Decorative bars are hidden from assistive technology; the existing live result region still announces scenario results. No new calculation policy, palette/panel redesign or animation is introduced.
+- Local validation: 74 unit tests and production build pass; SampleDealDemo and saved comparison helper lint pass; browser-script syntax passes. Existing global lint errors and CSS import ordering warning remain. Browser assertions cover fixed rendered proportions, exact labels/markers, hero CTA placement/focus, mobile containment and the existing no-API/no-write sample guarantee. The isolated fixture does not exercise real Clerk signup. Published-head CI and independent Claude review are required before merge.
+- No backend, API, schema, analysis math, sample preset, save/snapshot, ownership, dependency, storage, region or provider changes. Manual snapshot and isolated restore are already complete as recorded above. Outreach remains unsent and unscheduled; no investor repeat use or paying traction is claimed.
