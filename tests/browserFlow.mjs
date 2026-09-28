@@ -45,7 +45,15 @@ async function evaluate(expression) {
   return result.result.value;
 }
 async function until(expression) {
-  for (let i = 0; i < 80; i++) { if (await evaluate(expression)) return; await pause(200); }
+  for (let i = 0; i < 80; i++) {
+    try { if (await evaluate(expression)) return; }
+    catch (error) {
+      // A read poll can overlap an intentional reload. Keep the same bounded
+      // wait, but never replay actions or suppress application/assertion errors.
+      if (!(error instanceof Error) || error.message !== JSON.stringify({ code: -32000, message: "Inspected target navigated or closed" })) throw error;
+    }
+    await pause(200);
+  }
   throw new Error(`UI condition timed out: ${expression}`);
 }
 const byText = (tag, text) => `Array.from(document.querySelectorAll(${JSON.stringify(tag)})).find(e=>e.textContent.trim()===${JSON.stringify(text)})`;
