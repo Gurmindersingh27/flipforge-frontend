@@ -2,9 +2,12 @@ import { useState } from "react";
 import { SAMPLE_SCENARIOS } from "../lib/sampleDeal";
 
 const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+// One zero-based scale for every preset, with room beyond the purchase marker.
+const offerScale = Math.ceil(Math.max(...SAMPLE_SCENARIOS.map(option =>
+  Math.max(option.result.max_safe_offer, option.input.purchase_price))) * 1.1 / 10000) * 10000;
 
 export default function SampleDealDemo() {
-  const [selected, setSelected] = useState(0);
+  const [selected, setSelected] = useState(1);
   const baseline = SAMPLE_SCENARIOS[0];
   const scenario = SAMPLE_SCENARIOS[selected];
   const offerDrop = baseline.result.max_safe_offer - scenario.result.max_safe_offer;
@@ -36,6 +39,31 @@ export default function SampleDealDemo() {
             </button>
           ))}
           <p className="px-1 text-xs leading-relaxed text-slate-400">Three fixed examples. Nothing here is saved or added to your deals.</p>
+          <figure aria-labelledby="sample-offer-caption" className="pt-5">
+            <figcaption id="sample-offer-caption" className="text-sm font-semibold text-white">Modeled offer comparison</figcaption>
+            <p className="mt-2 flex items-center gap-2 text-xs text-slate-300">
+              <span aria-hidden="true" className="h-4 border-l-2 border-dashed border-white" />
+              Dashed marker: {dollars.format(scenario.input.purchase_price)} purchase price
+            </p>
+            <div className="mt-4 space-y-4">
+              {[baseline, scenario].map((option, index) => (
+                <div key={index} data-sample-offer-row={index === 0 ? "baseline" : "selected"}>
+                  <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
+                    <span className="text-slate-300">{index === 0 ? "Original estimate" : `Selected: ${option.label}`}</span>
+                    <span className="font-semibold tabular-nums text-white">{dollars.format(option.result.max_safe_offer)}</span>
+                  </div>
+                  <div aria-hidden="true" className="relative h-3 rounded-sm bg-white/10">
+                    <div data-sample-offer-bar className={`h-full rounded-sm ${index === 0 ? "bg-slate-300" : "bg-amber-300"}`}
+                      style={{ width: `${option.result.max_safe_offer / offerScale * 100}%` }} />
+                    <span data-sample-purchase-marker className="absolute -top-1 h-5 border-l-2 border-dashed border-white"
+                      style={{ left: `${scenario.input.purchase_price / offerScale * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 flex justify-between text-xs tabular-nums text-slate-400"><span>$0</span><span>{dollars.format(offerScale)}</span></p>
+            <p className="mt-1 text-xs text-slate-400">Both bars use the same scale.</p>
+          </figure>
         </div>
         <div id="sample-deal-results" aria-live="polite" aria-atomic="true" className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-5">
           <h3 className="text-sm font-medium text-slate-300">{scenario.label}</h3>

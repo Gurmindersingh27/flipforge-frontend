@@ -1546,6 +1546,11 @@ function AnalyzerPage() {
               Know what to offer.{" "}<span className="text-amber-400">See what changes it.</span>
             </h1>
             <p className="mt-4 text-base leading-relaxed text-slate-300">See how a bigger rehab bill or a longer project changes your numbers. Try the sample below. No account needed.</p>
+            <div className="mt-6">
+              <SignUpButton mode="modal">
+                <button type="button" data-hero-analyze className="rounded-lg bg-amber-400 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-300 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-300">Analyze your own deal</button>
+              </SignUpButton>
+            </div>
           </div>
           <SampleDealDemo />
           <div className="text-center">

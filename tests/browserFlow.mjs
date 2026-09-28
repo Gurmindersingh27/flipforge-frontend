@@ -114,8 +114,13 @@ try {
   const beforeSample = await api("/api/deals");
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/?fixtureSignedOut=1" });
   await until(`Boolean(document.querySelector('section[aria-label="Sample deal"]'))`);
+  assert.ok(await evaluate(`(()=>{const button=document.querySelector('[data-hero-analyze]');const sample=document.querySelector('section[aria-label="Sample deal"]');return button.textContent==='Analyze your own deal' && button.getBoundingClientRect().bottom < sample.getBoundingClientRect().top && button.getBoundingClientRect().bottom < innerHeight;})()`));
+  await evaluate(`document.querySelector('[data-hero-analyze]').focus()`);
+  assert.ok(await evaluate(`document.activeElement.matches('[data-hero-analyze]')`));
   const money = value => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
   const metric = key => `document.querySelector('[data-sample-metric="${key}"]')?.textContent`;
+  assert.equal(await evaluate(metric("max_safe_offer")), "$139,000");
+  assert.equal(await evaluate(`(${inputByAria(SAMPLE_SCENARIOS[1].label)}).getAttribute('aria-pressed')`), "true");
   for (const scenario of SAMPLE_SCENARIOS) {
     const response = await fetch("http://127.0.0.1:8000/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(scenario.input) });
     assert.equal(response.status, 200);
@@ -125,9 +130,21 @@ try {
     await until(`${metric("max_safe_offer")} === ${JSON.stringify(money(canonical.max_safe_offer))}`);
     assert.equal(await evaluate(metric("net_profit")), money(canonical.net_profit));
     assert.equal(await evaluate(`(${inputByAria(scenario.label)}).getAttribute('aria-pressed')`), "true");
+    const offerChart = await evaluate(`(()=>{const figure=document.querySelector('figure[aria-labelledby="sample-offer-caption"]');return {caption:document.getElementById(figure.getAttribute('aria-labelledby')).textContent,text:figure.textContent,rows:Array.from(figure.querySelectorAll('[data-sample-offer-row]')).map(row=>{const bar=row.querySelector('[data-sample-offer-bar]');const marker=row.querySelector('[data-sample-purchase-marker]');return {text:row.textContent,width:bar.getBoundingClientRect().width / bar.parentElement.getBoundingClientRect().width,marker:parseFloat(marker.style.left),hidden:bar.parentElement.getAttribute('aria-hidden')};})};})()`);
+    assert.equal(offerChart.caption, "Modeled offer comparison");
+    assert.ok(offerChart.text.includes(`Dashed marker: ${money(scenario.input.purchase_price)} purchase price`));
+    assert.ok(offerChart.rows[0].text.includes(money(SAMPLE_SCENARIOS[0].result.max_safe_offer)));
+    assert.ok(offerChart.rows[1].text.includes(`Selected: ${scenario.label}`));
+    assert.ok(offerChart.rows[1].text.includes(money(canonical.max_safe_offer)));
+    for (const [index, row] of offerChart.rows.entries()) {
+      const offer = index === 0 ? SAMPLE_SCENARIOS[0].result.max_safe_offer : canonical.max_safe_offer;
+      assert.ok(Math.abs(row.width - offer / 180000) < 0.001, "Bar must use the fixed zero-based scale");
+      assert.ok(Math.abs(row.marker - scenario.input.purchase_price / 180000 * 100) < 0.001);
+      assert.equal(row.hidden, "true", "Text carries the chart values, decorative bars are hidden from assistive technology");
+    }
     if (scenario.id !== "estimate") assert.ok(await evaluate(`document.querySelector('#sample-deal-results').textContent.includes(${JSON.stringify(`${money(scenario.input.purchase_price - canonical.max_safe_offer)} above the modeled offer ceiling`)})`));
   }
-  checks.push("All three signed-out presets match the real API and show their offer/profit impact");
+  checks.push("All three signed-out presets match the real API; labeled offer bars share a fixed zero-based scale and purchase marker; hero CTA is visible and focusable");
   assert.equal(await evaluate(`Boolean(${byText("button", "Generate Investor Memo")})`), false);
   await click("summary", "Sample assumptions and limits");
   assert.ok(await evaluate(`document.querySelector('section[aria-label="Sample deal"] details').open`));
@@ -138,14 +155,14 @@ try {
   assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
   await screenshot("sample-mobile.png");
   await cdp("Page.reload");
-  await until(`${metric("max_safe_offer")} === '$155,600'`);
+  await until(`${metric("max_safe_offer")} === '$139,000'`);
   await cdp("Page.bringToFront");
-  await evaluate(`(${inputByAria(SAMPLE_SCENARIOS[1].label)}).focus()`);
-  assert.ok(await evaluate(`document.activeElement === (${inputByAria(SAMPLE_SCENARIOS[1].label)})`));
+  await evaluate(`(${inputByAria(SAMPLE_SCENARIOS[0].label)}).focus()`);
+  assert.ok(await evaluate(`document.activeElement === (${inputByAria(SAMPLE_SCENARIOS[0].label)})`));
   await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" });
   await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-  await until(`${metric("max_safe_offer")} === '$139,000'`);
-  checks.push("Sample fits mobile, resets on reload and supports keyboard selection");
+  await until(`${metric("max_safe_offer")} === '$155,600'`);
+  checks.push("Sample fits mobile, defaults and resets to the higher quote, and supports keyboard selection of the original estimate");
   assert.deepEqual(browserApiRequests, [], "Public sample must not call the backend");
   assert.deepEqual(await api("/api/deals"), beforeSample);
   checks.push("Signed-out sample makes no browser API requests or saved-record changes");
@@ -389,8 +406,8 @@ try {
   assert.equal(await evaluate(`Boolean(${comparison})`), false);
   await toggle(`Compare saved version ${second.id}`);
   await until(`Boolean(${comparison})`);
-  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-comparison-metric="net_profit"] td')).map(cell=>cell.textContent)`), ["$34,900.00", "$13,880.00"]);
-  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-comparison-metric="max_safe_offer"] td')).map(cell=>cell.textContent)`), ["$155,600.00", "$136,200.00"]);
+  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-comparison-metric="net_profit"] td')).map(cell=>cell.textContent)`), ["$34,900", "$13,880"]);
+  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-comparison-metric="max_safe_offer"] td')).map(cell=>cell.textContent)`), ["$155,600", "$136,200"]);
   assert.ok(await evaluate(`${comparison}.textContent.includes('Holding period: different')`));
   await toggle(`Compare saved version ${third.id}`);
   assert.ok(await evaluate(`(${inputByAria(`Compare saved version ${baseline.id}`)}).disabled`));

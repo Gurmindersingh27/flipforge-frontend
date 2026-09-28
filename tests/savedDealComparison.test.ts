@@ -23,8 +23,8 @@ test("comparison keeps selected order and displays saved economics without recal
   second.analysis_result.max_safe_offer = 139000;
   second.analysis_result.overall_verdict = "CONDITIONAL";
   const before = structuredClone([second, first]);
-  assert.deepEqual(row([second, first], "net_profit").cells, ["$17,135.00", "$34,900.00"]);
-  assert.deepEqual(row([second, first], "max_safe_offer").cells, ["$139,000.00", "$155,600.00"]);
+  assert.deepEqual(row([second, first], "net_profit").cells, ["$17,135", "$34,900"]);
+  assert.deepEqual(row([second, first], "max_safe_offer").cells, ["$139,000", "$155,600"]);
   assert.deepEqual(row([second, first], "overall_verdict").cells, ["CONDITIONAL", "BUY"]);
   assert.deepEqual([second, first], before);
   assert.ok(savedDealComparisonRows([first, deal(3)]).every(value => !value.warning));
@@ -69,9 +69,13 @@ test("zero and negative saved numbers remain visible and cents are not discarded
   Object.assign(zero.analysis_result, { net_profit: -1234.56, max_safe_offer: 0, annualized_roi: -0.035 });
   zero.draft_input!.annual_interest_rate = 0;
   assert.deepEqual(row([zero], "net_profit").cells, ["-$1,234.56"]);
-  assert.deepEqual(row([zero], "max_safe_offer").cells, ["$0.00"]);
+  assert.deepEqual(row([zero], "max_safe_offer").cells, ["$0"]);
   assert.deepEqual(row([zero], "annualized_roi").cells, ["-3.5%"]);
   assert.deepEqual(row([zero], "annual_interest_rate").cells, ["0%"]);
+  zero.analysis_result.net_profit = -1234;
+  assert.deepEqual(row([zero], "net_profit").cells, ["-$1,234"]);
+  zero.analysis_result.net_profit = 1234.5;
+  assert.deepEqual(row([zero], "net_profit").cells, ["$1,234.50"]);
 });
 
 test("identity uses saved address, draft fallback, then version-specific untitled label", () => {
