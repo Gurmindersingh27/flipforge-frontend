@@ -6,7 +6,7 @@
 ## Last Updated
 2026-09-27
 
-Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Frontend main is `811b1aa7b05b6a05659be3b3478b54f66a7d1f21` (#69); backend main is `14a7dcedbe4ef2c914ea786122bdff88a2a5e35f` (#21). Saved-deal comparison is live. PR #70 is pending corrected-head review at `d385836515ef109104053d35d16ad08275adcadd`. The visual hierarchy pass below is a separate dependent branch, pending review and release.
+Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Frontend main is `63bbe5c348251f11e4f0563fa5375533a4533a16` (#70); backend main is `14a7dcedbe4ef2c914ea786122bdff88a2a5e35f` (#21). Saved-deal comparison is live. PR #70 is merged after approval at `d385836515ef109104053d35d16ad08275adcadd`; deployment verification is pending at this entry. PR #71 is pending re-review after the visual corrections below.
 
 ---
 
@@ -1187,3 +1187,11 @@ Frontend PR #62 contains the public checker, closeout record and this improvemen
 - Scope: presentation in App, AnalysisResult, SampleDealDemo, WorkflowRail, InvestorMemoPreview and shared index.css styles. Neutral section labels and static step markers; warm-white hero/offer emphasis; charcoal main/raised surfaces; fewer nested frames around inputs and memo assumptions; a muted amber sample warning with an explicit Review purchase price heading. Gold actions, selected sample state, focus indicators and existing semantic status colors are retained.
 - Existing visual workflow remains presentational, not a guided onboarding flow. The memo's five-zone hierarchy, calculations, handlers, requests, inputs, sample presets, snapshots, saved data, ownership, schema and dependencies are unchanged. No new animation, decorative illustration or global selector override is added.
 - Local 74 tests and production build pass. Focused component lint passes; the existing nine global lint errors and CSS import warning remain. Browser CI is required on the published design head. Local Vite starts, but the cloud browser cannot access its loopback address (ERR_BLOCKED_BY_CLIENT). The Vercel preview requires sign-in. No visual inspection or real-account authentication is claimed; CI screenshots and independent review remain necessary.
+
+
+## September 28, 2026 — #70 merge and #71 visual review corrections
+
+- Claude approved #70 at `d385836515ef109104053d35d16ad08275adcadd`. Rechecked head/base and successful exact-head CI `36365267925`, then merged as `63bbe5c348251f11e4f0563fa5375533a4533a16`. Public production verification follows deployment; consult PR #70 for the final evidence. Backend remains `14a7dce`.
+- Claude reviewed #71 at `fa04609d67dd0ec9a675e1b0b707e6a0b24f9f1d`, rendered local desktop/mobile fixtures, and supplied screenshots. Codex recovered and visually inspected all three supplied PNGs. These are local fixtures, not signed-in production checks.
+- Corrected the unselected sample controls with a subtle border/background and clearer hover styling so they look clickable. Restored the gold accent specifically on the public headline phrase See what changes it. Quieter offer numbers, neutral section labels and the labeled muted warning remain.
+- Only two source class strings change in this follow-up: SampleDealDemo.tsx and App.tsx. No handlers, calculations, data, save/API or authentication changes. Fresh CI and exact-head re-review are required before merging #71; fa04609 approval does not cover this follow-up.

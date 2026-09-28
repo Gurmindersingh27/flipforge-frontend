@@ -1543,7 +1543,7 @@ function AnalyzerPage() {
               Risk-first deal underwriting
             </div>
             <h1 className="mt-3 font-serif-display text-3xl font-bold leading-tight ff-heading sm:text-5xl">
-              Know what to offer.{" "}<span className="ff-heading">See what changes it.</span>
+              Know what to offer.{" "}<span className="text-amber-400">See what changes it.</span>
             </h1>
             <p className="mt-4 text-base leading-relaxed text-slate-300">See how a bigger rehab bill or a longer project changes your numbers. Try the sample below. No account needed.</p>
             <div className="mt-6">

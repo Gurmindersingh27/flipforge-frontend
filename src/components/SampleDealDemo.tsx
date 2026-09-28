@@ -30,7 +30,7 @@ export default function SampleDealDemo() {
             <button key={option.id} type="button" aria-label={option.label}
               aria-pressed={selected === index} aria-controls="sample-deal-results"
               onClick={() => setSelected(index)}
-              className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-300 ${selected === index ? "border-amber-400/70 bg-amber-400/10" : "border-transparent bg-transparent hover:border-white/15 hover:bg-white/[0.04]"}`}>
+              className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-300 ${selected === index ? "border-amber-400/70 bg-amber-400/10" : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]"}`}>
               <span aria-hidden="true" className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${selected === index ? "bg-amber-400 text-slate-950" : "bg-white/10 text-slate-300"}`}>{index + 1}</span>
               <span>
                 <span className="block text-sm font-semibold text-white">{option.label}</span>
