@@ -740,18 +740,18 @@ function AnalyzerPage() {
             Hidden once a real result exists so it never implies live data.
            ========================= */}
         {!result && (
-          <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6 md:p-8">
+          <section className="ff-panel rounded-2xl p-6 md:p-8">
             <div className="grid gap-6 md:grid-cols-2 md:items-center">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+                <div className="ff-kicker text-xs font-semibold uppercase tracking-widest">
                   Risk-first deal underwriting
                 </div>
-                <h1 className="mt-3 font-serif-display text-3xl font-bold leading-tight text-white md:text-4xl">
+                <h1 className="mt-3 font-serif-display text-3xl font-bold leading-tight ff-heading md:text-4xl">
                   Upload the house.
                   <br />
                   Know the rehab.
                   <br />
-                  <span className="text-amber-400">Know the offer.</span>
+                  <span className="ff-heading">Know the offer.</span>
                 </h1>
                 <p className="mt-4 max-w-md text-sm text-white/60">
                   FlipForge stress-tests the deal and hands you the max safe
@@ -770,14 +770,14 @@ function AnalyzerPage() {
         {/* =========================
             Property — Address / URL → DraftDeal
            ========================= */}
-        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
+        <div className="ff-panel rounded-2xl p-4 sm:p-6">
 
           {/* Step label — presentational only */}
           <div className="mb-3 flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+            <span className="inline-flex h-5 w-5 items-center justify-center ff-step rounded-full text-xs font-bold">
               1
             </span>
-            <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+            <span className="ff-kicker text-xs font-semibold uppercase tracking-widest">
               Property
             </span>
           </div>
@@ -901,20 +901,20 @@ function AnalyzerPage() {
           )}
 
           {draft && (
-            <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="mt-6 border-t border-white/10 pt-6">
               {/* =========================
                   Step 2 — Photos / Rehab (promoted core product cards)
                  ========================= */}
               <div className="mb-4 flex items-center gap-2">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+                <span className="inline-flex h-5 w-5 items-center justify-center ff-step rounded-full text-xs font-bold">
                   2
                 </span>
-                <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+                <span className="ff-kicker text-xs font-semibold uppercase tracking-widest">
                   Photos / Rehab Intelligence
                 </span>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-4">
+                <div className="ff-inset rounded-xl p-4">
                   <div className="text-sm font-bold text-white">
                     Photo Rehab Analyzer
                   </div>
@@ -927,7 +927,7 @@ function AnalyzerPage() {
                     onApply={(v) => { setDraftScope(null); setDraftDpNumber("rehab_budget", v); }}
                   />
                 </div>
-                <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-4">
+                <div className="ff-inset rounded-xl p-4">
                   <div className="text-sm font-bold text-white">
                     Repair Budget Builder
                   </div>
@@ -953,10 +953,10 @@ function AnalyzerPage() {
                   Step 3 — Deal Assumptions (Deal Numbers / Financing & Holding / Investor Criteria)
                  ========================= */}
               <div className="mt-6 mb-4 flex items-center gap-2">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+                <span className="inline-flex h-5 w-5 items-center justify-center ff-step rounded-full text-xs font-bold">
                   3
                 </span>
-                <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+                <span className="ff-kicker text-xs font-semibold uppercase tracking-widest">
                   Deal Assumptions
                 </span>
               </div>
@@ -1268,10 +1268,10 @@ function AnalyzerPage() {
 
               {/* Step 4 — Generate Investor Memo */}
               <div className="mt-6 mb-3 flex items-center gap-2">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+                <span className="inline-flex h-5 w-5 items-center justify-center ff-step rounded-full text-xs font-bold">
                   4
                 </span>
-                <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+                <span className="ff-kicker text-xs font-semibold uppercase tracking-widest">
                   Generate Investor Memo
                 </span>
               </div>
@@ -1311,7 +1311,7 @@ function AnalyzerPage() {
             Legacy Manual Analyze
            ========================= */}
         {showLegacy && (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-3 hover:bg-white/[0.06] transition-colors duration-150">
+        <div className="ff-panel rounded-2xl p-4 sm:p-6">
           <div className="text-sm font-semibold text-white">Manual Entry</div>
           {manualPreviousDeal && <p className="mt-2 text-xs text-amber-200/80">The next saved analysis will be a new revision of deal #{manualPreviousDeal.id}. <a href="/" className="underline">Start a separate deal</a></p>}
           <div className="mt-1 text-xs text-white/55">
@@ -1322,15 +1322,15 @@ function AnalyzerPage() {
               Step 2 — Photos / Rehab Intelligence (promoted core product cards)
              ========================= */}
           <div className="mt-5 mb-4 flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+            <span className="inline-flex h-5 w-5 items-center justify-center ff-step rounded-full text-xs font-bold">
               2
             </span>
-            <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+            <span className="ff-kicker text-xs font-semibold uppercase tracking-widest">
               Photos / Rehab Intelligence
             </span>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-4">
+            <div className="ff-inset rounded-xl p-4">
               <div className="text-sm font-bold text-white">
                 Photo Rehab Analyzer
               </div>
@@ -1341,7 +1341,7 @@ function AnalyzerPage() {
               {manualScope && <p className="mt-2 text-xs text-amber-200/80">Applying a photo estimate replaces this itemized scope with a lump-sum planning allowance.</p>}
               <PhotoRehabAnalyzer onApply={(mid) => { setManualScope(null); setRehabBudget(mid); }} />
             </div>
-            <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-4">
+            <div className="ff-inset rounded-xl p-4">
               <div className="text-sm font-bold text-white">
                 Repair Budget Builder
               </div>
@@ -1360,10 +1360,10 @@ function AnalyzerPage() {
               Step 3 — Deal Assumptions
              ========================= */}
           <div className="mt-6 mb-4 flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+            <span className="inline-flex h-5 w-5 items-center justify-center ff-step rounded-full text-xs font-bold">
               3
             </span>
-            <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+            <span className="ff-kicker text-xs font-semibold uppercase tracking-widest">
               Deal Assumptions
             </span>
           </div>
@@ -1431,10 +1431,10 @@ function AnalyzerPage() {
 
           {/* Step 4 — Generate Investor Memo */}
           <div className="mt-6 mb-3 flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+            <span className="inline-flex h-5 w-5 items-center justify-center ff-step rounded-full text-xs font-bold">
               4
             </span>
-            <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+            <span className="ff-kicker text-xs font-semibold uppercase tracking-widest">
               Generate Investor Memo
             </span>
           </div>
@@ -1465,13 +1465,13 @@ function AnalyzerPage() {
             Results
            ========================= */}
         {result && analysisSnapshot && (
-          <div className="rounded-2xl border border-amber-500/20 bg-black/40 p-3">
+          <div className="pt-3">
             <div className="mt-4">
               <div className="flex items-center gap-2 px-3">
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+                <span className="inline-flex h-5 w-5 items-center justify-center ff-step rounded-full text-xs font-bold">
                   5
                 </span>
-                <span className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+                <span className="ff-kicker text-xs font-semibold uppercase tracking-widest">
                   Investor Memo
                 </span>
               </div>
@@ -1539,10 +1539,10 @@ function AnalyzerPage() {
       <SignedOut>
         <div className="mx-auto flex max-w-5xl flex-col items-center gap-8 px-3 py-8 sm:px-6 sm:py-12">
           <div className="max-w-2xl text-center">
-            <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+            <div className="ff-kicker text-xs font-semibold uppercase tracking-widest">
               Risk-first deal underwriting
             </div>
-            <h1 className="mt-3 font-serif-display text-3xl font-bold leading-tight text-white sm:text-5xl">
+            <h1 className="mt-3 font-serif-display text-3xl font-bold leading-tight ff-heading sm:text-5xl">
               Know what to offer.{" "}<span className="text-amber-400">See what changes it.</span>
             </h1>
             <p className="mt-4 text-base leading-relaxed text-slate-300">See how a bigger rehab bill or a longer project changes your numbers. Try the sample below. No account needed.</p>

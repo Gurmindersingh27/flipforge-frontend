@@ -23,11 +23,11 @@ export default function InvestorMemoPreview({
 }) {
   return (
     <div
-      className={`rounded-2xl border border-amber-500/25 bg-black/40 p-5 ${className}`}
+      className={`ff-inset rounded-2xl p-5 ${className}`}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-bold text-white">Investor Memo Preview</div>
-        <span className="inline-flex items-center rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-300">
+        <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-300">
           Sample
         </span>
       </div>
@@ -41,7 +41,7 @@ export default function InvestorMemoPreview({
             key={row.label}
             className="flex items-baseline justify-between gap-4 border-b border-white/5 pb-2 last:border-b-0 last:pb-0"
           >
-            <span className="text-sm font-semibold text-amber-200/90">
+            <span className="ff-heading text-sm font-semibold">
               {row.label}
             </span>
             <span className="text-right text-xs text-white/60">
@@ -51,7 +51,7 @@ export default function InvestorMemoPreview({
         ))}
       </div>
 
-      <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/50">
+      <div className="mt-4 border-t border-white/10 pt-3 text-xs text-slate-400">
         Enter a property above to generate your real Investor Memo.
       </div>
     </div>

@@ -171,7 +171,7 @@ function buildOfferGapCallout(purchasePrice: number, mao: number) {
 
   if (absGap <= 5000) {
     return (
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
+      <div className="ff-warning rounded-xl p-5">
         <div className="text-[10px] uppercase tracking-widest text-amber-300/70 mb-1.5">
           Offer Gap
         </div>
@@ -417,8 +417,8 @@ export default function AnalysisResult({ result, meta }: Props) {
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-6 text-left">
       {/* ============ 1. Decision Header ============ */}
-      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6 space-y-4">
-        <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+      <section className="ff-panel rounded-2xl p-6 space-y-4">
+        <div className="ff-kicker text-xs font-semibold uppercase tracking-widest">
           Decision
         </div>
 
@@ -478,16 +478,16 @@ export default function AnalysisResult({ result, meta }: Props) {
       </section>
 
       {/* ============ 2. Offer Safety ============ */}
-      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6 space-y-5">
-        <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+      <section className="ff-panel rounded-2xl p-6 space-y-5">
+        <div className="ff-kicker text-xs font-semibold uppercase tracking-widest">
           Offer Safety
         </div>
 
-        <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 p-4">
-          <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80 mb-2">
+        <div className="py-1">
+          <div className="ff-kicker text-xs font-semibold uppercase tracking-widest mb-2">
             Max Safe Offer
           </div>
-          <div className="font-jetbrains text-5xl font-bold text-amber-300 leading-none pb-1">
+          <div className="ff-heading font-jetbrains text-4xl sm:text-5xl font-bold leading-none pb-1 break-words">
             ${result.max_safe_offer.toLocaleString()}
           </div>
           <div className="mt-2 text-xs text-white/50">
@@ -569,7 +569,7 @@ export default function AnalysisResult({ result, meta }: Props) {
           </div>
         )}
 
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="border-t border-white/10 pt-5">
           <div className="text-[10px] font-semibold uppercase tracking-widest text-white/50 mb-3">
             Assumptions Used
           </div>
@@ -642,8 +642,8 @@ export default function AnalysisResult({ result, meta }: Props) {
       </section>
 
       {/* ============ 3. Downside & Stress ============ */}
-      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6 space-y-4">
-        <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+      <section className="ff-panel rounded-2xl p-6 space-y-4">
+        <div className="ff-kicker text-xs font-semibold uppercase tracking-widest">
           Downside &amp; Stress
         </div>
 
@@ -724,12 +724,12 @@ export default function AnalysisResult({ result, meta }: Props) {
       <InvestorActionPlan result={result} purchasePrice={purchasePriceMeta} />
 
       {/* ============ 5. Supporting Detail ============ */}
-      <div className="text-xs font-semibold uppercase tracking-widest text-amber-300/60 pt-2">
+      <div className="ff-kicker text-xs font-semibold uppercase tracking-widest pt-2">
         Supporting Detail
       </div>
 
       {/* Metrics grid */}
-      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6">
+      <section className="ff-panel rounded-2xl p-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-4">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
@@ -806,7 +806,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       {/* Risk Flags card */}
       {((result.typed_flags?.length ?? 0) > 0 ||
         (result.risk_flags?.length ?? 0) > 0) && (
-        <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6">
+        <section className="ff-panel rounded-2xl p-6">
           <h3 className="font-serif-display text-base font-semibold text-white mb-3">
             Risk Flags
           </h3>
@@ -827,7 +827,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       )}
 
       {/* Narrative card — Why this verdict (notes + stress context) */}
-      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6">
+      <section className="ff-panel rounded-2xl p-6">
         <h3 className="font-serif-display text-base font-semibold text-white mb-2">
           Why this verdict
         </h3>
@@ -839,7 +839,7 @@ export default function AnalysisResult({ result, meta }: Props) {
       </section>
 
       {/* Actions card — Integrity Gate copy + grouped buttons */}
-      <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6 space-y-4">
+      <section className="ff-panel rounded-2xl p-6 space-y-4">
         <div>
           <div className="text-sm font-semibold text-white">Integrity Gate</div>
           <div className="mt-1 text-xs text-white/60">
@@ -902,7 +902,7 @@ export default function AnalysisResult({ result, meta }: Props) {
         <div className="text-xs text-red-400 px-1">{scriptError}</div>
       )}
       {script && (
-        <section className="rounded-2xl border border-amber-500/20 bg-black/40 p-6">
+        <section className="ff-panel rounded-2xl p-6">
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm font-semibold text-white">
               Negotiation Script

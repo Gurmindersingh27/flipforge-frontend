@@ -20,9 +20,9 @@ const STEPS: RailStep[] = [
 export default function WorkflowRail({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`rounded-2xl border border-amber-500/20 bg-black/40 px-4 py-4 ${className}`}
+      className={`ff-panel rounded-2xl px-4 py-4 ${className}`}
     >
-      <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-amber-300/80">
+      <div className="mb-3 ff-kicker text-xs font-semibold uppercase tracking-widest">
         Underwriting Flow
       </div>
       <ol className="flex items-stretch gap-2 overflow-x-auto">
@@ -33,7 +33,7 @@ export default function WorkflowRail({ className = "" }: { className?: string })
           >
             <div className="flex flex-col">
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-amber-400/40 bg-amber-400/10 text-xs font-bold text-amber-300">
+                <span className="inline-flex h-6 w-6 items-center justify-center ff-step rounded-full text-xs font-bold">
                   {i + 1}
                 </span>
                 <span className="text-sm font-semibold text-white">
@@ -47,7 +47,7 @@ export default function WorkflowRail({ className = "" }: { className?: string })
             {i < STEPS.length - 1 && (
               <span
                 aria-hidden="true"
-                className="mx-1 hidden h-px flex-1 bg-gradient-to-r from-amber-400/40 to-transparent md:block"
+                className="mx-1 hidden h-px flex-1 bg-white/10 md:block"
               />
             )}
           </li>
