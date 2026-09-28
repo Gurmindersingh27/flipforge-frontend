@@ -119,6 +119,8 @@ try {
   assert.ok(await evaluate(`document.activeElement.matches('[data-hero-analyze]')`));
   const money = value => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
   const metric = key => `document.querySelector('[data-sample-metric="${key}"]')?.textContent`;
+  assert.equal(await evaluate(metric("max_safe_offer")), "$139,000");
+  assert.equal(await evaluate(`(${inputByAria(SAMPLE_SCENARIOS[1].label)}).getAttribute('aria-pressed')`), "true");
   for (const scenario of SAMPLE_SCENARIOS) {
     const response = await fetch("http://127.0.0.1:8000/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(scenario.input) });
     assert.equal(response.status, 200);
@@ -153,14 +155,14 @@ try {
   assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
   await screenshot("sample-mobile.png");
   await cdp("Page.reload");
-  await until(`${metric("max_safe_offer")} === '$155,600'`);
+  await until(`${metric("max_safe_offer")} === '$139,000'`);
   await cdp("Page.bringToFront");
-  await evaluate(`(${inputByAria(SAMPLE_SCENARIOS[1].label)}).focus()`);
-  assert.ok(await evaluate(`document.activeElement === (${inputByAria(SAMPLE_SCENARIOS[1].label)})`));
+  await evaluate(`(${inputByAria(SAMPLE_SCENARIOS[0].label)}).focus()`);
+  assert.ok(await evaluate(`document.activeElement === (${inputByAria(SAMPLE_SCENARIOS[0].label)})`));
   await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" });
   await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-  await until(`${metric("max_safe_offer")} === '$139,000'`);
-  checks.push("Sample fits mobile, resets on reload and supports keyboard selection");
+  await until(`${metric("max_safe_offer")} === '$155,600'`);
+  checks.push("Sample fits mobile, defaults and resets to the higher quote, and supports keyboard selection of the original estimate");
   assert.deepEqual(browserApiRequests, [], "Public sample must not call the backend");
   assert.deepEqual(await api("/api/deals"), beforeSample);
   checks.push("Signed-out sample makes no browser API requests or saved-record changes");

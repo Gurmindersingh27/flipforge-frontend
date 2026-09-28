@@ -7,7 +7,7 @@ const offerScale = Math.ceil(Math.max(...SAMPLE_SCENARIOS.map(option =>
   Math.max(option.result.max_safe_offer, option.input.purchase_price))) * 1.1 / 10000) * 10000;
 
 export default function SampleDealDemo() {
-  const [selected, setSelected] = useState(0);
+  const [selected, setSelected] = useState(1);
   const baseline = SAMPLE_SCENARIOS[0];
   const scenario = SAMPLE_SCENARIOS[selected];
   const offerDrop = baseline.result.max_safe_offer - scenario.result.max_safe_offer;
