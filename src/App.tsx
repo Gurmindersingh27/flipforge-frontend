@@ -786,7 +786,7 @@ function AnalyzerPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               {isResumed ? (
-                <div className="text-sm font-semibold text-white">Resumed Deal</div>
+                <div className="text-sm font-semibold text-white">Create revision</div>
               ) : (
                 <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1">
                   <button
@@ -815,7 +815,7 @@ function AnalyzerPage() {
               )}
               <div className="mt-1 text-xs text-white/60">
                 {isResumed
-                  ? "Resumed from a saved deal. Review the fields and re-analyze."
+                  ? "Creating a revision from a saved version. Review the fields and re-analyze, then save a new version. The original stays unchanged."
                   : activeTab === "address"
                   ? "Enter a property address to look up data. Fill gaps. Then analyze."
                   : "Paste a listing URL. We extract what we can. Fill gaps. Then analyze."}

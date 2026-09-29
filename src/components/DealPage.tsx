@@ -39,24 +39,23 @@ function DealView({ deal, previous, comparisonError }: { deal: SavedDeal; previo
     <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
       {/* Deal summary header */}
       <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-white">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 break-words text-sm font-semibold text-white">
             {pdfMeta.property_address ?? "Saved Deal"}
           </div>
           {draft ? (
             <Link
               to="/"
               state={{ resumeDraft: draft, resumeDeal: deal }}
-              className="rounded-xl px-3 py-1.5 text-xs font-semibold border border-indigo-500/40 bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 transition-colors"
+              className="rounded-xl px-3 py-1.5 text-xs font-semibold border border-[#E8C547]/40 bg-[#202020] text-[#E8C547] hover:bg-[#292929] transition-colors"
             >
-              Resume Deal
+              Create revision
             </Link>
           ) : (
             <span
-              className="rounded-xl px-3 py-1.5 text-xs font-semibold border border-white/10 bg-white/5 text-white/30 cursor-not-allowed"
-              title="Draft data not available for this deal"
+              className="rounded-xl px-3 py-1.5 text-xs font-semibold border border-white/10 bg-white/5 text-white/60"
             >
-              Resume Deal
+              Create revision (unavailable: no saved inputs)
             </span>
           )}
         </div>
@@ -196,7 +195,7 @@ function DealLoader() {
 export default function DealPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="border-b border-white/10 bg-slate-900/60 px-6 py-3 flex items-center justify-between">
+      <div className="border-b border-white/10 bg-slate-900/60 px-6 py-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           <Link
             to="/"

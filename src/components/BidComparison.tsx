@@ -84,12 +84,12 @@ export default function BidComparison({ context, previous }: { context: SavedDea
       <h3 className="text-lg font-semibold text-white">Compare saved bids</h3>
       <button type="button" className={button} disabled={loading} onClick={loadBids}>{loading ? "Loading bids…" : loaded ? "Refresh saved bids" : "Compare bids"}</button>
     </div>
-    {baseline ? <p className="mt-2 text-sm text-white/60">Save each contractor option by resuming the same <Link className="text-amber-200 underline" to={`/deal/${baseline.id}`}>baseline #{baseline.id}</Link>. Compare two saved versions with matching property and underwriting assumptions.</p>
+    {baseline ? <p className="mt-2 text-sm text-white/60">Save each contractor option by creating a revision from the same <Link className="text-amber-200 underline" to={`/deal/${baseline.id}`}>baseline #{baseline.id}</Link>. Compare two saved versions with matching property and underwriting assumptions.</p>
       : <p className="mt-2 text-sm text-white/60">Load saved bids to identify their common baseline. This version's quoted children are checked first; otherwise a quoted version is compared with its siblings.</p>}
     {error && <p role="alert" className="mt-3 text-sm text-rose-300">{error}</p>}
     {loaded && !useCurrentBaseline && baseline?.id !== context.id && <button type="button" className={`${button} mt-3`} onClick={() => { setUseCurrentBaseline(true); setLeftId(null); setRightId(null); setConfirmedAmounts([]); }}>Start new bids from this version #{context.id}</button>}
     {loaded && !baseline && <p role="alert" className="mt-3 text-sm text-rose-300">The baseline could not be loaded. Open it before comparing retained costs.</p>}
-    {loaded && baseline && candidates.length < 2 && <p role="status" className="mt-4 text-sm text-white/70">Two saved quote versions are needed. Resume baseline #{baseline.id} for each bid, enter its scope and quote details, analyze, then save a new revision.</p>}
+    {loaded && baseline && candidates.length < 2 && <p role="status" className="mt-4 text-sm text-white/70">Two saved quote versions are needed. Create a revision from baseline #{baseline.id} for each bid, enter its scope and quote details, analyze, then save a new revision.</p>}
     {loaded && candidates.length >= 2 && <>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {([['Bid A', leftId, setLeftId], ['Bid B', rightId, setRightId]] as const).map(([label, id, setId]) => <label key={label} className="min-w-0 text-xs text-white/70">{label}
@@ -102,7 +102,7 @@ export default function BidComparison({ context, previous }: { context: SavedDea
       </div>}
       {!!review?.amountChecks.length && <fieldset aria-label="Carried allowance amount review" className="mt-4 min-w-0 rounded-xl border border-amber-400/40 p-3">
         <legend className="px-2 text-sm font-semibold text-amber-200">Check carried-over allowance amounts</legend>
-        <p className="text-xs text-white/70">These prices equal the baseline planning allowances. They may be valid quotes, but relabeling an allowance does not establish its price. Check each against the named contractor quote. If it differs, resume the bid and correct it. Confirmations apply to this comparison only and are not saved as verified quote evidence.</p>
+        <p className="text-xs text-white/70">These prices equal the baseline planning allowances. They may be valid quotes, but relabeling an allowance does not establish its price. Check each against the named contractor quote. If it differs, create a revision from the bid and correct it. Confirmations apply to this comparison only and are not saved as verified quote evidence.</p>
         <div className="mt-3 space-y-4">{review.amountChecks.map(check => <div key={check.key} className="min-w-0 text-xs text-white/80">
           <p className="break-words font-semibold">{check.label} #{check.dealId} · {check.item.category} · {money(check.amount)}</p>
           <p className="mt-1 whitespace-pre-wrap break-words">{check.item.description || "Description not recorded"}</p>

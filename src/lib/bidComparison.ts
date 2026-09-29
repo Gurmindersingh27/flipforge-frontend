@@ -116,7 +116,7 @@ export function compareBidOptions(baseline: SavedDeal, left: SavedDeal, right: S
     }
     if (label !== "Baseline" && (![deal.analysis_result.max_safe_offer, deal.analysis_result.net_profit].every(finite)
       || !verdicts.has(String(deal.analysis_result.overall_verdict)))) {
-      issues.push(`${label}: saved analysis is incomplete; resume, analyze and save a new version.`);
+      issues.push(`${label}: saved analysis is incomplete; create a revision, analyze and save a new version.`);
     }
   }
   const baseAssumptions = assumptions(baseline), leftAssumptions = assumptions(left), rightAssumptions = assumptions(right);
@@ -126,7 +126,7 @@ export function compareBidOptions(baseline: SavedDeal, left: SavedDeal, right: S
       ? [{ label: entry.label, baseline: entry.value, left: a, right: b }] : [];
   });
   if (differences.some(diff => diff.baseline === undefined)) {
-    issues.push("The baseline lacks recorded assumptions. Resume it, confirm the missing inputs, analyze and save a new baseline. Then create both bids from that new baseline; the historical record stays unchanged.");
+    issues.push("The baseline lacks recorded assumptions. Create a revision from it, confirm the missing inputs, analyze and save a new baseline. Then create both bids from that new baseline; the historical record stays unchanged.");
   } else if (differences.length) issues.push("Bid impact requires the same recorded property and non-rehab assumptions as the baseline. Resolve the differences below in a new version.");
   if (checks.some(check => !check.confirmed)) issues.push("Some quoted lines carry the same amount as a baseline planning allowance. Confirm each amount against its contractor quote below before comparing.");
   if (issues.length) return { issues, differences, amountChecks: checks, comparison: null };

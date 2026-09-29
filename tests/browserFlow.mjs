@@ -74,7 +74,7 @@ const inputByAria = label => `document.querySelector('[aria-label=${JSON.stringi
 async function toggle(label) { await evaluate(`(${inputByAria(label)}).click()`); }
 async function resumeSaved(id) {
   await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${id}` });
-  await click("a", "Resume Deal");
+  await click("a", "Create revision");
   await until(`location.pathname === '/' && Boolean(${scopeInput("Unit cost 1")}) && !(${scopeInput("Unit cost 1")}).matches(':disabled')`);
 }
 async function saveRevision(note) {
@@ -190,12 +190,12 @@ try {
   assert.equal(first.analysis_result.max_safe_offer, 155600);
   assert.equal(first.analysis_result.net_profit, 34900);
   checks.push("Manual flow saves the submitted $50K scope after editing the live scope to $67K");
-  await click("a", "View saved version →"); await until(`Boolean(${byText("a", "Resume Deal")})`);
-  await cdp("Page.reload"); await until(`Boolean(${byText("a", "Resume Deal")})`);
+  await click("a", "View saved version →"); await until(`Boolean(${byText("a", "Create revision")})`);
+  await cdp("Page.reload"); await until(`Boolean(${byText("a", "Create revision")})`);
   await until(`Boolean(${scopeInput("Unit cost 1")})`);
   assert.equal(await evaluate(`(${scopeInput("Unit cost 1")}).value`), "50000");
   checks.push("Scope persists through saved-deal reload");
-  await click("a", "Resume Deal");
+  await click("a", "Create revision");
   await until(`location.pathname === '/' && Boolean(${scopeInput("Unit cost 1")}) && !(${scopeInput("Unit cost 1")}).matches(':disabled')`);
   await scoped("Unit cost 1", "67000"); await scoped("Basis 1", "quote");
   await click("button", "Generate Investor Memo");
@@ -225,7 +225,7 @@ try {
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
   await screenshot("mobile-saved.png");
   assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
-  await click("a", "Resume Deal");
+  await click("a", "Create revision");
   await until(`location.pathname === '/' && Boolean(${scopeInput("Unit cost 1")}) && !(${scopeInput("Unit cost 1")}).matches(':disabled')`); await until(`Boolean(${scopeInput("Unit cost 1")})`);
   assert.equal(await evaluate(`(${scopeInput("Unit cost 1")}).value`), "67000");
   await screenshot("mobile-editor.png");
@@ -262,7 +262,7 @@ try {
   await click("a", "View saved version →"); await click("button", "Compare bids");
   await until(`Boolean(${byText("a", `baseline #${baseline.id}`)})`);
   assert.equal(await evaluate(`(${byText("a", `baseline #${baseline.id}`)}).getAttribute('href')`), `/deal/${baseline.id}`);
-  assert.ok(await evaluate(`document.querySelector('[aria-label="Bid comparison"]').textContent.includes('Resume baseline #${baseline.id}')`));
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Bid comparison"]').textContent.includes('Create a revision from baseline #${baseline.id}')`));
 
   await resumeSaved(baseline.id);
   await scoped("Unit cost 1", "14000");
@@ -388,7 +388,8 @@ try {
   await until(`document.body.textContent.includes('Confirm replacement of existing source / date')`);
   assert.equal(await evaluate(`(${scopeInput("Quote date 1")}).value`), "2026-09-11");
   await toggle("Confirm quote details replacement"); await click("button", "Apply quote details");
-  const selected = await saveRevision("Selected Bid B; quote date reconfirmed fixture");
+  const longRevisionNote = ("Selected Bid B; quote date reconfirmed.\nKeep the original version unchanged.\n".repeat(30)).slice(0, 2000);
+  const selected = await saveRevision(longRevisionNote);
   assert.equal(selected.parent_deal_id, bidB.id);
   assert.equal(selected.rehab_scope.items[0].quote_date, "2026-09-12");
   assert.equal(selected.analysis_result.net_profit, bidB.analysis_result.net_profit);
@@ -400,7 +401,7 @@ try {
   await click("button", "Compare bids");
   await click("button", `Start new bids from this version #${selected.id}`);
   await until(`Boolean(${byText("a", `baseline #${selected.id}`)})`);
-  assert.ok(await evaluate(`document.querySelector('[aria-label="Bid comparison"]').textContent.includes('Resume baseline #${selected.id}')`));
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Bid comparison"]').textContent.includes('Create a revision from baseline #${selected.id}')`));
   checks.push("A quoted revision can explicitly start a new baseline before it has any quoted children");
   const recordsBeforeList = await api("/api/deals");
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals" });
@@ -444,11 +445,63 @@ try {
   const selectedRow = `(${inputByAria(`Create revision from version ${selected.id}`)}).closest('tr')`;
   assert.ok(await evaluate(`(${selectedRow}).textContent.includes(${JSON.stringify(selected.revision_note)})`));
   assert.equal(await evaluate(`(${selectedRow}).querySelector('a[href="/deal/${bidB.id}"]').textContent`), `#${bidB.id}`);
-  await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-  assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
-  await screenshot("saved-deals-mobile.png");
+  assert.equal(await evaluate(`(${selectedRow}).querySelector('a[href="/deal/${bidB.id}"]').getAttribute('aria-label')`), `Open version #${bidB.id}, the version this was revised from`);
+  const noteButton = `(${selectedRow}).querySelector('button[aria-controls]')`;
+  const noteElement = `document.getElementById((${noteButton}).getAttribute('aria-controls'))`;
+  const requestsBeforeNotes = browserApiRequests.length;
+  assert.equal(selected.revision_note.length, 2000);
+  for (const width of [1440, 390]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    await until(`Boolean(${noteButton})`);
+    assert.equal(await evaluate(`(${noteButton}).getAttribute('aria-expanded')`), "false");
+    assert.equal(await evaluate(`getComputedStyle(${noteElement}).whiteSpace`), "pre-line");
+    assert.ok(await evaluate(`(${noteElement}).clientHeight <= parseFloat(getComputedStyle(${noteElement}).lineHeight) * 2 + 1`));
+    assert.equal(await evaluate(`(${inputByAria(`Create revision from version ${second.id}`)}).closest('tr').querySelector('button[aria-controls]')`), null);
+    assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
+    await screenshot(`saved-deals-${width}.png`);
+    await evaluate(`(${noteButton}).focus()`);
+    await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    await until(`(${noteButton}).getAttribute('aria-expanded') === 'true'`);
+    assert.equal(await evaluate(`(${noteElement}).textContent`), longRevisionNote);
+    assert.equal(await evaluate(`getComputedStyle(${noteElement}).whiteSpace`), "pre-line");
+    assert.ok(await evaluate(`(${noteElement}).clientHeight >= (${noteElement}).scrollHeight - 1`));
+    await screenshot(`saved-deals-expanded-${width}.png`);
+    await evaluate(`(${noteButton}).click()`);
+    await until(`(${noteButton}).getAttribute('aria-expanded') === 'false'`);
+  }
+  assert.equal(browserApiRequests.length, requestsBeforeNotes, "Note expansion must not issue API requests");
+  checks.push("A 2,000-character multiline note preserves line breaks, expands by keyboard and collapses at both widths; short notes have no toggle and parent links describe lineage");
   await evaluate(`(${inputByAria(`Open saved version ${selected.id}`)}).click()`);
   await until(`(${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
+  for (const width of [1440, 390]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    assert.ok(await evaluate(`Boolean(${byText("a", "Create revision")})`));
+    assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
+    await screenshot(`saved-deal-${width}.png`);
+  }
+  // Test-only read fixture for a legacy saved record with no draft inputs.
+  const { identifier: noDraftFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", { source: `
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+      const response = await nativeFetch(...args);
+      if (new URL(args[0], location.href).pathname === '/api/deals/${selected.id}' && response.ok) {
+        const record = await response.json();
+        return new Response(JSON.stringify({...record, draft_input: null}), {status: 200, headers: {'Content-Type': 'application/json'}});
+      }
+      return response;
+    };
+  ` });
+  await cdp("Page.reload");
+  await until(`document.body.textContent.includes('Create revision (unavailable: no saved inputs)')`);
+  for (const width of [1440, 390]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    assert.equal(await evaluate(`Boolean(${byText("a", "Create revision")})`), false);
+    assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
+    await screenshot(`saved-deal-no-inputs-${width}.png`);
+  }
+  await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: noDraftFixture });
+  checks.push("Saved details offer Create revision with inputs and a visible unavailable reason without inputs at desktop and mobile widths");
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals" });
   await until(`Boolean(${inputByAria(`Create revision from version ${selected.id}`)})`);
   await evaluate(`(${inputByAria(`Create revision from version ${selected.id}`)}).click()`);
