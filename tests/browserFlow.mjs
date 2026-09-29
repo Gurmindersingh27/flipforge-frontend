@@ -167,8 +167,8 @@ try {
   await cdp("Page.bringToFront");
   await evaluate(`(${inputByAria(SAMPLE_SCENARIOS[0].label)}).focus()`);
   assert.ok(await evaluate(`document.activeElement === (${inputByAria(SAMPLE_SCENARIOS[0].label)})`));
-  await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" });
-  await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+  await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32, text: " ", text: "\r", unmodifiedText: "\r" });
+  await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32 });
   await until(`${metric("max_safe_offer")} === '$155,600'`);
   checks.push("Sample fits mobile, defaults and resets to the higher quote, and supports keyboard selection of the original estimate");
   assert.deepEqual(browserApiRequests, [], "Public sample must not call the backend");
@@ -460,8 +460,9 @@ try {
     assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
     await screenshot(`saved-deals-${width}.png`);
     await evaluate(`(${noteButton}).focus()`);
-    await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
-    await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+    assert.ok(await evaluate(`document.activeElement === (${noteButton})`));
+    await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32, text: " " });
+    await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32 });
     await until(`(${noteButton}).getAttribute('aria-expanded') === 'true'`);
     assert.equal(await evaluate(`(${noteElement}).textContent`), longRevisionNote);
     assert.equal(await evaluate(`getComputedStyle(${noteElement}).whiteSpace`), "pre-line");
