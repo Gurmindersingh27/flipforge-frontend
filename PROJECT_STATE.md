@@ -6,7 +6,7 @@
 ## Last Updated
 2026-09-29
 
-Latest status: dated entries supersede historical pending-release descriptions. Live remotes verified: frontend main `aa29ff51ed5719c12c15e802982ed91dd469b248` (#71); backend main `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462` (#22). My Deals polish is on `codex/my-deals-polish`, pending exact-head Claude review and merge.
+Latest status: dated entries supersede historical pending-release descriptions. Live remotes verified: frontend main `aa29ff51ed5719c12c15e802982ed91dd469b248` (#71); backend main `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462` (#22). My Deals polish is PR #72 on `codex/my-deals-polish`, validated and pending exact-head Claude review and merge.
 
 ---
 
@@ -1204,7 +1204,7 @@ Frontend PR #62 contains the public checker, closeout record and this improvemen
 
 Approved seven-file scope: DealsPage, DealPage, App (copy only), BidComparison (copy only), lib/bidComparison (strings only), browserFlow and this document. Saved detail and analyzer copy now say Create revision; all bid guidance matches, while Continue with Bid B and router-state keys remain unchanged. Details wrap their header and expose the missing-input reason visibly. Parent links describe lineage. Notes preserve newlines, use two-line previews, and offer an accessible keyboard-operable toggle only when measured content overflows.
 
-Validation: 74/74 unit tests and production build pass; lint remains at 9 pre-existing errors. Browser suite adds 2,000-character multiline notes, keyboard expansion/collapse, short-note no-toggle, descriptive parent labels, no-write checks and detail views with/without draft inputs at 1440/390 px. Local Chrome launch is blocked by the workspace socket sandbox; browser execution and screenshot review are pending CI, not claimed complete. No application dependencies added.
+Validation: 74/74 unit tests and production build pass; lint remains at 9 pre-existing errors. Browser suite adds 2,000-character multiline notes, keyboard expansion/collapse, short-note no-toggle, descriptive parent labels, no-write checks and detail views with/without draft inputs at 1440/390 px. Local Chrome launch is blocked by the workspace socket sandbox, so verification ran in the existing GitHub browser CI. All 29 browser checks passed at code head `1028ebdc0b42162b2eef4429004564a18aaf2a7a` (run `36646389803`). Screenshots were downloaded and visually inspected: collapsed/expanded lists and details with/without inputs at 1440/390 px. Notes preserve line breaks and keyboard focus; unavailable copy wraps visibly. The existing table remains horizontally scrollable on mobile, with no page overflow. No application dependencies added.
 
 Frozen: AnalyzeRequest, underwriting math, snapshots, saved data, ownership, API calls, save paths, types and lineage. No production auth changes. Browser mocks remain isolated fixtures. No merge until Claude approves the exact published head.
 
