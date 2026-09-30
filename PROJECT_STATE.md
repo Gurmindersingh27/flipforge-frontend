@@ -1211,3 +1211,12 @@ Frozen: AnalyzeRequest, underwriting math, snapshots, saved data, ownership, API
 Release reconciliation: #71 and backend #22 are merged. The prior session reported 15/15 production smoke checks; this session independently rechecked the remote SHAs only. Usage caps limit admitted requests per process; reset on restart; not a spend ceiling. Provider dollar limits remain unverified.
 
 Customer path remains open: no outreach sent. Data note must say lookup results are reused for 30 days and may remain in the database afterward. Billing entity, cancellation/access policy, support contact and deletion/export process/timeline still require operator decisions; no customer-facing promises or paid-access behavior added by this PR.
+
+
+## 2026-09-30 — PR #72 review correction (pending re-review)
+
+Claude requested changes at `e5ef6da`: the unlayered global anchor rule overrode the Create revision link's gold text. Earlier screenshot inspection missed that color mismatch. Corrected one class line in DealPage: `!text-[#E8C547]`, normal surface `--ff-raised`, hover surface `--ff-panel`. Built CSS confirms `color:#e8c547!important` and both token-based backgrounds. No global anchor CSS changes.
+
+Validation on the correction: 74/74 unit tests, production build pass, lint unchanged at 9 errors. This is CSS-output verification, not a new computed-style browser inspection. Prior 29/29 browser evidence belongs to the previous head; new-head CI status is tracked on PR #72. Exact-head Claude re-review is required before merge.
+
+Separate future scopes: move global anchor reset into the base layer with before/after renders; mobile saved-deal cards below sm; bounded revision notes in the detail comparison. None implemented here.

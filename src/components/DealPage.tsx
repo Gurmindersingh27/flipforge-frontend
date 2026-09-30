@@ -47,7 +47,7 @@ function DealView({ deal, previous, comparisonError }: { deal: SavedDeal; previo
             <Link
               to="/"
               state={{ resumeDraft: draft, resumeDeal: deal }}
-              className="rounded-xl px-3 py-1.5 text-xs font-semibold border border-[#E8C547]/40 bg-[#202020] text-[#E8C547] hover:bg-[#292929] transition-colors"
+              className="rounded-xl px-3 py-1.5 text-xs font-semibold border border-[#E8C547]/40 bg-[var(--ff-raised)] !text-[#E8C547] hover:bg-[var(--ff-panel)] transition-colors"
             >
               Create revision
             </Link>
