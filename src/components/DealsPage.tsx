@@ -58,6 +58,76 @@ function RevisionNote({ note }: { note: string }) {
   </div>;
 }
 
+function dealPresentation(deal: SavedDeal) {
+  const r = deal.analysis_result as Record<string, unknown>;
+  const profit = r?.net_profit as number | null;
+  const roi = r?.annualized_roi as number | null;
+  const verdict = (r?.overall_verdict as string) ?? "—";
+  const maxOffer = r?.max_safe_offer as number | null;
+  const draftAddress = deal.draft_input?.address;
+  const address = deal.address?.trim()
+    || (typeof draftAddress === "string" ? draftAddress.trim() : "");
+  return { profit, roi, verdict, maxOffer, address };
+}
+
+function DealIdentity({ deal }: { deal: SavedDeal }) {
+  const { address } = dealPresentation(deal);
+  return <>
+    <div className="break-words sm:truncate" title={address || undefined}>
+      {address || `Untitled deal #${deal.id}`}
+    </div>
+    <div className="mt-1 text-xs text-white/60">
+      Version #{deal.id}
+      {deal.parent_deal_id != null && (
+        <> · From <Link to={`/deal/${deal.parent_deal_id}`} aria-label={`Open version #${deal.parent_deal_id}, the version this was revised from`} className="underline hover:text-white">#{deal.parent_deal_id}</Link></>
+      )}
+    </div>
+    {deal.revision_note?.trim() && (
+      <RevisionNote note={deal.revision_note} />
+    )}
+  </>;
+}
+
+function VerdictBadge({ verdict }: { verdict: string }) {
+  return (
+    <span className={`verdict-badge inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold ${verdictClass(verdict)} ${
+      verdict === "BUY"
+        ? "border-[#E8C547]/40 bg-[#E8C547]/10"
+        : verdict === "CONDITIONAL"
+        ? "border-amber-400/50 bg-amber-400/10"
+        : "border-red-500/40 bg-red-500/10"
+    }`}>
+      {verdict}
+    </span>
+  );
+}
+
+function DealActions({ deal, mobile = false }: { deal: SavedDeal; mobile?: boolean }) {
+  const actionClass = mobile
+    ? "inline-flex min-h-11 items-center justify-center rounded-lg border border-white/20 px-3 text-xs !text-[#E8C547] bg-[var(--ff-raised)] focus-visible:outline-2 focus-visible:outline-[#E8C547]"
+    : "text-xs text-white/50 hover:text-white/80 transition-colors";
+  return (
+    <div className={mobile ? "grid grid-cols-2 gap-2" : "flex items-center gap-3"}>
+      <Link
+        to={`/deal/${deal.id}`}
+        aria-label={`Open saved version ${deal.id}`}
+        className={actionClass}
+      >
+        Open
+      </Link>
+      <Link
+        to="/"
+        state={{ resumeDraft: deal.draft_input, resumeDeal: deal }}
+        aria-label={`Create revision from version ${deal.id}`}
+        className={actionClass}
+      >
+        Create revision
+      </Link>
+    </div>
+  );
+}
+
+
 function DealsList() {
   const { getToken } = useAuth();
   const [deals, setDeals] = useState<SavedDeal[]>([]);
@@ -147,7 +217,27 @@ function DealsList() {
         {selectedIds.length > 0 && <button type="button" onClick={() => setSelectedIds([])} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white hover:bg-white/10">Clear comparison</button>}
       </div>
       {selectedDeals.length >= 2 && <SavedDealComparison deals={selectedDeals} />}
-    <div className="overflow-x-auto">
+      <ul aria-label="Saved deal cards" className="space-y-3 sm:hidden">
+        {deals.map(deal => {
+          const { profit, roi, verdict, maxOffer } = dealPresentation(deal);
+          return <li key={deal.id} data-saved-version={deal.id} className="min-w-0 rounded-xl border border-white/10 bg-[var(--ff-panel)] p-3">
+            <label className="mb-2 flex min-h-11 cursor-pointer items-center gap-2 text-xs text-white/70">
+              <input type="checkbox" aria-label={`Compare saved version ${deal.id}`} aria-describedby="compare-deals-help" checked={selectedIds.includes(deal.id)} disabled={selectedIds.length >= 3 && !selectedIds.includes(deal.id)} onChange={() => toggleComparison(deal.id)} className="h-5 w-5 accent-amber-300 disabled:opacity-40" />
+              Compare this version
+            </label>
+            <div className="text-sm text-white/90"><DealIdentity deal={deal} /></div>
+            <dl className="my-4 grid grid-cols-2 gap-x-3 gap-y-4 text-xs">
+              <div><dt className="text-white/60">Est. profit</dt><dd className="mt-1 break-words font-jetbrains text-white/90">{fmt(profit)}</dd></div>
+              <div><dt className="text-white/60">Annualized ROI</dt><dd className="mt-1 break-words font-jetbrains text-white/90">{fmtPct(roi)}</dd></div>
+              <div className="col-span-2"><dt className="text-white/60">Verdict</dt><dd className="mt-1"><VerdictBadge verdict={verdict} /></dd></div>
+              <div><dt className="text-white/60">Max offer</dt><dd className="mt-1 break-words font-jetbrains text-white/90">{fmt(maxOffer)}</dd></div>
+              <div><dt className="text-white/60">Date</dt><dd className="mt-1 text-white/90">{fmtDate(deal.created_at)}</dd></div>
+            </dl>
+            <DealActions deal={deal} mobile />
+          </li>;
+        })}
+      </ul>
+    <div className="hidden overflow-x-auto sm:block">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-white/50">
@@ -163,72 +253,31 @@ function DealsList() {
         </thead>
         <tbody>
           {deals.map((deal) => {
-            const r = deal.analysis_result as Record<string, unknown>;
-            const profit = r?.net_profit as number | null;
-            const roi = r?.annualized_roi as number | null;
-            const verdict = (r?.overall_verdict as string) ?? "—";
-            const maxOffer = r?.max_safe_offer as number | null;
-            const draftAddress = deal.draft_input?.address;
-            const address = deal.address?.trim()
-              || (typeof draftAddress === "string" ? draftAddress.trim() : "");
+            const { profit, roi, verdict, maxOffer } = dealPresentation(deal);
 
             return (
               <tr
                 key={deal.id}
+                data-saved-version={deal.id}
                 className="border-b border-white/5 hover:bg-white/5 transition-colors"
               >
                 <td className="py-3 pr-4">
                   <input type="checkbox" aria-label={`Compare saved version ${deal.id}`} aria-describedby="compare-deals-help" checked={selectedIds.includes(deal.id)} disabled={selectedIds.length >= 3 && !selectedIds.includes(deal.id)} onChange={() => toggleComparison(deal.id)} className="h-5 w-5 accent-amber-300 disabled:opacity-40" />
                 </td>
                 <td className="py-3 pr-4 text-white/90 min-w-[180px] max-w-[240px]">
-                  <div className="truncate" title={address || undefined}>
-                    {address || `Untitled deal #${deal.id}`}
-                  </div>
-                  <div className="mt-1 text-xs text-white/60">
-                    Version #{deal.id}
-                    {deal.parent_deal_id != null && (
-                      <> · From <Link to={`/deal/${deal.parent_deal_id}`} aria-label={`Open version #${deal.parent_deal_id}, the version this was revised from`} className="underline hover:text-white">#{deal.parent_deal_id}</Link></>
-                    )}
-                  </div>
-                  {deal.revision_note?.trim() && (
-                    <RevisionNote note={deal.revision_note} />
-                  )}
+                  <DealIdentity deal={deal} />
                 </td>
                 <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmt(profit)}</td>
                 <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmtPct(roi)}</td>
                 <td className="py-3 pr-4">
-                  <span className={`verdict-badge inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-bold ${verdictClass(verdict)} ${
-                    verdict === "BUY"
-                      ? "border-[#E8C547]/40 bg-[#E8C547]/10"
-                      : verdict === "CONDITIONAL"
-                      ? "border-amber-400/50 bg-amber-400/10"
-                      : "border-red-500/40 bg-red-500/10"
-                  }`}>
-                    {verdict}
-                  </span>
+                  <VerdictBadge verdict={verdict} />
                 </td>
                 <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmt(maxOffer)}</td>
                 <td className="py-3 pr-4 text-white/50 text-xs">
                   {fmtDate(deal.created_at)}
                 </td>
                 <td className="py-3 pr-4">
-                  <div className="flex items-center gap-3">
-                    <Link
-                      to={`/deal/${deal.id}`}
-                      aria-label={`Open saved version ${deal.id}`}
-                      className="text-xs text-white/50 hover:text-white/80 transition-colors"
-                    >
-                      Open
-                    </Link>
-                    <Link
-                      to="/"
-                      state={{ resumeDraft: deal.draft_input, resumeDeal: deal }}
-                      aria-label={`Create revision from version ${deal.id}`}
-                      className="text-xs text-white/50 hover:text-white/80 transition-colors"
-                    >
-                      Create revision
-                    </Link>
-                  </div>
+                  <DealActions deal={deal} />
                 </td>
               </tr>
             );

@@ -6,7 +6,7 @@
 ## Last Updated
 2026-09-29
 
-Latest status: dated entries supersede historical pending-release descriptions. Live remotes verified: frontend main `aa29ff51ed5719c12c15e802982ed91dd469b248` (#71); backend main `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462` (#22). My Deals polish is PR #72 on `codex/my-deals-polish`, validated and pending exact-head Claude review and merge.
+Latest status: frontend main is `46ceb23f75c886005d156e9ec2d46bd4a88836ea` (#72), merged after Claude approved `0ab55e2ae579d9e2e54b17a1da84ee0effb53911` and exact-head CI passed. Production verification passed 15/15 including saved-route app shells and byte-identical assets. Signed-in production phone verification remains open. Backend main is `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. Mobile My Deals cards are in progress on `codex/my-deals-mobile-cards`, not merged.
 
 ---
 
@@ -1220,3 +1220,10 @@ Claude requested changes at `e5ef6da`: the unlayered global anchor rule overrode
 Validation on the correction: 74/74 unit tests, production build pass, lint unchanged at 9 errors. This is CSS-output verification, not a new computed-style browser inspection. Prior 29/29 browser evidence belongs to the previous head; new-head CI status is tracked on PR #72. Exact-head Claude re-review is required before merge.
 
 Separate future scopes: move global anchor reset into the base layer with before/after renders; mobile saved-deal cards below sm; bounded revision notes in the detail comparison. None implemented here.
+
+
+## 2026-09-30 — Mobile My Deals cards (pending validation/review)
+
+Approved three-file scope: DealsPage.tsx, browserFlow.mjs and this document. Cards below sm expose labeled metrics and 44px action/compare tap areas; the desktop table remains. Both layouts share selectedIds, existing RevisionNote, formatting helpers, identity/parent wording and actions/router state. API, save/type files, math, snapshots, saved data and ownership remain untouched. No dependencies added.
+
+Browser helpers now select visible controls by nonzero bounds and computed display/visibility. Pointer tests scroll the chosen control into view, check horizontal bounds and hit-testing, then send actual pointer events. Tests cover both resize directions for shared selection, visible metric labels/ROI disclaimer, tap sizes, multiline notes, both actions at 390/1440, no-input read fixtures and unchanged saved records. Initial local validation: 74/74 unit tests, build pass, lint unchanged at 9 errors. Browser CI and screenshot inspection pending; local Chrome is blocked by workspace socket restrictions. SavedDealComparison geometry is logged at 390px for a separately scoped follow-up; no edits to that component.
