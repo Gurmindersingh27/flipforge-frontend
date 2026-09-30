@@ -6,7 +6,7 @@
 ## Last Updated
 2026-09-29
 
-Latest status: frontend main is `46ceb23f75c886005d156e9ec2d46bd4a88836ea` (#72), merged after Claude approved `0ab55e2ae579d9e2e54b17a1da84ee0effb53911` and exact-head CI passed. Production verification passed 15/15 including saved-route app shells and byte-identical assets. Signed-in production phone verification remains open. Backend main is `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. Mobile My Deals cards are in progress on `codex/my-deals-mobile-cards`, not merged.
+Latest status: frontend main is `46ceb23f75c886005d156e9ec2d46bd4a88836ea` (#72), merged after Claude approved `0ab55e2ae579d9e2e54b17a1da84ee0effb53911` and exact-head CI passed. Production verification passed 15/15 including saved-route app shells and byte-identical assets. Signed-in production phone verification remains open. Backend main is `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. Mobile My Deals cards are PR #73 on `codex/my-deals-mobile-cards`, validated and awaiting exact-head Claude review; not merged.
 
 ---
 
@@ -1222,8 +1222,10 @@ Validation on the correction: 74/74 unit tests, production build pass, lint unch
 Separate future scopes: move global anchor reset into the base layer with before/after renders; mobile saved-deal cards below sm; bounded revision notes in the detail comparison. None implemented here.
 
 
-## 2026-09-30 — Mobile My Deals cards (pending validation/review)
+## 2026-09-30 — Mobile My Deals cards (pending review)
 
 Approved three-file scope: DealsPage.tsx, browserFlow.mjs and this document. Cards below sm expose labeled metrics and 44px action/compare tap areas; the desktop table remains. Both layouts share selectedIds, existing RevisionNote, formatting helpers, identity/parent wording and actions/router state. API, save/type files, math, snapshots, saved data and ownership remain untouched. No dependencies added.
 
-Browser helpers now select visible controls by nonzero bounds and computed display/visibility. Pointer tests scroll the chosen control into view, check horizontal bounds and hit-testing, then send actual pointer events. Tests cover both resize directions for shared selection, visible metric labels/ROI disclaimer, tap sizes, multiline notes, both actions at 390/1440, no-input read fixtures and unchanged saved records. Initial local validation: 74/74 unit tests, build pass, lint unchanged at 9 errors. Browser CI and screenshot inspection pending; local Chrome is blocked by workspace socket restrictions. SavedDealComparison geometry is logged at 390px for a separately scoped follow-up; no edits to that component.
+Browser helpers now select visible controls by nonzero bounds and computed display/visibility. Pointer tests scroll the chosen control into view, check horizontal bounds and hit-testing, then send actual pointer events. Tests cover both resize directions for shared selection, visible metric labels/ROI disclaimer, tap sizes, multiline notes, both actions at 390/1440, no-input read fixtures and unchanged saved records. Initial local validation: 74/74 unit tests, build pass, lint unchanged at 9 errors. Browser CI passed 31/31 checks at code head `7702c1f5e244392fa1694b23b872053d6d2e0b77`, run `36736288649`. Downloaded artifacts and inspected 390/1440 screenshots, including collapsed/expanded long notes, CONDITIONAL verdicts, parent labels, no-input cards and the comparison panel. Mobile actions are visible and gold; no page overflow. Local Chrome remains blocked by workspace socket restrictions, so these renders came from CI.
+
+Confirmed next follow-up: SavedDealComparison still scrolls sideways at 390px (580px content in a 218px viewport); its component is unchanged. Global anchor-layer correction and bounded detail-page revision notes remain separate scopes. No merge before Claude approves the final exact head.
