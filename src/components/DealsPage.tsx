@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, SignedIn, SignedOut, SignInButton } from "@clerk/clerk-react";
 import { getDeals } from "../lib/api";
@@ -31,6 +31,31 @@ function fmtDate(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function RevisionNote({ note }: { note: string }) {
+  const id = useId();
+  const preview = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const element = preview.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight);
+      setOverflows(element.scrollHeight > lineHeight * 2 + 1);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [note]);
+
+  return <div className="mt-1 text-xs text-white/60">
+    <div ref={preview} id={id} className={`whitespace-pre-line break-words ${expanded ? "" : "line-clamp-2"}`}>{note}</div>
+    {overflows && <button type="button" aria-expanded={expanded} aria-controls={id}
+      className="mt-1 text-[#E8C547] underline underline-offset-2 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E8C547]"
+      onClick={() => setExpanded(value => !value)}>{expanded ? "Show less" : "Show full note"}</button>}
+  </div>;
 }
 
 function DealsList() {
@@ -162,11 +187,11 @@ function DealsList() {
                   <div className="mt-1 text-xs text-white/60">
                     Version #{deal.id}
                     {deal.parent_deal_id != null && (
-                      <> · From <Link to={`/deal/${deal.parent_deal_id}`} className="underline hover:text-white">#{deal.parent_deal_id}</Link></>
+                      <> · From <Link to={`/deal/${deal.parent_deal_id}`} aria-label={`Open version #${deal.parent_deal_id}, the version this was revised from`} className="underline hover:text-white">#{deal.parent_deal_id}</Link></>
                     )}
                   </div>
                   {deal.revision_note?.trim() && (
-                    <div className="mt-1 text-xs text-white/60 break-words">{deal.revision_note}</div>
+                    <RevisionNote note={deal.revision_note} />
                   )}
                 </td>
                 <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmt(profit)}</td>

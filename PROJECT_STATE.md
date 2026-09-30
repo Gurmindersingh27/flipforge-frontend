@@ -4,9 +4,9 @@
 ---
 
 ## Last Updated
-2026-09-27
+2026-09-29
 
-Latest status: the dated entries at the end of this file supersede historical pending-release descriptions. Frontend main is `63bbe5c348251f11e4f0563fa5375533a4533a16` (#70); backend main is `14a7dcedbe4ef2c914ea786122bdff88a2a5e35f` (#21). Saved-deal comparison is live. PR #70 is merged after approval at `d385836515ef109104053d35d16ad08275adcadd`; deployment verification is pending at this entry. PR #71 is pending re-review after the visual corrections below.
+Latest status: dated entries supersede historical pending-release descriptions. Live remotes verified: frontend main `aa29ff51ed5719c12c15e802982ed91dd469b248` (#71); backend main `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462` (#22). My Deals polish is PR #72 on `codex/my-deals-polish`, validated and pending exact-head Claude review and merge.
 
 ---
 
@@ -1198,3 +1198,25 @@ Frontend PR #62 contains the public checker, closeout record and this improvemen
 
 - Production verification for #70 completed: all 15 public checks passed from merge `63bbe5c`, starting 2026-09-28 13:28:55 UTC. Deployed asset bytes match; direct saved-deal routes serve the app shell. Codex visually inspected the live signed-out desktop sample and its higher-quote default. No authenticated production QA is implied.
 - #71 follow-up `050f157` passed unit/build CI, but browser CI `36429003153` stopped on Chrome protocol error -32000, Inspected target navigated or closed, during a polling read around navigation. The existing bounded until helper now retries only that exact protocol error. Actions are never replayed; other errors still throw and a persistent navigation failure still times out. This test-only correction requires a new CI run and is included in the fresh review head.
+
+
+## 2026-09-29 — My Deals presentation polish (pending review)
+
+Approved seven-file scope: DealsPage, DealPage, App (copy only), BidComparison (copy only), lib/bidComparison (strings only), browserFlow and this document. Saved detail and analyzer copy now say Create revision; all bid guidance matches, while Continue with Bid B and router-state keys remain unchanged. Details wrap their header and expose the missing-input reason visibly. Parent links describe lineage. Notes preserve newlines, use two-line previews, and offer an accessible keyboard-operable toggle only when measured content overflows.
+
+Validation: 74/74 unit tests and production build pass; lint remains at 9 pre-existing errors. Browser suite adds 2,000-character multiline notes, keyboard expansion/collapse, short-note no-toggle, descriptive parent labels, no-write checks and detail views with/without draft inputs at 1440/390 px. Local Chrome launch is blocked by the workspace socket sandbox, so verification ran in the existing GitHub browser CI. All 29 browser checks passed at code head `1028ebdc0b42162b2eef4429004564a18aaf2a7a` (run `36646389803`). Screenshots were downloaded and visually inspected: collapsed/expanded lists and details with/without inputs at 1440/390 px. Notes preserve line breaks and keyboard focus; unavailable copy wraps visibly. The existing table remains horizontally scrollable on mobile, with no page overflow. No application dependencies added.
+
+Frozen: AnalyzeRequest, underwriting math, snapshots, saved data, ownership, API calls, save paths, types and lineage. No production auth changes. Browser mocks remain isolated fixtures. No merge until Claude approves the exact published head.
+
+Release reconciliation: #71 and backend #22 are merged. The prior session reported 15/15 production smoke checks; this session independently rechecked the remote SHAs only. Usage caps limit admitted requests per process; reset on restart; not a spend ceiling. Provider dollar limits remain unverified.
+
+Customer path remains open: no outreach sent. Data note must say lookup results are reused for 30 days and may remain in the database afterward. Billing entity, cancellation/access policy, support contact and deletion/export process/timeline still require operator decisions; no customer-facing promises or paid-access behavior added by this PR.
+
+
+## 2026-09-30 — PR #72 review correction (pending re-review)
+
+Claude requested changes at `e5ef6da`: the unlayered global anchor rule overrode the Create revision link's gold text. Earlier screenshot inspection missed that color mismatch. Corrected one class line in DealPage: `!text-[#E8C547]`, normal surface `--ff-raised`, hover surface `--ff-panel`. Built CSS confirms `color:#e8c547!important` and both token-based backgrounds. No global anchor CSS changes.
+
+Validation on the correction: 74/74 unit tests, production build pass, lint unchanged at 9 errors. This is CSS-output verification, not a new computed-style browser inspection. Prior 29/29 browser evidence belongs to the previous head; new-head CI status is tracked on PR #72. Exact-head Claude re-review is required before merge.
+
+Separate future scopes: move global anchor reset into the base layer with before/after renders; mobile saved-deal cards below sm; bounded revision notes in the detail comparison. None implemented here.
