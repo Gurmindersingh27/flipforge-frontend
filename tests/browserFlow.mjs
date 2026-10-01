@@ -71,7 +71,7 @@ const scopeInput = label => `document.querySelector('section[aria-label="Itemize
 const scoped = (label, value) => fill(scopeInput(label), value);
 const api = async path => { const res = await fetch(`http://127.0.0.1:8000${path}`); assert.equal(res.status, 200); return res.json(); };
 const visible = expression => `(()=>{const e=${expression};if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden';})()`;
-const inputByAria = label => `Array.from(document.querySelectorAll('[aria-label=${JSON.stringify(label)}]')).find(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden';})`;
+const inputByAria = label => `Array.from(document.querySelectorAll('[aria-label], input')).find(e=>{const name=e.getAttribute('aria-label') ?? Array.from(e.labels ?? []).map(l=>l.textContent.trim()).join(' ');const r=e.getBoundingClientRect(),s=getComputedStyle(e);return name===${JSON.stringify(label)} && r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden';})`;
 async function clickVisible(expression) {
   assert.ok(await evaluate(visible(expression)), `Target must be visible: ${expression}`);
   await evaluate(`(${expression}).scrollIntoView({block:'center',inline:'nearest'})`);
@@ -423,59 +423,61 @@ try {
   // Select on mobile, verify on desktop; change desktop selection and verify mobile.
   for (const width of [390, 1440]) {
     await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
-    const control = inputByAria(`Compare saved version ${first.id}`);
+    const control = inputByAria(`Compare version #${first.id}`);
     assert.ok(await evaluate(visible(control)));
     assert.equal(await evaluate(`(${control}).closest('[data-saved-version]').tagName`), width === 390 ? "LI" : "TR");
-    assert.equal(await evaluate(`Array.from(document.querySelectorAll('[aria-label="Compare saved version ${first.id}"]')).filter(e=>e.getBoundingClientRect().width>0 && e.getBoundingClientRect().height>0).length`), 1);
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('input[type=checkbox]')).filter(e=>(e.getAttribute('aria-label') ?? e.closest('label')?.textContent.trim()) === 'Compare version #${first.id}' && e.getBoundingClientRect().width>0 && e.getBoundingClientRect().height>0).length`), 1);
+    assert.equal(await evaluate(`(${control}).getAttribute('aria-label') ?? (${control}).closest('label')?.textContent.trim()`), `Compare version #${first.id}`);
+    if (width === 390) assert.equal(await evaluate(`(${control}).hasAttribute('aria-label')`), false);
     assert.equal(await evaluate(`(${control}).checked`), width === 1440);
     await clickVisible(control);
   }
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
-  assert.equal(await evaluate(`(${inputByAria(`Compare saved version ${first.id}`)}).checked`), false);
+  assert.equal(await evaluate(`(${inputByAria(`Compare version #${first.id}`)}).checked`), false);
   for (const label of ['Est. profit', 'Annualized ROI', 'Verdict', 'Max offer', 'Date']) {
     assert.ok(await evaluate(`Array.from(document.querySelectorAll('[aria-label="Saved deal cards"] dt')).some(e=>e.textContent===${JSON.stringify(label)} && e.getBoundingClientRect().width>0)`));
   }
   assert.ok(await evaluate(`Array.from(document.querySelectorAll('p')).some(e=>e.textContent.includes('it is not a guaranteed return') && e.getBoundingClientRect().height>0)`));
-  for (const label of [`Open saved version ${selected.id}`, `Create revision from version ${selected.id}`, `Compare saved version ${selected.id}`]) {
+  for (const label of [`Open saved version ${selected.id}`, `Create revision from version ${selected.id}`, `Compare version #${selected.id}`]) {
     const control = inputByAria(label);
     assert.ok(await evaluate(visible(control)));
     assert.ok(await evaluate(`(()=>{const e=${control};const r=(e.type==='checkbox'?e.closest('label'):e).getBoundingClientRect();return r.width>=44 && r.height>=44 && r.left>=0 && r.right<=innerWidth;})()`));
   }
-  assert.deepEqual(await evaluate(`Array.from((${inputByAria(`Compare saved version ${first.id}`)}).closest('li').querySelectorAll('dd')).slice(0,4).map(e=>e.textContent)`), ["$34,900", `${(first.analysis_result.annualized_roi * 100).toFixed(1)}%`, "BUY", "$155,600"]);
+  assert.deepEqual(await evaluate(`Array.from((${inputByAria(`Compare version #${first.id}`)}).closest('li').querySelectorAll('dd')).slice(0,4).map(e=>e.textContent)`), ["$34,900", `${(first.analysis_result.annualized_roi * 100).toFixed(1)}%`, "BUY", "$155,600"]);
   checks.push("Visible mobile and desktop controls share selection across resizing; cards label all metrics, preserve the ROI disclaimer and provide 44px tap areas");
 
   const comparison = `document.querySelector('section[aria-label="Saved deal comparison"]')`;
-  await toggle(`Compare saved version ${first.id}`);
+  await toggle(`Compare version #${first.id}`);
   assert.equal(await evaluate(`Boolean(${comparison})`), false);
-  await toggle(`Compare saved version ${second.id}`);
+  await toggle(`Compare version #${second.id}`);
   await until(`Boolean(${comparison})`);
   assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-comparison-metric="net_profit"] td')).map(cell=>cell.textContent)`), ["$34,900", "$13,880"]);
   assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[data-comparison-metric="max_safe_offer"] td')).map(cell=>cell.textContent)`), ["$155,600", "$136,200"]);
   assert.ok(await evaluate(`${comparison}.textContent.includes('Holding period: different')`));
-  await toggle(`Compare saved version ${third.id}`);
-  assert.ok(await evaluate(`(${inputByAria(`Compare saved version ${baseline.id}`)}).disabled`));
-  assert.equal(await evaluate(`(${inputByAria(`Compare saved version ${first.id}`)}).disabled`), false);
+  await toggle(`Compare version #${third.id}`);
+  assert.ok(await evaluate(`(${inputByAria(`Compare version #${baseline.id}`)}).disabled`));
+  assert.equal(await evaluate(`(${inputByAria(`Compare version #${first.id}`)}).disabled`), false);
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await screenshot("comparison-desktop.png");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
   await screenshot("comparison-mobile.png");
   console.log("COMPARISON_MOBILE_GEOMETRY", JSON.stringify(await evaluate(`Array.from(${comparison}.querySelectorAll('*')).filter(e=>getComputedStyle(e).overflowX==='auto').map(e=>({clientWidth:e.clientWidth,scrollWidth:e.scrollWidth}))`)));
-  await toggle(`Compare saved version ${second.id}`);
-  assert.equal(await evaluate(`(${inputByAria(`Compare saved version ${baseline.id}`)}).disabled`), false);
+  await toggle(`Compare version #${second.id}`);
+  assert.equal(await evaluate(`(${inputByAria(`Compare version #${baseline.id}`)}).disabled`), false);
   assert.equal(await evaluate(`(${inputByAria(`Open compared version ${third.id}`)}).getAttribute('href')`), `/deal/${third.id}`);
   await click("button", "Clear comparison");
   assert.equal(await evaluate(`Boolean(${comparison})`), false);
-  await evaluate(`(${inputByAria(`Compare saved version ${first.id}`)}).focus()`);
+  await evaluate(`(${inputByAria(`Compare version #${first.id}`)}).focus()`);
   await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32, text: " " });
   await cdp("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32 });
-  assert.ok(await evaluate(`(${inputByAria(`Compare saved version ${first.id}`)}).checked`));
+  assert.ok(await evaluate(`(${inputByAria(`Compare version #${first.id}`)}).checked`));
   assert.equal(browserApiRequests.length, requestsBeforeComparison, "Comparison must not issue API requests");
   assert.deepEqual(await api("/api/deals"), recordsBeforeList);
   const comparisonDocumentTime = await evaluate("performance.timeOrigin");
   await cdp("Page.reload");
-  await until(`performance.timeOrigin !== ${comparisonDocumentTime} && Boolean(${inputByAria(`Compare saved version ${first.id}`)})`);
-  assert.equal(await evaluate(`(${inputByAria(`Compare saved version ${first.id}`)}).checked`), false);
+  await until(`performance.timeOrigin !== ${comparisonDocumentTime} && Boolean(${inputByAria(`Compare version #${first.id}`)})`);
+  assert.equal(await evaluate(`(${inputByAria(`Compare version #${first.id}`)}).checked`), false);
   checks.push("Saved-deal comparison shows exact saved economics, flags different assumptions, limits selection to three, supports keyboard and mobile, clears on reload, and never requests or writes data");
   const selectedRow = `(${inputByAria(`Create revision from version ${selected.id}`)}).closest('[data-saved-version]')`;
   assert.ok(await evaluate(`(${selectedRow}).textContent.includes(${JSON.stringify(selected.revision_note)})`));
@@ -533,7 +535,9 @@ try {
       const response = await nativeFetch(...args);
       if (new URL(args[0], location.href).pathname === '/api/deals' && response.ok) {
         const records = await response.json();
-        return new Response(JSON.stringify(records.map(record=>record.id===${selected.id}?{...record,draft_input:null}:record)), {status:200,headers:{'Content-Type':'application/json'}});
+        const mode = new URLSearchParams(location.search).get('draftFixture');
+        const draft = mode === 'object' ? {} : mode === 'string' ? 'invalid' : mode === 'array' ? [] : mode === 'present' ? {purchase_price:null} : null;
+        return new Response(JSON.stringify(records.map(record=>record.id===${selected.id}?{...record,draft_input:draft}:record)), {status:200,headers:{'Content-Type':'application/json'}});
       }
       if (new URL(args[0], location.href).pathname === '/api/deals/${selected.id}' && response.ok) {
         const record = await response.json();
@@ -550,11 +554,30 @@ try {
     assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
     await screenshot(`saved-deal-no-inputs-${width}.png`);
   }
-  await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals" });
-  await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
-  await screenshot("cards-no-inputs-390.png");
-  await clickVisible(inputByAria(`Open saved version ${selected.id}`));
-  await until(`document.body.textContent.includes('Create revision (unavailable: no saved inputs)')`);
+  for (const width of [390, 1440]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    for (const mode of ['null', 'object', 'string', 'array']) {
+      await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deals?draftFixture=${mode}` });
+      await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
+      const row = `(${inputByAria(`Open saved version ${selected.id}`)}).closest('[data-saved-version]')`;
+      const reason = `Array.from((${row}).querySelectorAll('span')).find(e=>e.textContent.trim()==='Create revision (unavailable: no saved inputs)')`;
+      assert.ok(await evaluate(visible(reason)));
+      assert.equal(await evaluate(`(${row}).querySelector('a[aria-label="Create revision from version ${selected.id}"]')`), null);
+      assert.ok(await evaluate(`(()=>{const e=${reason};return e.tagName==='SPAN' && !e.hasAttribute('href') && !e.hasAttribute('tabindex') && e.tabIndex<0;})()`));
+      if (mode === 'null') {
+        await screenshot(`unavailable-list-${width}.png`);
+        await clickVisible(inputByAria(`Open saved version ${selected.id}`));
+        await until(`document.body.textContent.includes('Create revision (unavailable: no saved inputs)')`);
+        assert.equal(await evaluate('location.pathname'), `/deal/${selected.id}`);
+      }
+    }
+    // Presence, not validity of the numeric value, matches the analyzer guard exactly.
+    await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals?draftFixture=present" });
+    await until(`Boolean(${inputByAria(`Create revision from version ${selected.id}`)})`);
+    assert.ok(await evaluate(visible(inputByAria(`Create revision from version ${selected.id}`))));
+  }
+  assert.deepEqual(await api("/api/deals"), recordsBeforeList);
+  checks.push("Both visible layouts reject null/malformed drafts with nonfocusable reason text, retain Open, and match the analyzer purchase_price presence check without writes");
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: noDraftFixture });
   checks.push("Saved details offer Create revision with inputs and a visible unavailable reason without inputs at desktop and mobile widths");
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals" });

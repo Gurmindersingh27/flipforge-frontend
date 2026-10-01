@@ -6,7 +6,7 @@
 ## Last Updated
 2026-09-29
 
-Latest status: frontend main is `46ceb23f75c886005d156e9ec2d46bd4a88836ea` (#72), merged after Claude approved `0ab55e2ae579d9e2e54b17a1da84ee0effb53911` and exact-head CI passed. Production verification passed 15/15 including saved-route app shells and byte-identical assets. Signed-in production phone verification remains open. Backend main is `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. Mobile My Deals cards are PR #73 on `codex/my-deals-mobile-cards`, validated and awaiting exact-head Claude review; not merged.
+Latest status: frontend main is `c102abb312cf5e118cd8bbb73f0227996e0d6e3d` (#73), merged after Claude approved `068849ebe855bac330d266610e441ab6bd62fbbc` and exact-head CI passed. Production verification passed 15/15 after rollout, including route shells and byte-identical assets. Signed-in production phone verification remains open. Backend main remains `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. Saved-deal action clarity is in progress on `codex/saved-deal-action-clarity`, not merged.
 
 ---
 
@@ -1229,3 +1229,12 @@ Approved three-file scope: DealsPage.tsx, browserFlow.mjs and this document. Car
 Browser helpers now select visible controls by nonzero bounds and computed display/visibility. Pointer tests scroll the chosen control into view, check horizontal bounds and hit-testing, then send actual pointer events. Tests cover both resize directions for shared selection, visible metric labels/ROI disclaimer, tap sizes, multiline notes, both actions at 390/1440, no-input read fixtures and unchanged saved records. Initial local validation: 74/74 unit tests, build pass, lint unchanged at 9 errors. Browser CI passed 31/31 checks at code head `7702c1f5e244392fa1694b23b872053d6d2e0b77`, run `36736288649`. Downloaded artifacts and inspected 390/1440 screenshots, including collapsed/expanded long notes, CONDITIONAL verdicts, parent labels, no-input cards and the comparison panel. Mobile actions are visible and gold; no page overflow. Local Chrome remains blocked by workspace socket restrictions, so these renders came from CI.
 
 Confirmed next follow-up: SavedDealComparison still scrolls sideways at 390px (580px content in a 218px viewport); its component is unchanged. Global anchor-layer correction and bounded detail-page revision notes remain separate scopes. No merge before Claude approves the final exact head.
+
+
+## 2026-10-01 — Saved-deal action clarity (pending validation/review)
+
+Approved three-file scope: DealsPage.tsx, browserFlow.mjs, PROJECT_STATE.md. canCreateRevision applies precisely the analyzer guard: a truthy object containing purchase_price. Both list layouts replace rejected drafts' revision link with nonfocusable plain text, "Create revision (unavailable: no saved inputs)"; Open stays active. Card action text is centered. Cards derive "Compare version #N" from their wrapping label; the desktop input uses that identical aria-label. Existing old selectors have been updated and the visible-control helper also resolves native input labels.
+
+Tests reuse the isolated null-draft read fixture at 390/1440; add missing-property object, string and array cases, plus purchase_price present with null value to prevent stricter-than-analyzer validation. They check visible noninteractive reasons, absence of revision links, working Open, existing valid-draft revision flows and identical saved records. Local validation: 74/74 unit tests and build pass; lint stays at 9 existing errors. Browser CI and visual inspection pending; local Chrome remains blocked by workspace socket restrictions.
+
+Explicit follow-up: DealPage.tsx still uses the looser `draft ?` check. Align it in a separately scoped change; not edited here. API, save/type files, math, snapshots, ownership, router-state keys and dependencies remain unchanged. No merge before exact-head Claude approval.

@@ -102,9 +102,14 @@ function VerdictBadge({ verdict }: { verdict: string }) {
   );
 }
 
+function canCreateRevision(deal: SavedDeal): boolean {
+  const incoming = deal.draft_input;
+  return !!incoming && typeof incoming === "object" && "purchase_price" in incoming;
+}
+
 function DealActions({ deal, mobile = false }: { deal: SavedDeal; mobile?: boolean }) {
   const actionClass = mobile
-    ? "inline-flex min-h-11 items-center justify-center rounded-lg border border-white/20 px-3 text-xs !text-[#E8C547] bg-[var(--ff-raised)] focus-visible:outline-2 focus-visible:outline-[#E8C547]"
+    ? "inline-flex min-h-11 items-center justify-center text-center rounded-lg border border-white/20 px-3 text-xs !text-[#E8C547] bg-[var(--ff-raised)] focus-visible:outline-2 focus-visible:outline-[#E8C547]"
     : "text-xs text-white/50 hover:text-white/80 transition-colors";
   return (
     <div className={mobile ? "grid grid-cols-2 gap-2" : "flex items-center gap-3"}>
@@ -115,14 +120,16 @@ function DealActions({ deal, mobile = false }: { deal: SavedDeal; mobile?: boole
       >
         Open
       </Link>
-      <Link
+      {canCreateRevision(deal) ? <Link
         to="/"
         state={{ resumeDraft: deal.draft_input, resumeDeal: deal }}
         aria-label={`Create revision from version ${deal.id}`}
         className={actionClass}
       >
         Create revision
-      </Link>
+      </Link> : <span className="text-xs text-white/60">
+        Create revision (unavailable: no saved inputs)
+      </span>}
     </div>
   );
 }
@@ -222,8 +229,8 @@ function DealsList() {
           const { profit, roi, verdict, maxOffer } = dealPresentation(deal);
           return <li key={deal.id} data-saved-version={deal.id} className="min-w-0 rounded-xl border border-white/10 bg-[var(--ff-panel)] p-3">
             <label className="mb-2 flex min-h-11 cursor-pointer items-center gap-2 text-xs text-white/70">
-              <input type="checkbox" aria-label={`Compare saved version ${deal.id}`} aria-describedby="compare-deals-help" checked={selectedIds.includes(deal.id)} disabled={selectedIds.length >= 3 && !selectedIds.includes(deal.id)} onChange={() => toggleComparison(deal.id)} className="h-5 w-5 accent-amber-300 disabled:opacity-40" />
-              Compare this version
+              <input type="checkbox" aria-describedby="compare-deals-help" checked={selectedIds.includes(deal.id)} disabled={selectedIds.length >= 3 && !selectedIds.includes(deal.id)} onChange={() => toggleComparison(deal.id)} className="h-5 w-5 accent-amber-300 disabled:opacity-40" />
+              Compare version #{deal.id}
             </label>
             <div className="text-sm text-white/90"><DealIdentity deal={deal} /></div>
             <dl className="my-4 grid grid-cols-2 gap-x-3 gap-y-4 text-xs">
@@ -262,7 +269,7 @@ function DealsList() {
                 className="border-b border-white/5 hover:bg-white/5 transition-colors"
               >
                 <td className="py-3 pr-4">
-                  <input type="checkbox" aria-label={`Compare saved version ${deal.id}`} aria-describedby="compare-deals-help" checked={selectedIds.includes(deal.id)} disabled={selectedIds.length >= 3 && !selectedIds.includes(deal.id)} onChange={() => toggleComparison(deal.id)} className="h-5 w-5 accent-amber-300 disabled:opacity-40" />
+                  <input type="checkbox" aria-label={`Compare version #${deal.id}`} aria-describedby="compare-deals-help" checked={selectedIds.includes(deal.id)} disabled={selectedIds.length >= 3 && !selectedIds.includes(deal.id)} onChange={() => toggleComparison(deal.id)} className="h-5 w-5 accent-amber-300 disabled:opacity-40" />
                 </td>
                 <td className="py-3 pr-4 text-white/90 min-w-[180px] max-w-[240px]">
                   <DealIdentity deal={deal} />
