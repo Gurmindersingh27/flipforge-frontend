@@ -6,7 +6,7 @@
 ## Last Updated
 2026-09-29
 
-Latest status: frontend main is `c102abb312cf5e118cd8bbb73f0227996e0d6e3d` (#73), merged after Claude approved `068849ebe855bac330d266610e441ab6bd62fbbc` and exact-head CI passed. Production verification passed 15/15 after rollout, including route shells and byte-identical assets. Signed-in production phone verification remains open. Backend main remains `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. Saved-deal action clarity is in progress on `codex/saved-deal-action-clarity`, not merged.
+Latest status: frontend main is `86d8618123b3fcf117be117917968ca35489ba3f` (#74), merged after Claude approved `bfc8c3d4b279364fb7fce3bf67967163568303e1`. Production checks passed 15/15; signed-in production phone verification remains open. Backend main remains `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. PR #75 on `codex/link-base-layer` is awaiting exact-head Claude review, not merged.
 
 ---
 
@@ -1238,3 +1238,16 @@ Approved three-file scope: DealsPage.tsx, browserFlow.mjs, PROJECT_STATE.md. can
 Tests reuse the isolated null-draft read fixture at 390/1440; add missing-property object, string and array cases, plus purchase_price present with null value to prevent stricter-than-analyzer validation. They check visible noninteractive reasons, absence of revision links, working Open, existing valid-draft revision flows and identical saved records. Local validation: 74/74 unit tests and build pass; lint stays at 9 existing errors. Browser CI passed 32/32 checks at code head `b6cd34749b51af08aa561576b2f109387cba7af4`, run `36936070167`. Downloaded and inspected CI screenshots at 390/1440: unavailable reasons are visible beside active Open actions; normal mobile actions are centered and compare labels match. Local Chrome remains blocked by workspace socket restrictions, so renders came from CI.
 
 Explicit follow-up: DealPage.tsx still uses the looser `draft ?` check. Align it in a separately scoped change; not edited here. API, save/type files, math, snapshots, ownership, router-state keys and dependencies remain unchanged. No merge before exact-head Claude approval.
+
+
+## 2026-10-02 - Link base layer (pending review)
+
+Frontend main is 86d8618123b3fcf117be117917968ca35489ba3f (#74), tree-identical to Claude-approved bfc8c3d4b279364fb7fce3bf67967163568303e1. Production checks passed 15/15; signed-in phone verification remains open. Backend remains e4a4b2016f6187af6ffc8c3f363bf4a4dc429462.
+
+Approved four-file scope on codex/link-base-layer: src/index.css, src/components/DealPage.tsx (class only), tests/browserFlow.mjs, this document. Existing a and a:hover declarations are wrapped unchanged in @layer base; gold important overrides stay. DealPage back link changes white/40 to white/60 to avoid a contrast regression. Deliberate visible change: View saved version after saving now renders emerald-400 (emerald-300 on hover) as its existing success styling specifies.
+
+Browser checks cover computed desktop action colors and hover, parent and amber baseline underlines, unchanged gold mobile/detail actions, and white/60 back navigation. Paired renders restore the exact old CSS and back-link class temporarily on identical fixtures, then remove them, for public sample, My Deals, detail and saved analyzer at 390/1440. Visible-link contrast is checked against composited ancestor background colors. Validation: CI 74/74 unit tests, 33/33 browser checks and build pass at code head `ea2bc5dfbb3df8a40792045156f0530c32e7f01b`, run `37021655925`; local lint remains at 9 existing errors. Downloaded and inspected all eight before/after pairs, including detailed crops. Public sample layout stays stable, table actions dim as intended, parent underlines return, gold actions retain their color, and the saved success link turns emerald. Existing font-weight utilities also take effect (notably logo and detail action). No additional failing link contrast found on these fixtures. Desktop actions measured about 5.17:1; parent links about 6.81:1.
+
+Harness notes: full-page captures/mobile emulation reset headless pointer capability. Desktop hover now runs in a fresh real page target with explicit Chrome pointer launch settings, requiring hover capability and checking computed color after a real pointer move. The resize-selection test waits for the click state before resizing. Earlier CI failures were these harness conditions, not a relaxed color expectation. Paired baseline images use temporary prior CSS/class restoration, not a separate old-build run.
+
+No API, math, save, type, snapshot, ownership, router-state or dependency changes. Date-cell wrapping, detail guard, mobile comparison and bounded detail revision notes remain separate scopes. No merge before Claude approves the final exact head.

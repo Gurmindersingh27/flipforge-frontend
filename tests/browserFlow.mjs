@@ -81,6 +81,51 @@ async function clickVisible(expression) {
   await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
   await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
 }
+// Normalize modern CSS color syntax through canvas rather than comparing serialization.
+async function expectLinkStyle(expression, color, underline = false) {
+  assert.ok(await evaluate(visible(expression)), "Style target must be visible");
+  const result = await evaluate(`(()=>{const e=${expression},s=getComputedStyle(e),c=document.createElement('canvas'),x=c.getContext('2d');c.width=c.height=1;const pixel=v=>{x.clearRect(0,0,1,1);x.fillStyle=v;x.fillRect(0,0,1,1);return [...x.getImageData(0,0,1,1).data];};const probe=document.createElement('span');probe.style.color=${JSON.stringify(color)};document.body.append(probe);const expected=pixel(getComputedStyle(probe).color);probe.remove();return {actual:pixel(s.color),expected,decoration:s.textDecorationLine};})()`);
+  result.actual.forEach((v,i)=>assert.ok(Math.abs(v-result.expected[i])<=1, `Link color: ${JSON.stringify(result)}`));
+  if (underline) assert.ok(result.decoration.includes('underline'), "Link must render an underline");
+}
+async function linkRenderPair(name) {
+  // Reproduce only the two approved source differences for an identical-data baseline.
+  await evaluate(`(()=>{const s=document.createElement('style');s.id='prior-anchor-rules';s.textContent='a {font-weight:500;color:inherit;text-decoration:inherit} a:hover {color:inherit}';document.head.append(s);const a=[...document.querySelectorAll('a')].find(e=>e.textContent.trim()==='← My Deals');if(a){a.dataset.originalClass=a.className;a.className=a.className.replace('text-white/60','text-white/40');}})()`);
+  await pause(200);
+  await screenshot(`${name}-before.png`);
+  await evaluate(`(()=>{document.getElementById('prior-anchor-rules').remove();const a=document.querySelector('[data-original-class]');if(a){a.className=a.dataset.originalClass;delete a.dataset.originalClass;}})()`);
+  await pause(200);
+  await screenshot(`${name}-after.png`);
+  const contrast = await evaluate(`(()=>{const c=document.createElement('canvas'),x=c.getContext('2d');c.width=c.height=1;const rgba=v=>{x.clearRect(0,0,1,1);x.fillStyle=v;x.fillRect(0,0,1,1);return [...x.getImageData(0,0,1,1).data];};const blend=(a,b)=>a.slice(0,3).map((v,i)=>v*a[3]/255+b[i]*(1-a[3]/255));const luminance=c=>c.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((v,n,i)=>v+n*[.2126,.7152,.0722][i],0);return [...document.querySelectorAll('a')].filter(e=>e.getBoundingClientRect().width&&e.getBoundingClientRect().height&&getComputedStyle(e).visibility!=='hidden').map(e=>{const chain=[];for(let p=e;p;p=p.parentElement)chain.unshift(p);let bg=[0,0,0];for(const p of chain)bg=blend(rgba(getComputedStyle(p).backgroundColor),bg);const fg=blend(rgba(getComputedStyle(e).color),bg),a=luminance(fg),b=luminance(bg);return {text:e.textContent.trim(),ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};});})()`);
+  console.log("LINK_CONTRAST", name, JSON.stringify(contrast));
+  assert.ok(contrast.every(link=>link.ratio>=4.5), `Link contrast below 4.5:1: ${JSON.stringify(contrast.filter(link=>link.ratio<4.5))}`);
+
+}
+async function verifyDesktopHover(id) {
+  // Full-page screenshot/mobile emulation can reset headless pointer preferences.
+  // Use a fresh desktop target before any screenshot or touch emulation in it.
+  const originalSession = sessionId;
+  const {targetId} = await cdp("Target.createTarget", {url:"about:blank",newWindow:true,width:1440,height:1000}, false);
+  try {
+    ({sessionId} = await cdp("Target.attachToTarget", {targetId,flatten:true}, false));
+    await cdp("Page.enable"); await cdp("Runtime.enable");
+    await cdp("Page.navigate", {url:"http://127.0.0.1:5173/deals"});
+    const action = inputByAria(`Create revision from version ${id}`);
+    await until(`Boolean(${action})`);
+    assert.ok(await evaluate("matchMedia('(hover: hover)').matches"), "Fresh desktop must support hover");
+    await expectLinkStyle(action, "rgb(255 255 255 / 0.5)");
+    await evaluate(`(${action}).scrollIntoView({block:'center'})`);
+    const point = await evaluate(`(()=>{const r=(${action}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+    await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",pointerType:"mouse",...point});
+    await until(`(${action}).matches(':hover')`);
+    await pause(200);
+    await expectLinkStyle(action, "rgb(255 255 255 / 0.8)");
+  } finally {
+    await cdp("Target.closeTarget", {targetId}, false);
+    sessionId = originalSession;
+    await cdp("Page.bringToFront");
+  }
+}
 async function toggle(label) { assert.ok(await evaluate(visible(inputByAria(label)))); await evaluate(`(${inputByAria(label)}).click()`); }
 async function resumeSaved(id) {
   await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${id}` });
@@ -115,7 +160,7 @@ try {
   start(process.env.PYTHON ?? "python", ["-m", "uvicorn", "fixture:app", "--host", "127.0.0.1", "--port", "8000"], { PYTHONPATH: `${backend}:${temp}` });
   start(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "--config", join(temp, "vite.mjs"), "--configLoader", "native"], { VITE_API_BASE_URL: "http://127.0.0.1:8000" });
   await Promise.all([ready("http://127.0.0.1:8000/api/health"), ready("http://127.0.0.1:5173/")]);
-  start(process.env.CHROME_BIN ?? "google-chrome", ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--remote-debugging-port=9222", `--user-data-dir=${temp}/chrome`, "about:blank"]);
+  start(process.env.CHROME_BIN ?? "google-chrome", ["--headless=new", "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--remote-debugging-port=9222", `--user-data-dir=${temp}/chrome`, "about:blank"]);
   const version = JSON.parse(await ready("http://127.0.0.1:9222/json/version"));
   socket = new WebSocket(version.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
@@ -169,9 +214,11 @@ try {
   assert.ok(await evaluate(`document.querySelector('section[aria-label="Sample deal"]').textContent.includes('Fictional deal')`));
   assert.ok(await evaluate(`document.querySelector('section[aria-label="Sample deal"]').textContent.includes('Taxes, insurance, utilities, lender fees and draw timing are not separately modeled.')`));
   await screenshot("sample-desktop.png");
+  await linkRenderPair("links-public-1440");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
   assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
   await screenshot("sample-mobile.png");
+  await linkRenderPair("links-public-390");
   await cdp("Page.reload");
   await until(`${metric("max_safe_offer")} === '$139,000'`);
   await cdp("Page.bringToFront");
@@ -200,6 +247,12 @@ try {
   assert.equal(first.analysis_result.max_safe_offer, 155600);
   assert.equal(first.analysis_result.net_profit, 34900);
   checks.push("Manual flow saves the submitted $50K scope after editing the live scope to $67K");
+  for (const width of [390, 1440]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    await expectLinkStyle(byText("a", "View saved version →"), "var(--color-emerald-400)");
+    await linkRenderPair(`links-saved-analyzer-${width}`);
+  }
+
   await click("a", "View saved version →"); await until(`Boolean(${byText("a", "Create revision")})`);
   await cdp("Page.reload"); await until(`Boolean(${byText("a", "Create revision")})`);
   await until(`Boolean(${scopeInput("Unit cost 1")})`);
@@ -272,6 +325,7 @@ try {
   await click("a", "View saved version →"); await click("button", "Compare bids");
   await until(`Boolean(${byText("a", `baseline #${baseline.id}`)})`);
   assert.equal(await evaluate(`(${byText("a", `baseline #${baseline.id}`)}).getAttribute('href')`), `/deal/${baseline.id}`);
+  await expectLinkStyle(byText("a", `baseline #${baseline.id}`), "var(--color-amber-200)", true);
   assert.ok(await evaluate(`document.querySelector('[aria-label="Bid comparison"]').textContent.includes('Create a revision from baseline #${baseline.id}')`));
 
   await resumeSaved(baseline.id);
@@ -431,6 +485,7 @@ try {
     if (width === 390) assert.equal(await evaluate(`(${control}).hasAttribute('aria-label')`), false);
     assert.equal(await evaluate(`(${control}).checked`), width === 1440);
     await clickVisible(control);
+    await until(`(${control}).checked === ${width === 390}`);
   }
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
   assert.equal(await evaluate(`(${inputByAria(`Compare version #${first.id}`)}).checked`), false);
@@ -485,6 +540,7 @@ try {
   assert.equal(await evaluate(`(${selectedRow}).querySelector('a[href="/deal/${bidB.id}"]').getAttribute('aria-label')`), `Open version #${bidB.id}, the version this was revised from`);
   const noteButton = `(${selectedRow}).querySelector('button[aria-controls]')`;
   const noteElement = `document.getElementById((${noteButton}).getAttribute('aria-controls'))`;
+  await verifyDesktopHover(selected.id);
   const requestsBeforeNotes = browserApiRequests.length;
   assert.equal(selected.revision_note.length, 2000);
   for (const width of [1440, 390]) {
@@ -497,6 +553,13 @@ try {
     assert.equal(await evaluate(`(${inputByAria(`Create revision from version ${second.id}`)}).closest('[data-saved-version]').querySelector('button[aria-controls]')`), null);
     assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
     await screenshot(`saved-deals-${width}.png`);
+    await linkRenderPair(`links-deals-${width}`);
+    await expectLinkStyle(`(${selectedRow}).querySelector('a[aria-label^="Open version"]')`, "rgb(255 255 255 / 0.6)", true);
+    const action = inputByAria(`Create revision from version ${selected.id}`);
+    await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
+    await pause(200);
+    await expectLinkStyle(action, width === 390 ? "#E8C547" : "rgb(255 255 255 / 0.5)");
+
     await evaluate(`(${noteButton}).focus()`);
     assert.ok(await evaluate(`document.activeElement === (${noteButton})`));
     await cdp("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32, text: " " });
@@ -518,6 +581,10 @@ try {
     await clickVisible(inputByAria(`Open saved version ${selected.id}`));
     await until(`(${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
     await screenshot(`saved-deal-${width}.png`);
+    await linkRenderPair(`links-detail-${width}`);
+    await expectLinkStyle(byText("a", "Create revision"), "#E8C547");
+    await expectLinkStyle(byText("a", "← My Deals"), "rgb(255 255 255 / 0.6)");
+
     await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals" });
     await until(`Boolean(${inputByAria(`Create revision from version ${selected.id}`)})`);
     await clickVisible(inputByAria(`Create revision from version ${selected.id}`));
@@ -525,6 +592,7 @@ try {
     assert.equal(await evaluate(`(${scopeInput("Source 1")}).value`), "Builder B fixture");
     assert.deepEqual(await api("/api/deals"), recordsBeforeList);
   }
+  checks.push("Computed link colors, desktop hover, parent/baseline underlines, gold actions and back-link contrast styles match the intended utilities; public, list, detail and saved-analyzer before/after renders captured");
   checks.push("Pointer clicks on visible Open and Create revision controls work at 390/1440 without changing saved data");
   await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${selected.id}` });
   await until(`(${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
