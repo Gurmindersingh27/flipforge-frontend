@@ -135,7 +135,7 @@ try {
   start(process.env.PYTHON ?? "python", ["-m", "uvicorn", "fixture:app", "--host", "127.0.0.1", "--port", "8000"], { PYTHONPATH: `${backend}:${temp}` });
   start(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "--config", join(temp, "vite.mjs"), "--configLoader", "native"], { VITE_API_BASE_URL: "http://127.0.0.1:8000" });
   await Promise.all([ready("http://127.0.0.1:8000/api/health"), ready("http://127.0.0.1:5173/")]);
-  start(process.env.CHROME_BIN ?? "google-chrome", ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--remote-debugging-port=9222", `--user-data-dir=${temp}/chrome`, "about:blank"]);
+  start(process.env.CHROME_BIN ?? "google-chrome", ["--headless=new", "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--remote-debugging-port=9222", `--user-data-dir=${temp}/chrome`, "about:blank"]);
   const version = JSON.parse(await ready("http://127.0.0.1:9222/json/version"));
   socket = new WebSocket(version.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
@@ -535,7 +535,6 @@ try {
     await expectLinkStyle(action, width === 390 ? "#E8C547" : "rgb(255 255 255 / 0.5)");
     if (width === 1440) {
       await cdp("Emulation.setTouchEmulationEnabled", {enabled:false});
-      await cdp("Emulation.setEmulatedMedia", {features:[{name:"hover",value:"hover"},{name:"pointer",value:"fine"}]});
       await cdp("Page.bringToFront");
       await evaluate(`(${action}).scrollIntoView({block:'center'})`);
       const point = await evaluate(`(()=>{const r=(${action}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
@@ -545,7 +544,6 @@ try {
       console.log("LINK_HOVER", await evaluate(`JSON.stringify({hover:matchMedia('(hover: hover)').matches,matches:(${action}).matches(':hover'),hit:(${action}).contains(document.elementFromPoint(${point.x},${point.y})),point:${JSON.stringify(point)}})`));
       await expectLinkStyle(action, "rgb(255 255 255 / 0.8)");
       await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
-      await cdp("Emulation.setEmulatedMedia", {features:[]});
     }
 
     await evaluate(`(${noteButton}).focus()`);
