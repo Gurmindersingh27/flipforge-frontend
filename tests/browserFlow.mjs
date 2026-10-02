@@ -101,6 +101,31 @@ async function linkRenderPair(name) {
   assert.ok(contrast.every(link=>link.ratio>=4.5), `Link contrast below 4.5:1: ${JSON.stringify(contrast.filter(link=>link.ratio<4.5))}`);
 
 }
+async function verifyDesktopHover(id) {
+  // Full-page screenshot/mobile emulation can reset headless pointer preferences.
+  // Use a fresh desktop target before any screenshot or touch emulation in it.
+  const originalSession = sessionId;
+  const {targetId} = await cdp("Target.createTarget", {url:"about:blank",newWindow:true,width:1440,height:1000}, false);
+  try {
+    ({sessionId} = await cdp("Target.attachToTarget", {targetId,flatten:true}, false));
+    await cdp("Page.enable"); await cdp("Runtime.enable");
+    await cdp("Page.navigate", {url:"http://127.0.0.1:5173/deals"});
+    const action = inputByAria(`Create revision from version ${id}`);
+    await until(`Boolean(${action})`);
+    assert.ok(await evaluate("matchMedia('(hover: hover)').matches"), "Fresh desktop must support hover");
+    await expectLinkStyle(action, "rgb(255 255 255 / 0.5)");
+    await evaluate(`(${action}).scrollIntoView({block:'center'})`);
+    const point = await evaluate(`(()=>{const r=(${action}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+    await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",pointerType:"mouse",...point});
+    await until(`(${action}).matches(':hover')`);
+    await pause(200);
+    await expectLinkStyle(action, "rgb(255 255 255 / 0.8)");
+  } finally {
+    await cdp("Target.closeTarget", {targetId}, false);
+    sessionId = originalSession;
+    await cdp("Page.bringToFront");
+  }
+}
 async function toggle(label) { assert.ok(await evaluate(visible(inputByAria(label)))); await evaluate(`(${inputByAria(label)}).click()`); }
 async function resumeSaved(id) {
   await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${id}` });
@@ -515,6 +540,7 @@ try {
   assert.equal(await evaluate(`(${selectedRow}).querySelector('a[href="/deal/${bidB.id}"]').getAttribute('aria-label')`), `Open version #${bidB.id}, the version this was revised from`);
   const noteButton = `(${selectedRow}).querySelector('button[aria-controls]')`;
   const noteElement = `document.getElementById((${noteButton}).getAttribute('aria-controls'))`;
+  await verifyDesktopHover(selected.id);
   const requestsBeforeNotes = browserApiRequests.length;
   assert.equal(selected.revision_note.length, 2000);
   for (const width of [1440, 390]) {
@@ -533,18 +559,6 @@ try {
     await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
     await pause(200);
     await expectLinkStyle(action, width === 390 ? "#E8C547" : "rgb(255 255 255 / 0.5)");
-    if (width === 1440) {
-      await cdp("Emulation.setTouchEmulationEnabled", {enabled:false});
-      await cdp("Page.bringToFront");
-      await evaluate(`(${action}).scrollIntoView({block:'center'})`);
-      const point = await evaluate(`(()=>{const r=(${action}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
-      await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",pointerType:"mouse",...point});
-      await pause(200);
-      assert.ok(await evaluate("matchMedia('(hover: hover)').matches"), "Desktop hover capability must be enabled");
-      console.log("LINK_HOVER", await evaluate(`JSON.stringify({hover:matchMedia('(hover: hover)').matches,matches:(${action}).matches(':hover'),hit:(${action}).contains(document.elementFromPoint(${point.x},${point.y})),point:${JSON.stringify(point)}})`));
-      await expectLinkStyle(action, "rgb(255 255 255 / 0.8)");
-      await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
-    }
 
     await evaluate(`(${noteButton}).focus()`);
     assert.ok(await evaluate(`document.activeElement === (${noteButton})`));
