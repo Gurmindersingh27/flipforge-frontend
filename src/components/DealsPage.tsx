@@ -7,7 +7,8 @@ import SavedDealComparison from "./SavedDealComparison";
 
 function fmt(n: unknown, prefix = "$"): string {
   if (n == null || typeof n !== "number") return "—";
-  return `${prefix}${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const abs = Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return `${n < 0 && abs !== "0" ? "-" : ""}${prefix}${abs}`;
 }
 
 function fmtPct(n: unknown): string {
