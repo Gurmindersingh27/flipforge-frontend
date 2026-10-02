@@ -127,7 +127,8 @@ async function verifyDesktopHover(id, noDraftSource) {
     }
     await cdp("Page.addScriptToEvaluateOnNewDocument", {source:noDraftSource});
     await cdp("Page.reload");
-    const reason = byText("span", "Create revision (unavailable: no saved inputs)");
+    const row = `(${inputByAria(`Open saved version ${id}`)}).closest('[data-saved-version]')`;
+    const reason = `Array.from((${row}).querySelectorAll('span')).find(e=>e.textContent.trim()==='Create revision (unavailable: no saved inputs)')`;
     await until(`Boolean(${reason})`);
     await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
     await pause(200);
