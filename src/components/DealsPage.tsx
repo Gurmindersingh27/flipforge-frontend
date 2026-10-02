@@ -73,7 +73,7 @@ function dealPresentation(deal: SavedDeal) {
 function DealIdentity({ deal }: { deal: SavedDeal }) {
   const { address } = dealPresentation(deal);
   return <>
-    <div className="break-words lg:truncate" title={address || undefined}>
+    <div className="break-words xl:truncate" title={address || undefined}>
       {address || `Untitled deal #${deal.id}`}
     </div>
     <div className="mt-1 text-xs text-white/60">
@@ -224,7 +224,7 @@ function DealsList() {
         {selectedIds.length > 0 && <button type="button" onClick={() => setSelectedIds([])} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white hover:bg-white/10">Clear comparison</button>}
       </div>
       {selectedDeals.length >= 2 && <SavedDealComparison deals={selectedDeals} />}
-      <ul aria-label="Saved deal cards" className="space-y-3 lg:hidden">
+      <ul aria-label="Saved deal cards" className="space-y-3 xl:hidden">
         {deals.map(deal => {
           const { profit, roi, verdict, maxOffer } = dealPresentation(deal);
           return <li key={deal.id} data-saved-version={deal.id} className="min-w-0 rounded-xl border border-white/10 bg-[var(--ff-panel)] p-3">
@@ -244,7 +244,7 @@ function DealsList() {
           </li>;
         })}
       </ul>
-    <div className="hidden overflow-x-auto lg:block">
+    <div className="hidden overflow-x-auto xl:block">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-white/50">
