@@ -249,14 +249,14 @@ function DealsList() {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-white/50">
-            <th scope="col" className="py-3 pr-4">Compare</th>
-            <th className="py-3 pr-4">Deal / version</th>
-            <th className="py-3 pr-4">Est. profit</th>
-            <th className="py-3 pr-4">Annualized ROI</th>
-            <th className="py-3 pr-4">Verdict</th>
-            <th className="py-3 pr-4">Max Offer</th>
-            <th className="py-3 pr-4">Date</th>
-            <th className="py-3 pr-4">Actions</th>
+            <th scope="col" className="py-3 pr-3">Compare</th>
+            <th className="py-3 pr-3">Deal / version</th>
+            <th className="py-3 pr-3">Est. profit</th>
+            <th className="py-3 pr-3">Annualized ROI</th>
+            <th className="py-3 pr-3">Verdict</th>
+            <th className="py-3 pr-3">Max Offer</th>
+            <th className="py-3 pr-3">Date</th>
+            <th className="py-3 pr-0">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -269,22 +269,22 @@ function DealsList() {
                 data-saved-version={deal.id}
                 className="border-b border-white/5 hover:bg-white/5 transition-colors"
               >
-                <td className="py-3 pr-4">
+                <td className="py-3 pr-3">
                   <input type="checkbox" aria-label={`Compare version #${deal.id}`} aria-describedby="compare-deals-help" checked={selectedIds.includes(deal.id)} disabled={selectedIds.length >= 3 && !selectedIds.includes(deal.id)} onChange={() => toggleComparison(deal.id)} className="h-5 w-5 accent-amber-300 disabled:opacity-40" />
                 </td>
-                <td className="py-3 pr-4 text-white/90 min-w-[180px] max-w-[240px]">
+                <td className="py-3 pr-3 text-white/90 min-w-[180px] max-w-[240px]">
                   <DealIdentity deal={deal} />
                 </td>
-                <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmt(profit)}</td>
-                <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmtPct(roi)}</td>
-                <td className="py-3 pr-4">
+                <td className="py-3 pr-3 text-white/80 font-jetbrains">{fmt(profit)}</td>
+                <td className="py-3 pr-3 text-white/80 font-jetbrains">{fmtPct(roi)}</td>
+                <td className="py-3 pr-3">
                   <VerdictBadge verdict={verdict} />
                 </td>
-                <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmt(maxOffer)}</td>
-                <td className="py-3 pr-4 text-white/50 text-xs whitespace-nowrap">
+                <td className="py-3 pr-3 text-white/80 font-jetbrains">{fmt(maxOffer)}</td>
+                <td className="py-3 pr-3 text-white/50 text-xs whitespace-nowrap">
                   {fmtDate(deal.created_at)}
                 </td>
-                <td className="py-3 pr-4">
+                <td className="py-3 pr-0">
                   <DealActions deal={deal} />
                 </td>
               </tr>

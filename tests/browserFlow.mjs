@@ -45,6 +45,13 @@ async function evaluate(expression) {
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   return result.result.value;
 }
+async function requireMoneyFont() {
+  const font = await evaluate(`(async()=>{await document.fonts.ready;return {ready:document.fonts.check('14px "JetBrains Mono"'),faces:[...document.fonts].filter(f=>f.family.replaceAll('"','').replaceAll("'",'')==='JetBrains Mono').map(f=>({status:f.status,weight:f.weight}))};})()`);
+  console.log("TABLE_FONT", JSON.stringify(font));
+  assert.ok(font.ready, 'JetBrains Mono must load before table width assertions');
+  // FontFaceSet.check alone can return true when the family is not registered at all.
+  assert.ok(font.faces.some(f=>f.status === 'loaded' && f.weight === '400'), 'A real JetBrains Mono regular face must be loaded, not a fallback');
+}
 async function until(expression) {
   for (let i = 0; i < 80; i++) {
     try { if (await evaluate(expression)) return; }
@@ -705,6 +712,7 @@ try {
       await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
       const row = `(${inputByAria(`Open saved version ${selected.id}`)}).closest('[data-saved-version]')`;
       const reason = `Array.from((${row}).querySelectorAll('span')).find(e=>e.textContent.trim()==='Create revision (unavailable: no saved inputs)')`;
+      await requireMoneyFont();
       assert.ok(await evaluate(visible(reason)));
       assert.equal(await evaluate(`(${row}).querySelector('a[aria-label="Create revision from version ${selected.id}"]')`), null);
       assert.ok(await evaluate(`(()=>{const e=${reason};return e.tagName==='SPAN' && !e.hasAttribute('href') && !e.hasAttribute('tabindex') && e.tabIndex<0;})()`));
@@ -753,18 +761,45 @@ try {
     await until(`Boolean(${inputByAria(`Create revision from version ${selected.id}`)})`);
     assert.ok(await evaluate(visible(inputByAria(`Create revision from version ${selected.id}`))));
   }
-  // Read-only stress fixture: measure wider figures without making overflow a failure.
-  await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 1000, deviceScaleFactor: 1, mobile: false });
-  await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals?layoutFixture=wide" });
-  await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
-  const wideRow = `(${inputByAria(`Open saved version ${selected.id}`)}).closest('tr')`;
-  const wideLayout = await evaluate(`(()=>{const row=${wideRow},wrapper=row.closest('table').parentElement;return {profit:row.cells[2].textContent,verdict:row.cells[4].textContent,maxOffer:row.cells[5].textContent,clientWidth:wrapper.clientWidth,scrollWidth:wrapper.scrollWidth,overflowPixels:Math.max(0,wrapper.scrollWidth-wrapper.clientWidth),pageWidth:document.documentElement.scrollWidth,viewportWidth:innerWidth};})()`);
-  console.log("WORST_CASE_TABLE_LAYOUT", 1280, JSON.stringify(wideLayout));
-  await screenshot("worst-case-list-1280-left.png");
-  await evaluate(`(()=>{const wrapper=(${wideRow}).closest('table').parentElement;wrapper.scrollLeft=wrapper.scrollWidth;})()`);
-  await screenshot("worst-case-list-1280-right.png");
-  assert.deepEqual(await api("/api/deals"), recordsBeforeList);
-  checks.push("Cards wrap full addresses below 1280; table truncation and one-line dates remain at 1280/1440, with no standard-fixture table or page overflow; worst-case row measured separately");
+  // Both live actions and the longer unavailable label must fit with real fonts.
+  for (const width of [1280, 1440]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height:1000, deviceScaleFactor:1, mobile:false });
+    for (const mode of ['null', 'valid']) {
+      const writesBeforeWideCase = browserApiWrites.length;
+      await cdp("Page.navigate", { url:`http://127.0.0.1:5173/deals?layoutFixture=wide&draftFixture=${mode}` });
+      await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
+      await requireMoneyFont();
+      const wideRow = `(${inputByAria(`Open saved version ${selected.id}`)}).closest('tr')`;
+      await evaluate(`(${wideRow}).scrollIntoView({block:'center'})`);
+      const layout = await evaluate(`(()=>{
+        const row=${wideRow},table=row.closest('table'),wrapper=table.parentElement,wr=wrapper.getBoundingClientRect();
+        const textBox=e=>{const range=document.createRange();range.selectNodeContents(e);const rects=[...range.getClientRects()].filter(r=>r.width>0&&r.height>0),cell=e.closest('td').getBoundingClientRect();return {text:e.textContent.trim(),lines:new Set(rects.map(r=>Math.round(r.top))).size,complete:rects.length>0&&rects.every(r=>r.left>=Math.max(cell.left,wr.left)-1&&r.right<=Math.min(cell.right,wr.right)+1&&r.top>=cell.top-1&&r.bottom<=cell.bottom+1),visible:rects.every(r=>r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight)};};
+        const metrics=[2,3,5,6].map(i=>textBox(row.cells[i]));
+        const actions=[...row.cells[7].querySelectorAll('a,span')].map(textBox);
+        const clientWidth=wrapper.clientWidth,scrollWidth=wrapper.scrollWidth,scrollLeft=wrapper.scrollLeft;
+        const oldWidth=table.style.width;let requiredWidth;
+        try {table.style.width='min-content';requiredWidth=table.getBoundingClientRect().width;} finally {table.style.width=oldWidth;}
+        return {metrics,actions,verdict:row.cells[4].textContent,clientWidth,scrollWidth,scrollLeft,requiredWidth,margin:clientWidth-requiredWidth,pageWidth:document.documentElement.scrollWidth,viewportWidth:innerWidth};
+      })()`);
+      console.log("WORST_CASE_TABLE_LAYOUT", width, mode, JSON.stringify(layout));
+      assert.ok(layout.scrollWidth <= layout.clientWidth + 1, 'Worst-case table must fit without horizontal scrolling');
+      assert.equal(layout.scrollLeft, 0);
+      assert.ok(layout.pageWidth <= layout.viewportWidth);
+      assert.equal(layout.verdict, 'CONDITIONAL');
+      assert.deepEqual(layout.metrics.map(m=>m.text), ['-$123,456', `${(selected.analysis_result.annualized_roi * 100).toFixed(1)}%`, '$1,234,567', 'Sep 28, 2026']);
+      for (const metric of layout.metrics) {
+        assert.equal(metric.lines, 1, 'Amounts and date must stay on one line');
+        assert.ok(metric.complete && metric.visible, 'Amounts and date must be complete and unclipped');
+      }
+      assert.deepEqual(layout.actions.map(a=>a.text), ['Open', mode === 'valid' ? 'Create revision' : 'Create revision (unavailable: no saved inputs)']);
+      assert.ok(layout.actions.every(a=>a.complete && a.visible), 'Every action or unavailable label must be visible without scrolling');
+      const { data } = await cdp("Page.captureScreenshot", {format:'png',captureBeyondViewport:false});
+      writeFileSync(join(artifacts, `worst-case-list-${width}-${mode}.png`), Buffer.from(data, 'base64'));
+      assert.deepEqual(await api('/api/deals'), recordsBeforeList);
+      assert.deepEqual(browserApiWrites.slice(writesBeforeWideCase), [], 'Table fit checks must not write');
+    }
+  }
+  checks.push("Cards wrap full addresses below 1280; standard and worst-case tables fit at 1280/1440 with loaded JetBrains Mono, complete amounts, one-line dates, visible actions/unavailable text and no writes");
   checks.push("Both visible layouts reject null/malformed drafts with nonfocusable reason text, retain Open, and match the analyzer purchase_price presence check without writes");
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: noDraftFixture });
   checks.push("Detail guard matches list/analyzer for null, object, string, array and purchase_price presence; PDF details render, valid/present drafts resume at 390/1440, minimal drafts analyze with blank rent, only the expected stateless analysis POST occurs, and saved records remain unchanged");
