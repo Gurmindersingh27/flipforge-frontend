@@ -14,6 +14,11 @@ function fmt(n: number | null | undefined, prefix = "$"): string {
   return `${prefix}${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
+function canCreateRevision(deal: SavedDeal): boolean {
+  const incoming = deal.draft_input;
+  return !!incoming && typeof incoming === "object" && "purchase_price" in incoming;
+}
+
 function DealView({ deal, previous, comparisonError }: { deal: SavedDeal; previous: SavedDeal | null; comparisonError: string }) {
   const draft = deal.draft_input as DraftDeal | null;
   const result = deal.analysis_result as unknown as AnalyzeResponse;
@@ -43,7 +48,7 @@ function DealView({ deal, previous, comparisonError }: { deal: SavedDeal; previo
           <div className="min-w-0 break-words text-sm font-semibold text-white">
             {pdfMeta.property_address ?? "Saved Deal"}
           </div>
-          {draft ? (
+          {canCreateRevision(deal) ? (
             <Link
               to="/"
               state={{ resumeDraft: draft, resumeDeal: deal }}
