@@ -493,19 +493,21 @@ try {
   assert.ok(await evaluate(`document.body.textContent.includes('Annualized ROI')`));
   assert.ok(await evaluate(`document.body.textContent.includes('Untitled deal #${first.id}')`));
   const requestsBeforeComparison = browserApiRequests.length;
-  // Select on mobile, verify on desktop; change desktop selection and verify mobile.
-  for (const width of [390, 1440]) {
-    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+  // Cross the exact card/table boundary in both directions without losing selection.
+  for (const width of [1023, 1024]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 1023 });
     const control = inputByAria(`Compare version #${first.id}`);
     assert.ok(await evaluate(visible(control)));
-    assert.equal(await evaluate(`(${control}).closest('[data-saved-version]').tagName`), width === 390 ? "LI" : "TR");
+    assert.equal(await evaluate(`(${control}).closest('[data-saved-version]').tagName`), width === 1023 ? "LI" : "TR");
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('input[type=checkbox]')).filter(e=>(e.getAttribute('aria-label') ?? e.closest('label')?.textContent.trim()) === 'Compare version #${first.id}' && e.getBoundingClientRect().width>0 && e.getBoundingClientRect().height>0).length`), 1);
     assert.equal(await evaluate(`(${control}).getAttribute('aria-label') ?? (${control}).closest('label')?.textContent.trim()`), `Compare version #${first.id}`);
-    if (width === 390) assert.equal(await evaluate(`(${control}).hasAttribute('aria-label')`), false);
-    assert.equal(await evaluate(`(${control}).checked`), width === 1440);
+    if (width === 1023) assert.equal(await evaluate(`(${control}).hasAttribute('aria-label')`), false);
+    assert.equal(await evaluate(`(${control}).checked`), width === 1024);
     await clickVisible(control);
-    await until(`(${control}).checked === ${width === 390}`);
+    await until(`(${control}).checked === ${width === 1023}`);
   }
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 1023, height: 1000, deviceScaleFactor: 1, mobile: false });
+  assert.equal(await evaluate(`(${inputByAria(`Compare version #${first.id}`)}).checked`), false);
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
   assert.equal(await evaluate(`(${inputByAria(`Compare version #${first.id}`)}).checked`), false);
   for (const label of ['Est. profit', 'Annualized ROI', 'Verdict', 'Max offer', 'Date']) {
@@ -593,7 +595,7 @@ try {
   }
   assert.equal(browserApiRequests.length, requestsBeforeNotes, "Note expansion must not issue API requests");
   checks.push("A 2,000-character multiline note preserves line breaks, expands by keyboard and collapses at both widths; short notes have no toggle and parent links describe lineage");
-  for (const width of [1440, 390]) {
+  for (const width of [390, 768, 1023, 1024, 1440]) {
     await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
     await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals" });
     await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
@@ -612,10 +614,11 @@ try {
     assert.deepEqual(await api("/api/deals"), recordsBeforeList);
   }
   checks.push("Computed link colors, desktop hover, parent/baseline underlines, gold actions and back-link contrast styles match the intended utilities; public, list, detail and saved-analyzer before/after renders captured");
-  checks.push("Pointer clicks on visible Open and Create revision controls work at 390/1440 without changing saved data");
+  checks.push("Pointer clicks on visible Open and Create revision controls work at 390/768/1023/1024/1440 without changing saved data");
   await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${selected.id}` });
   await until(`(${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
   // Test-only read fixture for a legacy saved record with no draft inputs.
+  const longAddress = '12345 North Peachtree Industrial Boulevard, Building Twelve, Upper Courtyard Residence, Suite 987, Historic Chattahoochee Riverside Estates and Gardens, Sandy Springs, Fulton County, Georgia 30350, United States of America';
   const noDraftSource = `
     const nativeFetch = window.fetch.bind(window);
     window.fetch = async (...args) => {
@@ -624,7 +627,7 @@ try {
         const records = await response.json();
         const mode = new URLSearchParams(location.search).get('draftFixture');
         const draft = mode === 'object' ? {} : mode === 'string' ? 'invalid' : mode === 'array' ? [] : mode === 'present' ? {purchase_price:null} : null;
-        return new Response(JSON.stringify(records.map(record=>record.id===${selected.id}?{...record,draft_input:draft,created_at:"2026-09-28T12:00:00Z"}:record)), {status:200,headers:{'Content-Type':'application/json'}});
+        return new Response(JSON.stringify(records.map(record=>record.id===${selected.id}?{...record,draft_input:draft,address:${JSON.stringify(longAddress)},created_at:"2026-09-28T12:00:00Z"}:record)), {status:200,headers:{'Content-Type':'application/json'}});
       }
       if (new URL(args[0], location.href).pathname === '/api/deals/${selected.id}' && response.ok) {
         const record = await response.json();
@@ -643,7 +646,7 @@ try {
     assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
     await screenshot(`saved-deal-no-inputs-${width}.png`);
   }
-  for (const width of [390, 768, 1440]) {
+  for (const width of [390, 768, 1023, 1024, 1440]) {
     await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
     for (const mode of ['null', 'object', 'string', 'array']) {
       await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deals?draftFixture=${mode}` });
@@ -656,10 +659,28 @@ try {
       await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
       await pause(200);
       await expectLinkStyle(reason, "rgb(255 255 255 / 0.6)", "none");
-      await expectLinkStyle(inputByAria(`Open saved version ${selected.id}`), width === 390 ? "#E8C547" : "rgb(255 255 255 / 0.7)", width !== 390);
+      await expectLinkStyle(inputByAria(`Open saved version ${selected.id}`), width < 1024 ? "#E8C547" : "rgb(255 255 255 / 0.7)", width >= 1024);
       if (mode === 'null') {
+        const address = `(${row}).querySelector('[title]')`;
+        const addressLayout = await evaluate(`(()=>{const e=${address},s=getComputedStyle(e),r=document.createRange();r.selectNodeContents(e);return {text:e.textContent,title:e.title,whiteSpace:s.whiteSpace,textOverflow:s.textOverflow,overflowX:s.overflowX,clientWidth:e.clientWidth,scrollWidth:e.scrollWidth,clientHeight:e.clientHeight,scrollHeight:e.scrollHeight,lineCount:new Set([...r.getClientRects()].filter(r=>r.width>0&&r.height>0).map(r=>Math.round(r.top))).size,rowTag:(${row}).tagName};})()`);
+        assert.equal(addressLayout.text, longAddress);
+        assert.equal(addressLayout.title, longAddress);
+        assert.equal(addressLayout.rowTag, width < 1024 ? "LI" : "TR");
+        if (width < 1024) {
+          assert.equal(addressLayout.whiteSpace, "normal");
+          assert.notEqual(addressLayout.textOverflow, "ellipsis");
+          assert.ok(addressLayout.lineCount > 1, "Long card address must wrap onto multiple lines");
+          assert.ok(addressLayout.scrollHeight <= addressLayout.clientHeight + 1, "Full card address must be visible");
+          assert.ok(addressLayout.scrollWidth <= addressLayout.clientWidth + 1, "Card address must not overflow horizontally");
+        } else {
+          assert.equal(addressLayout.whiteSpace, "nowrap");
+          assert.equal(addressLayout.textOverflow, "ellipsis");
+          assert.equal(addressLayout.overflowX, "hidden");
+          assert.ok(addressLayout.scrollWidth > addressLayout.clientWidth, "Table fixture must exercise real address truncation");
+        }
+        console.log("ADDRESS_LAYOUT", width, JSON.stringify(addressLayout));
         assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"), "Table scrolling must stay inside its wrapper");
-        if (width !== 390) {
+        if (width >= 1024) {
           const date = `(${row}).cells[6]`;
           const layout = await evaluate(`(()=>{const e=${date},r=document.createRange();r.selectNodeContents(e);const lines=[...r.getClientRects()].filter(r=>r.width>0&&r.height>0);const wrapper=e.closest('table').parentElement;return {date:e.textContent.trim(),whiteSpace:getComputedStyle(e).whiteSpace,lineCount:new Set(lines.map(r=>Math.round(r.top))).size,clientWidth:wrapper.clientWidth,scrollWidth:wrapper.scrollWidth,overflowX:getComputedStyle(wrapper).overflowX};})()`);
           assert.equal(layout.date, "Sep 28, 2026");
@@ -667,11 +688,7 @@ try {
           assert.equal(layout.lineCount, 1, "Long date must occupy exactly one rendered line");
           assert.equal(layout.overflowX, "auto");
           console.log("TABLE_LAYOUT", width, JSON.stringify(layout));
-          if (width === 768) {
-            await screenshot("unavailable-list-768-left.png");
-            await evaluate(`(()=>{const wrapper=(${row}).closest('table').parentElement;wrapper.scrollLeft=wrapper.scrollWidth;})()`);
-            await screenshot("unavailable-list-768-right.png");
-          }
+          assert.ok(layout.scrollWidth <= layout.clientWidth + 1, "Desktop table must fit its container at 1024/1440");
         }
         await screenshot(`unavailable-list-${width}.png`);
         await clickVisible(inputByAria(`Open saved version ${selected.id}`));
@@ -685,7 +702,7 @@ try {
     assert.ok(await evaluate(visible(inputByAria(`Create revision from version ${selected.id}`))));
   }
   assert.deepEqual(await api("/api/deals"), recordsBeforeList);
-  checks.push("Desktop dates stay on one line with an unavailable row at 768/1440; tablet scroll is reported and mobile stays within the page");
+  checks.push("Cards wrap full addresses below 1024; table truncation and one-line dates remain at 1024/1440, with no table or page overflow");
   checks.push("Both visible layouts reject null/malformed drafts with nonfocusable reason text, retain Open, and match the analyzer purchase_price presence check without writes");
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: noDraftFixture });
   checks.push("Saved details offer Create revision with inputs and a visible unavailable reason without inputs at desktop and mobile widths");
