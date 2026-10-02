@@ -86,7 +86,8 @@ async function expectLinkStyle(expression, color, underline = false) {
   assert.ok(await evaluate(visible(expression)), "Style target must be visible");
   const result = await evaluate(`(()=>{const e=${expression},s=getComputedStyle(e),c=document.createElement('canvas'),x=c.getContext('2d');c.width=c.height=1;const pixel=v=>{x.clearRect(0,0,1,1);x.fillStyle=v;x.fillRect(0,0,1,1);return [...x.getImageData(0,0,1,1).data];};const probe=document.createElement('span');probe.style.color=${JSON.stringify(color)};document.body.append(probe);const expected=pixel(getComputedStyle(probe).color);probe.remove();return {actual:pixel(s.color),expected,decoration:s.textDecorationLine};})()`);
   result.actual.forEach((v,i)=>assert.ok(Math.abs(v-result.expected[i])<=1, `Link color: ${JSON.stringify(result)}`));
-  if (underline) assert.ok(result.decoration.includes('underline'), "Link must render an underline");
+  if (underline === true) assert.ok(result.decoration.includes('underline'), "Link must render an underline");
+  if (underline === "none") assert.equal(result.decoration, "none", "Unavailable text must not look like a link");
 }
 async function linkRenderPair(name) {
   // Reproduce only the two approved source differences for an identical-data baseline.
@@ -101,7 +102,7 @@ async function linkRenderPair(name) {
   assert.ok(contrast.every(link=>link.ratio>=4.5), `Link contrast below 4.5:1: ${JSON.stringify(contrast.filter(link=>link.ratio<4.5))}`);
 
 }
-async function verifyDesktopHover(id) {
+async function verifyDesktopHover(id, noDraftSource) {
   // Full-page screenshot/mobile emulation can reset headless pointer preferences.
   // Use a fresh desktop target before any screenshot or touch emulation in it.
   const originalSession = sessionId;
@@ -110,16 +111,34 @@ async function verifyDesktopHover(id) {
     ({sessionId} = await cdp("Target.attachToTarget", {targetId,flatten:true}, false));
     await cdp("Page.enable"); await cdp("Runtime.enable");
     await cdp("Page.navigate", {url:"http://127.0.0.1:5173/deals"});
-    const action = inputByAria(`Create revision from version ${id}`);
-    await until(`Boolean(${action})`);
-    assert.ok(await evaluate("matchMedia('(hover: hover)').matches"), "Fresh desktop must support hover");
-    await expectLinkStyle(action, "rgb(255 255 255 / 0.5)");
-    await evaluate(`(${action}).scrollIntoView({block:'center'})`);
-    const point = await evaluate(`(()=>{const r=(${action}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
-    await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",pointerType:"mouse",...point});
-    await until(`(${action}).matches(':hover')`);
+    for (const label of [`Open saved version ${id}`, `Create revision from version ${id}`]) {
+      const action = inputByAria(label);
+      await until(`Boolean(${action})`);
+      assert.ok(await evaluate("matchMedia('(hover: hover)').matches"), "Fresh desktop must support hover");
+      await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
+      await pause(200);
+      await expectLinkStyle(action, "rgb(255 255 255 / 0.7)", true);
+      await evaluate(`(${action}).scrollIntoView({block:'center'})`);
+      const point = await evaluate(`(()=>{const r=(${action}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",pointerType:"mouse",...point});
+      await until(`(${action}).matches(':hover')`);
+      await pause(200);
+      await expectLinkStyle(action, "rgb(255 255 255 / 0.8)", true);
+    }
+    await cdp("Page.addScriptToEvaluateOnNewDocument", {source:noDraftSource});
+    await cdp("Page.reload");
+    const row = `(${inputByAria(`Open saved version ${id}`)})?.closest('[data-saved-version]')`;
+    const reason = `Array.from((${row})?.querySelectorAll('span') ?? []).find(e=>e.textContent.trim()==='Create revision (unavailable: no saved inputs)')`;
+    await until(`Boolean(${reason})`);
+    await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
     await pause(200);
-    await expectLinkStyle(action, "rgb(255 255 255 / 0.8)");
+    await expectLinkStyle(reason, "rgb(255 255 255 / 0.6)", "none");
+    await evaluate(`(${reason}).scrollIntoView({block:'center',inline:'nearest'})`);
+    const point = await evaluate(`(()=>{const r=(${reason}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+    await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",pointerType:"mouse",...point});
+    await until(`(${reason}).matches(':hover')`);
+    await pause(200);
+    await expectLinkStyle(reason, "rgb(255 255 255 / 0.6)", "none");
   } finally {
     await cdp("Target.closeTarget", {targetId}, false);
     sessionId = originalSession;
@@ -540,7 +559,6 @@ try {
   assert.equal(await evaluate(`(${selectedRow}).querySelector('a[href="/deal/${bidB.id}"]').getAttribute('aria-label')`), `Open version #${bidB.id}, the version this was revised from`);
   const noteButton = `(${selectedRow}).querySelector('button[aria-controls]')`;
   const noteElement = `document.getElementById((${noteButton}).getAttribute('aria-controls'))`;
-  await verifyDesktopHover(selected.id);
   const requestsBeforeNotes = browserApiRequests.length;
   assert.equal(selected.revision_note.length, 2000);
   for (const width of [1440, 390]) {
@@ -558,7 +576,8 @@ try {
     const action = inputByAria(`Create revision from version ${selected.id}`);
     await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
     await pause(200);
-    await expectLinkStyle(action, width === 390 ? "#E8C547" : "rgb(255 255 255 / 0.5)");
+    await expectLinkStyle(action, width === 390 ? "#E8C547" : "rgb(255 255 255 / 0.7)", width !== 390);
+    await expectLinkStyle(inputByAria(`Open saved version ${selected.id}`), width === 390 ? "#E8C547" : "rgb(255 255 255 / 0.7)", width !== 390);
 
     await evaluate(`(${noteButton}).focus()`);
     assert.ok(await evaluate(`document.activeElement === (${noteButton})`));
@@ -597,7 +616,7 @@ try {
   await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${selected.id}` });
   await until(`(${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
   // Test-only read fixture for a legacy saved record with no draft inputs.
-  const { identifier: noDraftFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", { source: `
+  const noDraftSource = `
     const nativeFetch = window.fetch.bind(window);
     window.fetch = async (...args) => {
       const response = await nativeFetch(...args);
@@ -605,7 +624,7 @@ try {
         const records = await response.json();
         const mode = new URLSearchParams(location.search).get('draftFixture');
         const draft = mode === 'object' ? {} : mode === 'string' ? 'invalid' : mode === 'array' ? [] : mode === 'present' ? {purchase_price:null} : null;
-        return new Response(JSON.stringify(records.map(record=>record.id===${selected.id}?{...record,draft_input:draft}:record)), {status:200,headers:{'Content-Type':'application/json'}});
+        return new Response(JSON.stringify(records.map(record=>record.id===${selected.id}?{...record,draft_input:draft,created_at:"2026-09-28T12:00:00Z"}:record)), {status:200,headers:{'Content-Type':'application/json'}});
       }
       if (new URL(args[0], location.href).pathname === '/api/deals/${selected.id}' && response.ok) {
         const record = await response.json();
@@ -613,7 +632,9 @@ try {
       }
       return response;
     };
-  ` });
+  `;
+  await verifyDesktopHover(selected.id, noDraftSource);
+  const { identifier: noDraftFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", {source:noDraftSource});
   await cdp("Page.reload");
   await until(`document.body.textContent.includes('Create revision (unavailable: no saved inputs)')`);
   for (const width of [1440, 390]) {
@@ -622,7 +643,7 @@ try {
     assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
     await screenshot(`saved-deal-no-inputs-${width}.png`);
   }
-  for (const width of [390, 1440]) {
+  for (const width of [390, 768, 1440]) {
     await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
     for (const mode of ['null', 'object', 'string', 'array']) {
       await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deals?draftFixture=${mode}` });
@@ -632,7 +653,26 @@ try {
       assert.ok(await evaluate(visible(reason)));
       assert.equal(await evaluate(`(${row}).querySelector('a[aria-label="Create revision from version ${selected.id}"]')`), null);
       assert.ok(await evaluate(`(()=>{const e=${reason};return e.tagName==='SPAN' && !e.hasAttribute('href') && !e.hasAttribute('tabindex') && e.tabIndex<0;})()`));
+      await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
+      await pause(200);
+      await expectLinkStyle(reason, "rgb(255 255 255 / 0.6)", "none");
+      await expectLinkStyle(inputByAria(`Open saved version ${selected.id}`), width === 390 ? "#E8C547" : "rgb(255 255 255 / 0.7)", width !== 390);
       if (mode === 'null') {
+        assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"), "Table scrolling must stay inside its wrapper");
+        if (width !== 390) {
+          const date = `(${row}).cells[6]`;
+          const layout = await evaluate(`(()=>{const e=${date},r=document.createRange();r.selectNodeContents(e);const lines=[...r.getClientRects()].filter(r=>r.width>0&&r.height>0);const wrapper=e.closest('table').parentElement;return {date:e.textContent.trim(),whiteSpace:getComputedStyle(e).whiteSpace,lineCount:new Set(lines.map(r=>Math.round(r.top))).size,clientWidth:wrapper.clientWidth,scrollWidth:wrapper.scrollWidth,overflowX:getComputedStyle(wrapper).overflowX};})()`);
+          assert.equal(layout.date, "Sep 28, 2026");
+          assert.equal(layout.whiteSpace, "nowrap");
+          assert.equal(layout.lineCount, 1, "Long date must occupy exactly one rendered line");
+          assert.equal(layout.overflowX, "auto");
+          console.log("TABLE_LAYOUT", width, JSON.stringify(layout));
+          if (width === 768) {
+            await screenshot("unavailable-list-768-left.png");
+            await evaluate(`(()=>{const wrapper=(${row}).closest('table').parentElement;wrapper.scrollLeft=wrapper.scrollWidth;})()`);
+            await screenshot("unavailable-list-768-right.png");
+          }
+        }
         await screenshot(`unavailable-list-${width}.png`);
         await clickVisible(inputByAria(`Open saved version ${selected.id}`));
         await until(`document.body.textContent.includes('Create revision (unavailable: no saved inputs)')`);
@@ -645,6 +685,7 @@ try {
     assert.ok(await evaluate(visible(inputByAria(`Create revision from version ${selected.id}`))));
   }
   assert.deepEqual(await api("/api/deals"), recordsBeforeList);
+  checks.push("Desktop dates stay on one line with an unavailable row at 768/1440; tablet scroll is reported and mobile stays within the page");
   checks.push("Both visible layouts reject null/malformed drafts with nonfocusable reason text, retain Open, and match the analyzer purchase_price presence check without writes");
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: noDraftFixture });
   checks.push("Saved details offer Create revision with inputs and a visible unavailable reason without inputs at desktop and mobile widths");

@@ -4,9 +4,9 @@
 ---
 
 ## Last Updated
-2026-09-29
+2026-10-02
 
-Latest status: frontend main is `86d8618123b3fcf117be117917968ca35489ba3f` (#74), merged after Claude approved `bfc8c3d4b279364fb7fce3bf67967163568303e1`. Production checks passed 15/15; signed-in production phone verification remains open. Backend main remains `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. PR #75 on `codex/link-base-layer` is awaiting exact-head Claude review, not merged.
+Latest status: frontend main is `232eec4975c4de5ce5946b1073f5650a5abefdcd` (#75), merged after Claude approved `ab9e043bff009c04d72cbde092bd19e33809a5da`. Its parents are `86d8618123b3fcf117be117917968ca35489ba3f` and the approved head; both trees are `88ad0d07799720a58f3d6bf05fd99201c0fab331`. Codex production verification passed 15/15 on October 2 at 15:41 UTC (prior-session evidence, not rerun here); Claude independently confirmed the merge/tree. Backend main remains `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. Live heads were reconciled again October 2. Desktop table polish is in progress on `codex/deals-table-clarity`; final-head review and merge remain pending. Signed-in production phone verification remains open.
 
 ---
 
@@ -1240,9 +1240,9 @@ Tests reuse the isolated null-draft read fixture at 390/1440; add missing-proper
 Explicit follow-up: DealPage.tsx still uses the looser `draft ?` check. Align it in a separately scoped change; not edited here. API, save/type files, math, snapshots, ownership, router-state keys and dependencies remain unchanged. No merge before exact-head Claude approval.
 
 
-## 2026-10-02 - Link base layer (pending review)
+## 2026-10-02 - Link base layer (#75 merged)
 
-Frontend main is 86d8618123b3fcf117be117917968ca35489ba3f (#74), tree-identical to Claude-approved bfc8c3d4b279364fb7fce3bf67967163568303e1. Production checks passed 15/15; signed-in phone verification remains open. Backend remains e4a4b2016f6187af6ffc8c3f363bf4a4dc429462.
+At the start of #75, frontend main was 86d8618123b3fcf117be117917968ca35489ba3f (#74), tree-identical to Claude-approved bfc8c3d4b279364fb7fce3bf67967163568303e1. Production checks passed 15/15; signed-in phone verification remains open. Backend remains e4a4b2016f6187af6ffc8c3f363bf4a4dc429462.
 
 Approved four-file scope on codex/link-base-layer: src/index.css, src/components/DealPage.tsx (class only), tests/browserFlow.mjs, this document. Existing a and a:hover declarations are wrapped unchanged in @layer base; gold important overrides stay. DealPage back link changes white/40 to white/60 to avoid a contrast regression. Deliberate visible change: View saved version after saving now renders emerald-400 (emerald-300 on hover) as its existing success styling specifies.
 
@@ -1250,4 +1250,13 @@ Browser checks cover computed desktop action colors and hover, parent and amber 
 
 Harness notes: full-page captures/mobile emulation reset headless pointer capability. Desktop hover now runs in a fresh real page target with explicit Chrome pointer launch settings, requiring hover capability and checking computed color after a real pointer move. The resize-selection test waits for the click state before resizing. Earlier CI failures were these harness conditions, not a relaxed color expectation. Paired baseline images use temporary prior CSS/class restoration, not a separate old-build run.
 
-No API, math, save, type, snapshot, ownership, router-state or dependency changes. Date-cell wrapping, detail guard, mobile comparison and bounded detail revision notes remain separate scopes. No merge before Claude approves the final exact head.
+No API, math, save, type, snapshot, ownership, router-state or dependency changes. Date-cell wrapping, detail guard, mobile comparison and bounded detail revision notes were excluded from #75. Claude approved final head ab9e043bff009c04d72cbde092bd19e33809a5da, final-head CI 37022250162 passed, and #75 merged as 232eec4975c4de5ce5946b1073f5650a5abefdcd. Production 15/15 and tree identity are recorded above.
+
+
+## 2026-10-02 - Desktop table clarity (implementation; review pending)
+
+Claude approved the three-file plan with desktop action underlines and a 768px check. Only src/components/DealsPage.tsx, tests/browserFlow.mjs and this file change. Desktop date cells use whitespace-nowrap. Working Open/Create revision links use white/70 with an underline, white/30 decoration and 2px underline offset; hover uses white/80 and white/60 decoration. Unavailable text stays plain white/60; mobile gold buttons stay unchanged.
+
+Browser checks cover both desktop links at rest and real-pointer hover, unavailable text without decoration, and a fixed Sep 28, 2026 read fixture with an unavailable row at 390/768/1440. Date checks measure actual rendered line boxes. The tablet wrapper's client/scroll widths are logged and both scroll positions captured; wrapper scrolling is a product observation, not an automatic failure. Existing Open/revision, restored-input and saved-record integrity checks remain. Fixtures modify isolated read responses only. The existing #75 CSS-restoration render pairs remain historical-style comparisons, not a separate old build or a before/after comparison for this change.
+
+Local 74/74 unit tests (test-isolation=none in this sandbox) and production build pass; lint remains at 9 existing errors. Initial code-head CI 37036456478 at 0ddee8969dd9a12cf1f21f5594e0723c8f92e0ab passed 74 unit tests, 34 browser checks and build. Downloaded and inspected 390/768/1440 list and public sample renders. At 1440 the table fits (950px content/viewport); at 768 it scrolls inside its wrapper (889px content/615px viewport), with no page overflow and a one-line date. Both tablet scroll positions were inspected. Retaining this scroll is a product decision for Gurminder; no breakpoint change is bundled. A follow-up expands real-pointer coverage to unavailable text at rest and hover, scoped to the visible desktop row; final-head CI is recorded in the PR and handoff. This workspace lacks installed Chrome; browser validation and renders will use existing CI (backend remains pinned to #20). No changes to APIs, math, snapshots, saved records, ownership, router-state keys, dependencies or backend. Claude must approve the final exact head before merge. Owner spending controls, phone check and Vargas invitation remain unconfirmed; existing outreach drafts and pilot-term decisions are unchanged.
