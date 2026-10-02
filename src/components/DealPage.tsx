@@ -11,7 +11,8 @@ import type { SavedDeal, DraftDeal, AnalyzeResponse } from "../lib/types";
 
 function fmt(n: number | null | undefined, prefix = "$"): string {
   if (n == null) return "—";
-  return `${prefix}${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const abs = Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return `${n < 0 && abs !== "0" ? "-" : ""}${prefix}${abs}`;
 }
 
 function canCreateRevision(deal: SavedDeal): boolean {

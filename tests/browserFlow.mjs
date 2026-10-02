@@ -768,6 +768,66 @@ try {
   checks.push("Both visible layouts reject null/malformed drafts with nonfocusable reason text, retain Open, and match the analyzer purchase_price presence check without writes");
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: noDraftFixture });
   checks.push("Detail guard matches list/analyzer for null, object, string, array and purchase_price presence; PDF details render, valid/present drafts resume at 390/1440, minimal drafts analyze with blank rent, only the expected stateless analysis POST occurs, and saved records remain unchanged");
+  // Read-only money fixtures persist across the list's Open navigation in this document.
+  const moneyCases = [[-123456, '-$123,456'], [123456, '$123,456'], [0, '$0'], [-0.4, '$0'], [-2.5, '-$3'], [null, '—']];
+  const { identifier: moneyFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", { source: `
+    const index = new URLSearchParams(location.search).get('moneyFixture');
+    if (index !== null) {
+      const value = ${JSON.stringify(moneyCases.map(([value]) => value))}[Number(index)];
+      const nativeFetch = window.fetch.bind(window);
+      const withMoney = (record, isDetail = false) => record.id !== ${selected.id} ? record : {
+        ...record,
+        // Detail results require numeric offers; null coverage belongs to nullable draft fields.
+        analysis_result: isDetail && value === null ? record.analysis_result : {...record.analysis_result, net_profit:value, max_safe_offer:value},
+        draft_input: {...record.draft_input, ...Object.fromEntries(['purchase_price','arv','rehab_budget','est_monthly_rent'].map(field => [field, {...record.draft_input[field], value}]))}
+      };
+      window.fetch = async (...args) => {
+        const response = await nativeFetch(...args);
+        const path = new URL(args[0], location.href).pathname;
+        if (response.ok && (path === '/api/deals' || path === '/api/deals/${selected.id}')) {
+          const data = await response.json();
+          return new Response(JSON.stringify(Array.isArray(data) ? data.map(record=>withMoney(record)) : withMoney(data, true)), {status:200,headers:{'Content-Type':'application/json'}});
+        }
+        return response;
+      };
+    }
+  ` });
+  for (const width of [390, 1280, 1440]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height:1000, deviceScaleFactor:1, mobile:width === 390 });
+    for (const [index, [value, expected]] of moneyCases.entries()) {
+      const writesBeforeMoneyCase = browserApiWrites.length;
+      await cdp("Page.navigate", { url:`http://127.0.0.1:5173/deals?moneyFixture=${index}` });
+      const open = inputByAria(`Open saved version ${selected.id}`);
+      await until(`Boolean(${open})`);
+      const row = `(${open}).closest('li,tr')`;
+      const amounts = await evaluate(`(()=>{const r=${row};return r.tagName==='TR' ? [r.cells[2].textContent,r.cells[5].textContent] : ['Est. profit','Max offer'].map(label=>[...r.querySelectorAll('dt')].find(e=>e.textContent===label).nextElementSibling.textContent);})()`);
+      assert.deepEqual(amounts, [expected, expected], `List money ${value} at ${width}`);
+      assert.equal(await evaluate(`(${row}).textContent.includes('$-')`), false);
+      if (index === 0) {
+        await evaluate(`(${row}).scrollIntoView({block:'start'})`);
+        const { data } = await cdp("Page.captureScreenshot", {format:"png",captureBeyondViewport:false});
+        writeFileSync(join(artifacts, `negative-money-list-${width}.png`), Buffer.from(data, "base64"));
+      }
+      await clickVisible(open);
+      await until(`Boolean(${byText('button', 'Lender Report')}) && (${scopeInput('Quote date 1')})?.value === '2026-09-12'`);
+      assert.equal(await evaluate('location.pathname'), `/deal/${selected.id}`);
+      for (const label of ['Purchase Price','ARV','Rehab Budget','Est. Monthly Rent','Max Safe Offer']) {
+        const amount = `(${byText('div', label)}).nextElementSibling`;
+        assert.ok(await evaluate(visible(amount)));
+        const detailExpected = label === 'Max Safe Offer' && value === null ? money(selected.analysis_result.max_safe_offer) : expected;
+        assert.equal(await evaluate(`(${amount}).textContent`), detailExpected, `Detail ${label} ${value} at ${width}`);
+      }
+      if (index === 0) {
+        await evaluate('window.scrollTo(0,0)');
+        const { data } = await cdp("Page.captureScreenshot", {format:"png",captureBeyondViewport:false});
+        writeFileSync(join(artifacts, `negative-money-detail-${width}.png`), Buffer.from(data, "base64"));
+      }
+      assert.deepEqual(await api('/api/deals'), recordsBeforeList);
+      assert.deepEqual(browserApiWrites.slice(writesBeforeMoneyCase), [], 'Money display checks must not write');
+    }
+  }
+  await cdp("Page.removeScriptToEvaluateOnNewDocument", {identifier:moneyFixture});
+  checks.push("List and detail format negative, positive, zero, rounded-zero, negative-half and missing money at 390/1280/1440; Open preserves the fixture, no API writes or saved-record changes");
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals" });
   await until(`Boolean(${inputByAria(`Create revision from version ${selected.id}`)})`);
   await clickVisible(inputByAria(`Create revision from version ${selected.id}`));
