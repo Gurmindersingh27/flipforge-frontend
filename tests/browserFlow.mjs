@@ -14,6 +14,7 @@ const artifacts = resolve("browser-artifacts");
 mkdirSync(artifacts, { recursive: true });
 const children = [], errors = [], checks = [];
 const browserApiRequests = [];
+const browserApiWrites = [];
 let socket, sequence = 0, sessionId;
 const pending = new Map();
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -187,7 +188,10 @@ try {
     const msg = JSON.parse(event.data);
     if (msg.id) { const waiter = pending.get(msg.id); if (!waiter) return; pending.delete(msg.id); msg.error ? waiter.reject(new Error(JSON.stringify(msg.error))) : waiter.resolve(msg.result); }
     if (msg.method === "Runtime.exceptionThrown") errors.push(JSON.stringify(msg.params.exceptionDetails));
-    if (msg.method === "Network.requestWillBeSent" && new URL(msg.params.request.url).origin === "http://127.0.0.1:8000") browserApiRequests.push(msg.params.request.url);
+    if (msg.method === "Network.requestWillBeSent" && new URL(msg.params.request.url).origin === "http://127.0.0.1:8000") {
+      browserApiRequests.push(msg.params.request.url);
+      if (!["GET", "HEAD", "OPTIONS"].includes(msg.params.request.method)) browserApiWrites.push({url:msg.params.request.url,method:msg.params.request.method});
+    }
   };
   const { targetId } = await cdp("Target.createTarget", { url: "about:blank" }, false);
   ({ sessionId } = await cdp("Target.attachToTarget", { targetId, flatten: true }, false));
@@ -621,30 +625,78 @@ try {
   const longAddress = '12345 North Peachtree Industrial Boulevard, Building Twelve, Upper Courtyard Residence, Suite 987, Historic Chattahoochee Riverside Estates and Gardens, Sandy Springs, Fulton County, Georgia 30350, United States of America';
   const noDraftSource = `
     const nativeFetch = window.fetch.bind(window);
+    const fixtureDraft = record => {
+      const mode = new URLSearchParams(location.search).get('draftFixture');
+      return mode === 'valid' ? record.draft_input : mode === 'object' ? {} : mode === 'string' ? 'invalid' : mode === 'array' ? [] : mode === 'present' ? {purchase_price:null} : null;
+    };
     window.fetch = async (...args) => {
       const response = await nativeFetch(...args);
       if (new URL(args[0], location.href).pathname === '/api/deals' && response.ok) {
         const records = await response.json();
-        const mode = new URLSearchParams(location.search).get('draftFixture');
-        const draft = mode === 'object' ? {} : mode === 'string' ? 'invalid' : mode === 'array' ? [] : mode === 'present' ? {purchase_price:null} : null;
-        return new Response(JSON.stringify(records.map(record=>record.id===${selected.id}?{...record,draft_input:draft,address:${JSON.stringify(longAddress)},created_at:"2026-09-28T12:00:00Z",analysis_result:new URLSearchParams(location.search).get('layoutFixture') === 'wide' ? {...record.analysis_result,overall_verdict:"CONDITIONAL",net_profit:-123456,max_safe_offer:1234567} : record.analysis_result}:record)), {status:200,headers:{'Content-Type':'application/json'}});
+        return new Response(JSON.stringify(records.map(record=>record.id===${selected.id}?{...record,draft_input:fixtureDraft(record),address:${JSON.stringify(longAddress)},created_at:"2026-09-28T12:00:00Z",analysis_result:new URLSearchParams(location.search).get('layoutFixture') === 'wide' ? {...record.analysis_result,overall_verdict:"CONDITIONAL",net_profit:-123456,max_safe_offer:1234567} : record.analysis_result}:record)), {status:200,headers:{'Content-Type':'application/json'}});
       }
       if (new URL(args[0], location.href).pathname === '/api/deals/${selected.id}' && response.ok) {
         const record = await response.json();
-        return new Response(JSON.stringify({...record, draft_input: null}), {status: 200, headers: {'Content-Type': 'application/json'}});
+        return new Response(JSON.stringify({...record, draft_input: fixtureDraft(record)}), {status: 200, headers: {'Content-Type': 'application/json'}});
       }
       return response;
     };
   `;
   await verifyDesktopHover(selected.id, noDraftSource);
   const { identifier: noDraftFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", {source:noDraftSource});
-  await cdp("Page.reload");
-  await until(`document.body.textContent.includes('Create revision (unavailable: no saved inputs)')`);
-  for (const width of [1440, 390]) {
+  for (const width of [390, 1440]) {
     await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
-    assert.equal(await evaluate(`Boolean(${byText("a", "Create revision")})`), false);
-    assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
-    await screenshot(`saved-deal-no-inputs-${width}.png`);
+    for (const mode of ['null', 'object', 'string', 'array', 'present', 'valid']) {
+      const writesBeforeDetailCase = browserApiWrites.length;
+      await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${selected.id}?draftFixture=${mode}` });
+      await until(`Boolean(${byText("button", "Lender Report")}) && (${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
+      const allowed = mode === 'present' || mode === 'valid';
+      const revision = byText("a", "Create revision");
+      const reason = byText("span", "Create revision (unavailable: no saved inputs)");
+      assert.equal(await evaluate(`Boolean(${revision})`), allowed, `Detail guard mode ${mode} at ${width}`);
+      assert.equal(await evaluate(`Boolean(${reason})`), !allowed);
+      // The existing PDF summary still renders the same safe fallbacks.
+      for (const [label, field] of [['Purchase Price', 'purchase_price'], ['ARV', 'arv'], ['Rehab Budget', 'rehab_budget'], ['Est. Monthly Rent', 'est_monthly_rent']]) {
+        const value = mode === 'valid' ? selected.draft_input[field]?.value : null;
+        const expected = value == null ? '—' : `$${value.toLocaleString('en-US', {maximumFractionDigits:0})}`;
+        assert.equal(await evaluate(`(${byText("div", label)}).nextElementSibling.textContent`), expected);
+      }
+      assert.ok(await evaluate(visible(byText("button", "Lender Report"))));
+      assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth'));
+      if (!allowed) {
+        assert.ok(await evaluate(visible(reason)));
+        assert.ok(await evaluate(`(()=>{const e=${reason};return e.tagName==='SPAN' && !e.hasAttribute('href') && !e.hasAttribute('tabindex') && e.tabIndex<0;})()`));
+        if (mode === 'null' || mode === 'object') await screenshot(`detail-guard-${mode}-${width}.png`);
+      } else {
+        // Capture the payload before the analyzer consumes and clears router state.
+        await evaluate(`(()=>{const push=history.pushState.bind(history);history.pushState=(state,...args)=>{window.detailResumeState=structuredClone(state?.usr);return push(state,...args);};})()`);
+        await clickVisible(revision);
+        await until(`location.pathname === '/' && (${scopeInput("Quote date 1")})?.value === '2026-09-12' && !(${scopeInput("Unit cost 1")}).matches(':disabled')`);
+        assert.equal(await evaluate(`(${labelInput("Purchase Price")}).value`), mode === 'present' ? '' : String(selected.draft_input.purchase_price.value));
+        assert.equal(await evaluate(`(${scopeInput("Source 1")}).value`), 'Builder B fixture');
+        assert.equal(await evaluate('window.detailResumeState.resumeDeal.id'), selected.id);
+        assert.deepEqual(await evaluate('window.detailResumeState.resumeDraft'), mode === 'present' ? {purchase_price:null} : selected.draft_input);
+        if (mode === 'present') {
+          await screenshot(`detail-guard-present-resumed-${width}.png`);
+          await fill(labelInput('Purchase Price'), '150000');
+          await fill(labelInput('ARV'), '270000');
+          // Restored itemized scope owns the read-only rehab total; edit it through its control.
+          await scoped('Unit cost 1', '19000');
+          assert.ok(Number(await evaluate(`(${labelInput('Rehab Budget')}).value`)) > 0);
+          assert.equal(await evaluate(`(${labelInput('Est. Monthly Rent (optional)')}).value`), '');
+          await clickVisible(byText('button', 'Generate Investor Memo'));
+          await until(`Boolean(${byText('button', 'Save New Revision')})`);
+          assert.equal(await evaluate("document.querySelector('[role=alert]')?.textContent ?? ''"), '');
+          assert.equal(await evaluate("document.body.textContent.includes('Cannot read properties')"), false);
+          assert.ok(await evaluate(visible(byText('button', 'Lender Report'))));
+          await screenshot(`detail-guard-present-analyzed-${width}.png`);
+        }
+      }
+      assert.deepEqual(await api('/api/deals'), recordsBeforeList);
+      assert.deepEqual(browserApiWrites.slice(writesBeforeDetailCase), mode === 'present'
+        ? [{url:'http://127.0.0.1:8000/api/finalize-and-analyze',method:'POST'}]
+        : [], `Detail mode ${mode} permits only the explicit stateless analysis, never a saved write`);
+    }
   }
   for (const width of [390, 768, 1023, 1024, 1279, 1280, 1440]) {
     await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
@@ -715,7 +767,7 @@ try {
   checks.push("Cards wrap full addresses below 1280; table truncation and one-line dates remain at 1280/1440, with no standard-fixture table or page overflow; worst-case row measured separately");
   checks.push("Both visible layouts reject null/malformed drafts with nonfocusable reason text, retain Open, and match the analyzer purchase_price presence check without writes");
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: noDraftFixture });
-  checks.push("Saved details offer Create revision with inputs and a visible unavailable reason without inputs at desktop and mobile widths");
+  checks.push("Detail guard matches list/analyzer for null, object, string, array and purchase_price presence; PDF details render, valid/present drafts resume at 390/1440, minimal drafts analyze with blank rent, only the expected stateless analysis POST occurs, and saved records remain unchanged");
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals" });
   await until(`Boolean(${inputByAria(`Create revision from version ${selected.id}`)})`);
   await clickVisible(inputByAria(`Create revision from version ${selected.id}`));

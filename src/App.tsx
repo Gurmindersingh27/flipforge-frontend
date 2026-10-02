@@ -177,7 +177,9 @@ function AnalyzerPage() {
 
     const VALID_CONFIDENCE = new Set(["HIGH", "MEDIUM", "LOW", "MISSING"]);
     const fixDp = (dp: any): any =>
-      dp && typeof dp === "object"
+      dp == null
+        ? { value: null, confidence: "MISSING", source: null }
+        : dp && typeof dp === "object"
         ? {
             ...dp,
             confidence:
