@@ -16,13 +16,15 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: inherit;
-  text-decoration: inherit;
-}
-a:hover {
-  color: inherit;
+@layer base {
+  a {
+    font-weight: 500;
+    color: inherit;
+    text-decoration: inherit;
+  }
+  a:hover {
+    color: inherit;
+  }
 }
 
 body {

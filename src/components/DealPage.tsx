@@ -205,7 +205,7 @@ export default function DealPage() {
           </Link>
           <Link
             to="/deals"
-            className="text-xs text-white/40 hover:text-white/70 transition-colors"
+            className="text-xs text-white/60 hover:text-white/70 transition-colors"
           >
             ← My Deals
           </Link>
