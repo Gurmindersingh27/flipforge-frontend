@@ -102,7 +102,7 @@ async function linkRenderPair(name) {
   assert.ok(contrast.every(link=>link.ratio>=4.5), `Link contrast below 4.5:1: ${JSON.stringify(contrast.filter(link=>link.ratio<4.5))}`);
 
 }
-async function verifyDesktopHover(id) {
+async function verifyDesktopHover(id, noDraftSource) {
   // Full-page screenshot/mobile emulation can reset headless pointer preferences.
   // Use a fresh desktop target before any screenshot or touch emulation in it.
   const originalSession = sessionId;
@@ -125,6 +125,19 @@ async function verifyDesktopHover(id) {
       await pause(200);
       await expectLinkStyle(action, "rgb(255 255 255 / 0.8)", true);
     }
+    await cdp("Page.addScriptToEvaluateOnNewDocument", {source:noDraftSource});
+    await cdp("Page.reload");
+    const reason = byText("span", "Create revision (unavailable: no saved inputs)");
+    await until(`Boolean(${reason})`);
+    await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
+    await pause(200);
+    await expectLinkStyle(reason, "rgb(255 255 255 / 0.6)", "none");
+    await evaluate(`(${reason}).scrollIntoView({block:'center',inline:'nearest'})`);
+    const point = await evaluate(`(()=>{const r=(${reason}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+    await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",pointerType:"mouse",...point});
+    await until(`(${reason}).matches(':hover')`);
+    await pause(200);
+    await expectLinkStyle(reason, "rgb(255 255 255 / 0.6)", "none");
   } finally {
     await cdp("Target.closeTarget", {targetId}, false);
     sessionId = originalSession;
@@ -545,7 +558,6 @@ try {
   assert.equal(await evaluate(`(${selectedRow}).querySelector('a[href="/deal/${bidB.id}"]').getAttribute('aria-label')`), `Open version #${bidB.id}, the version this was revised from`);
   const noteButton = `(${selectedRow}).querySelector('button[aria-controls]')`;
   const noteElement = `document.getElementById((${noteButton}).getAttribute('aria-controls'))`;
-  await verifyDesktopHover(selected.id);
   const requestsBeforeNotes = browserApiRequests.length;
   assert.equal(selected.revision_note.length, 2000);
   for (const width of [1440, 390]) {
@@ -603,7 +615,7 @@ try {
   await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${selected.id}` });
   await until(`(${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
   // Test-only read fixture for a legacy saved record with no draft inputs.
-  const { identifier: noDraftFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", { source: `
+  const noDraftSource = `
     const nativeFetch = window.fetch.bind(window);
     window.fetch = async (...args) => {
       const response = await nativeFetch(...args);
@@ -619,7 +631,9 @@ try {
       }
       return response;
     };
-  ` });
+  `;
+  await verifyDesktopHover(selected.id, noDraftSource);
+  const { identifier: noDraftFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", {source:noDraftSource});
   await cdp("Page.reload");
   await until(`document.body.textContent.includes('Create revision (unavailable: no saved inputs)')`);
   for (const width of [1440, 390]) {
