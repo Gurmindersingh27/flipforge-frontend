@@ -644,10 +644,10 @@ try {
   `;
   await verifyDesktopHover(selected.id, noDraftSource);
   const { identifier: noDraftFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", {source:noDraftSource});
-  const writesBeforeDetailGuard = browserApiWrites.length;
   for (const width of [390, 1440]) {
     await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
     for (const mode of ['null', 'object', 'string', 'array', 'present', 'valid']) {
+      const writesBeforeDetailCase = browserApiWrites.length;
       await cdp("Page.navigate", { url: `http://127.0.0.1:5173/deal/${selected.id}?draftFixture=${mode}` });
       await until(`Boolean(${byText("button", "Lender Report")}) && (${scopeInput("Quote date 1")})?.value === '2026-09-12'`);
       const allowed = mode === 'present' || mode === 'valid';
@@ -668,16 +668,34 @@ try {
         assert.ok(await evaluate(`(()=>{const e=${reason};return e.tagName==='SPAN' && !e.hasAttribute('href') && !e.hasAttribute('tabindex') && e.tabIndex<0;})()`));
         if (mode === 'null' || mode === 'object') await screenshot(`detail-guard-${mode}-${width}.png`);
       } else {
+        // Capture the payload before the analyzer consumes and clears router state.
+        await evaluate(`(()=>{const push=history.pushState.bind(history);history.pushState=(state,...args)=>{window.detailResumeState=structuredClone(state?.usr);return push(state,...args);};})()`);
         await clickVisible(revision);
         await until(`location.pathname === '/' && (${scopeInput("Quote date 1")})?.value === '2026-09-12' && !(${scopeInput("Unit cost 1")}).matches(':disabled')`);
         assert.equal(await evaluate(`(${labelInput("Purchase Price")}).value`), mode === 'present' ? '' : String(selected.draft_input.purchase_price.value));
         assert.equal(await evaluate(`(${scopeInput("Source 1")}).value`), 'Builder B fixture');
-        assert.equal(await evaluate('history.state.usr.resumeDeal.id'), selected.id);
-        assert.deepEqual(await evaluate('history.state.usr.resumeDraft'), mode === 'present' ? {purchase_price:null} : selected.draft_input);
-        if (mode === 'present') await screenshot(`detail-guard-present-resumed-${width}.png`);
+        assert.equal(await evaluate('window.detailResumeState.resumeDeal.id'), selected.id);
+        assert.deepEqual(await evaluate('window.detailResumeState.resumeDraft'), mode === 'present' ? {purchase_price:null} : selected.draft_input);
+        if (mode === 'present') {
+          await screenshot(`detail-guard-present-resumed-${width}.png`);
+          await fill(labelInput('Purchase Price'), '150000');
+          await fill(labelInput('ARV'), '270000');
+          // Restored itemized scope owns the read-only rehab total; edit it through its control.
+          await scoped('Unit cost 1', '19000');
+          assert.ok(Number(await evaluate(`(${labelInput('Rehab Budget')}).value`)) > 0);
+          assert.equal(await evaluate(`(${labelInput('Est. Monthly Rent (optional)')}).value`), '');
+          await clickVisible(byText('button', 'Generate Investor Memo'));
+          await until(`Boolean(${byText('button', 'Save New Revision')})`);
+          assert.equal(await evaluate("document.querySelector('[role=alert]')?.textContent ?? ''"), '');
+          assert.equal(await evaluate("document.body.textContent.includes('Cannot read properties')"), false);
+          assert.ok(await evaluate(visible(byText('button', 'Lender Report'))));
+          await screenshot(`detail-guard-present-analyzed-${width}.png`);
+        }
       }
       assert.deepEqual(await api('/api/deals'), recordsBeforeList);
-      assert.equal(browserApiWrites.length, writesBeforeDetailGuard, `Detail mode ${mode} must not write to the API`);
+      assert.deepEqual(browserApiWrites.slice(writesBeforeDetailCase), mode === 'present'
+        ? [{url:'http://127.0.0.1:8000/api/finalize-and-analyze',method:'POST'}]
+        : [], `Detail mode ${mode} permits only the explicit stateless analysis, never a saved write`);
     }
   }
   for (const width of [390, 768, 1023, 1024, 1279, 1280, 1440]) {
@@ -749,7 +767,7 @@ try {
   checks.push("Cards wrap full addresses below 1280; table truncation and one-line dates remain at 1280/1440, with no standard-fixture table or page overflow; worst-case row measured separately");
   checks.push("Both visible layouts reject null/malformed drafts with nonfocusable reason text, retain Open, and match the analyzer purchase_price presence check without writes");
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: noDraftFixture });
-  checks.push("Detail guard matches list/analyzer for null, object, string, array and purchase_price presence; PDF details render, valid/present drafts resume at 390/1440, and no API writes or saved changes occur");
+  checks.push("Detail guard matches list/analyzer for null, object, string, array and purchase_price presence; PDF details render, valid/present drafts resume at 390/1440, minimal drafts analyze with blank rent, only the expected stateless analysis POST occurs, and saved records remain unchanged");
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals" });
   await until(`Boolean(${inputByAria(`Create revision from version ${selected.id}`)})`);
   await clickVisible(inputByAria(`Create revision from version ${selected.id}`));
