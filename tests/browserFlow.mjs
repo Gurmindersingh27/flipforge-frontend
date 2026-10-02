@@ -460,6 +460,7 @@ try {
     if (width === 390) assert.equal(await evaluate(`(${control}).hasAttribute('aria-label')`), false);
     assert.equal(await evaluate(`(${control}).checked`), width === 1440);
     await clickVisible(control);
+    await until(`(${control}).checked === ${width === 390}`);
   }
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
   assert.equal(await evaluate(`(${inputByAria(`Compare version #${first.id}`)}).checked`), false);
