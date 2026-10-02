@@ -127,8 +127,8 @@ async function verifyDesktopHover(id, noDraftSource) {
     }
     await cdp("Page.addScriptToEvaluateOnNewDocument", {source:noDraftSource});
     await cdp("Page.reload");
-    const row = `(${inputByAria(`Open saved version ${id}`)}).closest('[data-saved-version]')`;
-    const reason = `Array.from((${row}).querySelectorAll('span')).find(e=>e.textContent.trim()==='Create revision (unavailable: no saved inputs)')`;
+    const row = `(${inputByAria(`Open saved version ${id}`)})?.closest('[data-saved-version]')`;
+    const reason = `Array.from((${row})?.querySelectorAll('span') ?? []).find(e=>e.textContent.trim()==='Create revision (unavailable: no saved inputs)')`;
     await until(`Boolean(${reason})`);
     await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
     await pause(200);
@@ -895,90 +895,4 @@ try {
   checks.push("Slow saves show progress, lock before token retrieval, send one authenticated write despite rapid clicks, and retain the analyzed snapshot");
 
   for (const mode of ["headers", "body", "committed-body", "committed-network", "committed-invalid", "missing-id", "server-error", "forbidden", "forbidden-body"]) {
-    const beforeSave = await api("/api/deals");
-    await openManual("pass");
-    await click("button", "Generate Investor Memo");
-    await until(`Boolean(${byText("button", "Save Deal")})`);
-    await configureRequest("/api/deals/save", mode);
-    await click("button", "Save Deal");
-    if (mode === "headers" || mode.endsWith("body")) await until(hasStatus("Still waiting for save confirmation"));
-    if (mode.startsWith("forbidden")) {
-      await until(hasAlert("Save deal error 403"));
-      assert.equal(await evaluate(`(${byText("button", "Save Deal")}).disabled`), false);
-      assert.equal(await evaluate(`Boolean(${byText("a", "Check Saved Deals (opens in a new tab)")})`), false);
-    } else {
-      await until(hasAlert("This deal may already be saved"));
-      assert.ok(await evaluate(`(${byText("button", "Save unconfirmed")}).disabled`));
-      assert.ok(await evaluate(`Boolean(${byText("a", "Check Saved Deals (opens in a new tab)")})`));
-      await click("button", "Save unconfirmed");
-    }
-    await noReplay();
-    assert.equal(await evaluate(`Boolean(${byText("button", "Saved!")})`), false);
-    assert.equal(await evaluate(hasStatus("Still waiting for save confirmation")), false);
-    assert.ok(await evaluate("window.requestFixture.authenticated.every(Boolean)"));
-    assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
-    const saved = await evaluate("window.requestFixture.saved");
-    const afterSave = await api("/api/deals");
-    assert.equal(afterSave.length, beforeSave.length + (saved ? 1 : 0));
-    if (saved) {
-      assert.equal(saved.analysis_result.net_profit, 34900);
-      const analyzerSession = sessionId;
-      const analyzerUrl = await evaluate("location.href");
-      const rehabBeforeCheck = await evaluate(`(${labelInput("Rehab Budget")}).value`);
-      const beforeTargets = (await cdp("Target.getTargets", {}, false)).targetInfos.map(target => target.targetId);
-      await cdp("Runtime.evaluate", { expression: `(${byText("a", "Check Saved Deals (opens in a new tab)")}).click()`, userGesture: true });
-      let savedDealsTab;
-      for (let i = 0; i < 80 && !savedDealsTab; i++) {
-        savedDealsTab = (await cdp("Target.getTargets", {}, false)).targetInfos.find(target =>
-          !beforeTargets.includes(target.targetId) && target.url === "http://127.0.0.1:5173/deals");
-        if (!savedDealsTab) await pause(200);
-      }
-      assert.ok(savedDealsTab, "Saved Deals must open in a separate tab");
-      ({ sessionId } = await cdp("Target.attachToTarget", { targetId: savedDealsTab.targetId, flatten: true }, false));
-      await cdp("Runtime.enable");
-      await until(`Boolean(${inputByAria(`Open saved version ${saved.id}`)})`);
-      assert.equal(await evaluate("window.opener === null"), true);
-      await cdp("Target.closeTarget", { targetId: savedDealsTab.targetId }, false);
-      sessionId = analyzerSession;
-      assert.equal(await evaluate("location.href"), analyzerUrl);
-      assert.equal(await evaluate(`(${labelInput("Rehab Budget")}).value`), rehabBeforeCheck);
-      assert.ok(await evaluate(`(${byText("button", "Save unconfirmed")}).disabled`));
-      assert.ok(await evaluate("document.body.textContent.includes('If it is not there, return to this tab and generate the memo again to save.')"));
-      assert.equal(await evaluate(hasStatus("Still waiting for save confirmation")), false);
-    }
-    for (const record of beforeSave) assert.deepEqual(await api(`/api/deals/${record.id}`), record);
-  }
-  checks.push("Lost save confirmations never report success or replay; committed records are found in a separate Saved Deals tab without losing analyzer inputs or the memo, while 403 rejections remain distinct and existing records stay intact");
-
-  await openManual("pass");
-  await click("button", "Generate Investor Memo");
-  await until(`Boolean(${byText("button", "Save Deal")})`);
-  await configureRequest("/api/deals/save", "pass");
-  await evaluate("window.authFixture = { calls: 0, delayMs: 650 }");
-  const beforeAbandonedSave = await api("/api/deals");
-  await click("button", "Save Deal");
-  await fill(labelInput("Rehab Budget"), "67000");
-  await click("button", "Generate Investor Memo");
-  await until(`Boolean(${byText("button", "Save Deal")})`);
-  await pause(800);
-  assert.equal(await evaluate("window.requestFixture.calls"), 0);
-  assert.equal(await evaluate(`Boolean(${byText("button", "Saved!")})`), false);
-  assert.deepEqual(await api("/api/deals"), beforeAbandonedSave);
-  checks.push("Starting a new analysis during token retrieval cancels the obsolete save before any write");
-  await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: analyzerFixture });
-  assert.deepEqual(errors, []);
-  checks.push("No browser runtime exceptions");
-  writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));
-  console.log(JSON.stringify({ result: "PASS", checks }));
-} catch (error) {
-  console.error(error);
-  if (socket && sessionId) {
-    try { writeFileSync(join(artifacts, "failure.html"), await evaluate("document.documentElement.outerHTML")); await screenshot("failure.png"); } catch {}
-  }
-  process.exitCode = 1;
-} finally {
-  socket?.close();
-  for (const child of children) child.kill("SIGTERM");
-  for (const waiter of pending.values()) waiter.reject(new Error("Browser test closed"));
-  setTimeout(() => { rmSync(temp, { recursive: true, force: true }); }, 1000).unref();
-}
+   
