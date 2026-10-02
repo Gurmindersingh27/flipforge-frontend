@@ -535,14 +535,17 @@ try {
     await expectLinkStyle(action, width === 390 ? "#E8C547" : "rgb(255 255 255 / 0.5)");
     if (width === 1440) {
       await cdp("Emulation.setTouchEmulationEnabled", {enabled:false});
+      await cdp("Emulation.setEmulatedMedia", {features:[{name:"hover",value:"hover"},{name:"pointer",value:"fine"}]});
       await cdp("Page.bringToFront");
       await evaluate(`(${action}).scrollIntoView({block:'center'})`);
       const point = await evaluate(`(()=>{const r=(${action}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
       await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",pointerType:"mouse",...point});
       await pause(200);
+      assert.ok(await evaluate("matchMedia('(hover: hover)').matches"), "Desktop hover capability must be enabled");
       console.log("LINK_HOVER", await evaluate(`JSON.stringify({hover:matchMedia('(hover: hover)').matches,matches:(${action}).matches(':hover'),hit:(${action}).contains(document.elementFromPoint(${point.x},${point.y})),point:${JSON.stringify(point)}})`));
       await expectLinkStyle(action, "rgb(255 255 255 / 0.8)");
       await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",x:0,y:0});
+      await cdp("Emulation.setEmulatedMedia", {features:[]});
     }
 
     await evaluate(`(${noteButton}).focus()`);
