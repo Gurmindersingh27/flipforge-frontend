@@ -110,7 +110,7 @@ function canCreateRevision(deal: SavedDeal): boolean {
 function DealActions({ deal, mobile = false }: { deal: SavedDeal; mobile?: boolean }) {
   const actionClass = mobile
     ? "inline-flex min-h-11 items-center justify-center text-center rounded-lg border border-white/20 px-3 text-xs !text-[#E8C547] bg-[var(--ff-raised)] focus-visible:outline-2 focus-visible:outline-[#E8C547]"
-    : "text-xs text-white/50 hover:text-white/80 transition-colors";
+    : "text-xs text-white/70 underline decoration-white/30 underline-offset-2 hover:text-white/80 hover:decoration-white/60 transition-colors";
   return (
     <div className={mobile ? "grid grid-cols-2 gap-2" : "flex items-center gap-3"}>
       <Link
@@ -280,7 +280,7 @@ function DealsList() {
                   <VerdictBadge verdict={verdict} />
                 </td>
                 <td className="py-3 pr-4 text-white/80 font-jetbrains">{fmt(maxOffer)}</td>
-                <td className="py-3 pr-4 text-white/50 text-xs">
+                <td className="py-3 pr-4 text-white/50 text-xs whitespace-nowrap">
                   {fmtDate(deal.created_at)}
                 </td>
                 <td className="py-3 pr-4">
