@@ -952,11 +952,12 @@ try {
       if (!(error instanceof assert.AssertionError)) throw error;
       metricLayoutFailures.push(`${page} ${width} ${fixture.name}: ${error.message}`);
     }
-    // Capture the affected sections at native resolution, avoiding duplicate full-page artifacts.
+    // Scroll targets into view and capture the viewport; offscreen CDP crops can shift on narrow pages.
     if (fixture.name === 'wide-loss' && [375,390,768,1023,1024,1440].includes(width)) {
       for (const [name,expr] of [['offer',`(${offerElement}).parentElement`],['support',supportSection],...(page === 'detail' ? [['shield',shieldGrid]] : [])]) {
-        const clip = await measure(`(()=>{const r=(${expr}).getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1};})()`);
-        const {data} = await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip});
+        await evaluate(`(${expr}).scrollIntoView({block:'center',inline:'nearest'})`);
+        await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+        const {data} = await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
         writeFileSync(join(artifacts,`metrics-${page}-${name}-${width}.png`),Buffer.from(data,'base64'));
       }
     }
