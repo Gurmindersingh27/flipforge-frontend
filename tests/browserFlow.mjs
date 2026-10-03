@@ -907,9 +907,9 @@ try {
       window.fetch = async (...args) => {
         const response = await nativeFetch(...args);
         const path = new URL(args[0], location.href).pathname;
-        if (response.ok && (path === '/api/deals/${selected.id}' || path === '/api/analyze')) {
+        if (response.ok && (path === '/api/deals/${selected.id}' || path === '/api/finalize-and-analyze')) {
           const data = await response.json();
-          const patched = path === '/api/analyze' ? {...data,...fields} : {...data,analysis_result:{...data.analysis_result,...fields}};
+          const patched = path === '/api/finalize-and-analyze' ? {...data,...fields} : {...data,analysis_result:{...data.analysis_result,...fields}};
           return new Response(JSON.stringify(patched), {status:200,headers:{'Content-Type':'application/json'}});
         }
         return response;
@@ -974,7 +974,7 @@ try {
       await click('button','Generate Investor Memo');
       await until(`Boolean(${byText('button','Save New Revision')}) && Boolean(${byText('div','Supporting Detail')})`);
       await checkMetricLayout('analyzer',width,fixture);
-      assert.deepEqual(browserApiWrites.slice(writesBeforeMetrics),[{url:'http://127.0.0.1:8000/api/analyze',method:'POST'}],'Only the explicit stateless analysis may write a request; never save');
+      assert.deepEqual(browserApiWrites.slice(writesBeforeMetrics),[{url:'http://127.0.0.1:8000/api/finalize-and-analyze',method:'POST'}],'Only the explicit stateless analysis may write a request; never save');
       assert.deepEqual(await api('/api/deals'),recordsBeforeList);
     }
   }
