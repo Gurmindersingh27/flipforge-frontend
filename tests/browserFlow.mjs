@@ -954,7 +954,7 @@ try {
     }
     // Capture the affected sections at native resolution, avoiding duplicate full-page artifacts.
     if (fixture.name === 'wide-loss' && [375,390,768,1023,1024,1440].includes(width)) {
-      for (const [name,expr] of [['offer',offerSection],['support',supportSection],...(page === 'detail' ? [['shield',shieldGrid]] : [])]) {
+      for (const [name,expr] of [['offer',`(${offerElement}).parentElement`],['support',supportSection],...(page === 'detail' ? [['shield',shieldGrid]] : [])]) {
         const clip = await measure(`(()=>{const r=(${expr}).getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1};})()`);
         const {data} = await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip});
         writeFileSync(join(artifacts,`metrics-${page}-${name}-${width}.png`),Buffer.from(data,'base64'));
