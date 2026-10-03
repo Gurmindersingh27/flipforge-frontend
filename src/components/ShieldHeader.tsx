@@ -203,7 +203,7 @@ export default function ShieldHeader({ result }: Props) {
         "border-white/10 bg-white/[0.04]",
       ].join(" ")}
     >
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3">
         <div className="flex items-start gap-3">
           <div className={["mt-0.5 h-3 w-3 rounded-full", v.dotClass].join(" ")} />
           <div>
@@ -263,7 +263,7 @@ export default function ShieldHeader({ result }: Props) {
         </div>
 
         {/* ADDED: expanded metrics (keeps existing 3, adds Offer + ROI) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3 lg:grid-cols-5">
           <Metric
             label="Net profit"
             value={metricCopied === "net" ? "Copied ✓" : fmtMoney(profit)}

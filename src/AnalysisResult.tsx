@@ -730,7 +730,7 @@ export default function AnalysisResult({ result, meta }: Props) {
 
       {/* Metrics grid */}
       <section className="ff-panel rounded-2xl p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-4">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
               Net Profit

@@ -936,11 +936,11 @@ try {
       assert.ok(layout.offer.complete,'Main offer glyphs must remain inside their element');
       assert.ok(layout.pageWidth <= layout.viewport, `${page} page must not scroll sideways at ${width}`);
       assert.equal(layout.offerGrid.columns,width < 640 ? 1 : width < 768 ? 2 : 3);
-      assert.equal(layout.supportGrid.columns,width < 640 ? 1 : width < 768 ? 2 : 4);
+      assert.equal(layout.supportGrid.columns,width < 640 ? 1 : width < 768 ? 2 : width < 1024 ? 3 : 4);
       assert.equal(layout.offerGrid.values[2].text, `$${fixture.fields.total_project_cost.toLocaleString('en-US')}`,'Keep saved cost precision');
       assert.equal(layout.supportGrid.values[0].text, `${fixture.fields.net_profit < 0 ? '-' : ''}$${Math.abs(fixture.fields.net_profit).toLocaleString('en-US')}`,'Keep saved profit precision/sign');
       if (layout.shield) {
-        assert.equal(layout.shield.columns,width < 640 ? 2 : width < 768 ? 3 : 5);
+        assert.equal(layout.shield.columns,width < 640 ? 1 : width < 1024 ? 3 : 5);
         assert.equal(layout.shield.values[0].text,money(fixture.fields.net_profit));
         assert.equal(layout.shield.values[3].text,money(fixture.fields.max_safe_offer));
       }
@@ -953,7 +953,7 @@ try {
       metricLayoutFailures.push(`${page} ${width} ${fixture.name}: ${error.message}`);
     }
     // Capture the affected sections at native resolution, avoiding duplicate full-page artifacts.
-    if (fixture.name === 'wide-loss' && [375,390,768,1440].includes(width)) {
+    if (fixture.name === 'wide-loss' && [375,390,768,1023,1024,1440].includes(width)) {
       for (const [name,expr] of [['offer',offerSection],['support',supportSection],...(page === 'detail' ? [['shield',shieldGrid]] : [])]) {
         const clip = await measure(`(()=>{const r=(${expr}).getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1};})()`);
         const {data} = await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip});
@@ -961,7 +961,7 @@ try {
       }
     }
   }
-  for (const width of [375,390,639,640,767,768,1440]) {
+  for (const width of [375,390,639,640,767,768,1023,1024,1440]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});
     for (const [index,fixture] of metricCases.entries()) {
       const writesBeforeMetrics = browserApiWrites.length;
@@ -980,7 +980,7 @@ try {
   }
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:metricFixture});
   assert.deepEqual(metricLayoutFailures, [], 'Every metric layout must pass; collect all widths before failing');
-  checks.push('Detail/analyzer numbers fit without overlap at 375/390/639/640/767/768/1440 with both fonts loaded; million-dollar offer stays inside its box, decimals/signs survive, responsive grids fit, and only explicit analysis requests occur with saved records unchanged');
+  checks.push('Detail/analyzer numbers fit without overlap at 375/390/639/640/767/768/1023/1024/1440 with both fonts loaded; million-dollar offer stays inside its box, decimals/signs survive, responsive grids fit, and only explicit analysis requests occur with saved records unchanged');
 
   // Test-only browser injection. Compress the two UI/network timers, and stall
   // reads before headers or during the body. No production auth or test hooks.
