@@ -46,6 +46,8 @@ async function evaluate(expression) {
   return result.result.value;
 }
 async function requireFonts() {
+  // Vite can render React before the imported font stylesheet has registered its faces.
+  await until(`["JetBrains Mono","DM Serif Display"].every(family=>[...document.fonts].some(f=>f.family.replaceAll('"','').replaceAll("'",'')===family))`);
   const fonts = await evaluate(`(async()=>{
     const required=[['JetBrains Mono','14px "JetBrains Mono"'],['DM Serif Display','16px "DM Serif Display"']];
     await Promise.all(required.map(([,spec])=>document.fonts.load(spec)));
@@ -918,6 +920,7 @@ try {
   const offerElement = `(${offerSection}).querySelector('.ff-heading')`;
   const supportSection = `(${byText('div','Supporting Detail')}).nextElementSibling`;
   const shieldGrid = `document.querySelector('button[title="Click to copy"]').parentElement`;
+  const metricLayoutFailures = [];
   async function checkMetricLayout(page, width, fixture) {
     const layout = await measure(`(()=>{
       const rect=r=>({left:r.left,right:r.right,top:r.top,bottom:r.bottom});
@@ -926,23 +929,28 @@ try {
       return {offer:text(${offerElement}),offerGrid:grid((${offerSection}).querySelector('.grid')),supportGrid:grid((${supportSection}).querySelector('.grid')),shield:${page === 'detail' ? `grid(${shieldGrid})` : 'null'},pageWidth:document.documentElement.scrollWidth,viewport:innerWidth};
     })()`);
     console.log('METRIC_LAYOUT',page,width,fixture.name,JSON.stringify(layout));
-    assert.equal(layout.offer.text, `$${fixture.fields.max_safe_offer.toLocaleString('en-US')}`);
-    assert.equal(layout.offer.lines,1,'Main offer must stay on one line');
-    assert.ok(layout.offer.scrollWidth <= layout.offer.clientWidth, `Main offer overflows at ${width}: ${JSON.stringify(layout.offer)}`);
-    assert.ok(layout.offer.complete,'Main offer glyphs must remain inside their element');
-    assert.ok(layout.pageWidth <= layout.viewport, `${page} page must not scroll sideways at ${width}`);
-    assert.equal(layout.offerGrid.columns,width < 640 ? 1 : width < 768 ? 2 : 3);
-    assert.equal(layout.supportGrid.columns,width < 640 ? 1 : width < 768 ? 2 : 4);
-    assert.equal(layout.offerGrid.values[2].text, `$${fixture.fields.total_project_cost.toLocaleString('en-US')}`,'Keep saved cost precision');
-    assert.equal(layout.supportGrid.values[0].text, `${fixture.fields.net_profit < 0 ? '-' : ''}$${Math.abs(fixture.fields.net_profit).toLocaleString('en-US')}`,'Keep saved profit precision/sign');
-    if (layout.shield) {
-      assert.equal(layout.shield.columns,width < 640 ? 2 : width < 768 ? 3 : 5);
-      assert.equal(layout.shield.values[0].text,money(fixture.fields.net_profit));
-      assert.equal(layout.shield.values[3].text,money(fixture.fields.max_safe_offer));
-    }
-    for (const grid of [layout.offerGrid,layout.supportGrid,layout.shield].filter(Boolean)) {
-      assert.ok(grid.noOverlap, `Metric text must not overlap at ${width}`);
-      for (const value of grid.values) assert.ok(value.complete && value.scrollWidth <= value.clientWidth, `Clipped/overflowing metric on ${page} at ${width}: ${JSON.stringify(value)}`);
+    try {
+      assert.equal(layout.offer.text, `$${fixture.fields.max_safe_offer.toLocaleString('en-US')}`);
+      assert.equal(layout.offer.lines,1,'Main offer must stay on one line');
+      assert.ok(layout.offer.scrollWidth <= layout.offer.clientWidth, `Main offer overflows at ${width}: ${JSON.stringify(layout.offer)}`);
+      assert.ok(layout.offer.complete,'Main offer glyphs must remain inside their element');
+      assert.ok(layout.pageWidth <= layout.viewport, `${page} page must not scroll sideways at ${width}`);
+      assert.equal(layout.offerGrid.columns,width < 640 ? 1 : width < 768 ? 2 : 3);
+      assert.equal(layout.supportGrid.columns,width < 640 ? 1 : width < 768 ? 2 : 4);
+      assert.equal(layout.offerGrid.values[2].text, `$${fixture.fields.total_project_cost.toLocaleString('en-US')}`,'Keep saved cost precision');
+      assert.equal(layout.supportGrid.values[0].text, `${fixture.fields.net_profit < 0 ? '-' : ''}$${Math.abs(fixture.fields.net_profit).toLocaleString('en-US')}`,'Keep saved profit precision/sign');
+      if (layout.shield) {
+        assert.equal(layout.shield.columns,width < 640 ? 2 : width < 768 ? 3 : 5);
+        assert.equal(layout.shield.values[0].text,money(fixture.fields.net_profit));
+        assert.equal(layout.shield.values[3].text,money(fixture.fields.max_safe_offer));
+      }
+      for (const grid of [layout.offerGrid,layout.supportGrid,layout.shield].filter(Boolean)) {
+        assert.ok(grid.noOverlap, `Metric text must not overlap at ${width}`);
+        for (const value of grid.values) assert.ok(value.complete && value.scrollWidth <= value.clientWidth, `Clipped/overflowing metric on ${page} at ${width}: ${JSON.stringify(value)}`);
+      }
+    } catch (error) {
+      if (!(error instanceof assert.AssertionError)) throw error;
+      metricLayoutFailures.push(`${page} ${width} ${fixture.name}: ${error.message}`);
     }
     // Capture the affected sections at native resolution, avoiding duplicate full-page artifacts.
     if (fixture.name === 'wide-loss' && [375,390,768,1440].includes(width)) {
@@ -971,6 +979,7 @@ try {
     }
   }
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:metricFixture});
+  assert.deepEqual(metricLayoutFailures, [], 'Every metric layout must pass; collect all widths before failing');
   checks.push('Detail/analyzer numbers fit without overlap at 375/390/639/640/767/768/1440 with both fonts loaded; million-dollar offer stays inside its box, decimals/signs survive, responsive grids fit, and only explicit analysis requests occur with saved records unchanged');
 
   // Test-only browser injection. Compress the two UI/network timers, and stall
