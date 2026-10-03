@@ -263,7 +263,7 @@ export default function ShieldHeader({ result }: Props) {
         </div>
 
         {/* ADDED: expanded metrics (keeps existing 3, adds Offer + ROI) */}
-        <div className="grid grid-cols-3 gap-2 md:gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-3 md:grid-cols-5">
           <Metric
             label="Net profit"
             value={metricCopied === "net" ? "Copied ✓" : fmtMoney(profit)}

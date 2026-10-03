@@ -892,6 +892,87 @@ try {
   assert.deepEqual(await api("/api/deals"), recordsBeforeList);
   checks.push("Saved Deals identifies versions and parents, labels annualized ROI, fits mobile, and opens/resumes the selected snapshot without writes");
 
+  // Read/analysis response fixtures only: never persist synthetic metric values.
+  const metricCases = [
+    {name:'saved-decimals', fields:{net_profit:selected.analysis_result.net_profit, max_safe_offer:selected.analysis_result.max_safe_offer, total_project_cost:selected.analysis_result.total_project_cost}},
+    {name:'wide-loss', fields:{net_profit:-123456, max_safe_offer:1234567, total_project_cost:1234567.875}},
+  ];
+  const {identifier: metricFixture} = await cdp('Page.addScriptToEvaluateOnNewDocument', {source:`
+    const metricIndex = new URLSearchParams(location.search).get('metricFixture');
+    if (metricIndex !== null) {
+      const fields = ${JSON.stringify(metricCases.map(c=>c.fields))}[Number(metricIndex)];
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const response = await nativeFetch(...args);
+        const path = new URL(args[0], location.href).pathname;
+        if (response.ok && (path === '/api/deals/${selected.id}' || path === '/api/analyze')) {
+          const data = await response.json();
+          const patched = path === '/api/analyze' ? {...data,...fields} : {...data,analysis_result:{...data.analysis_result,...fields}};
+          return new Response(JSON.stringify(patched), {status:200,headers:{'Content-Type':'application/json'}});
+        }
+        return response;
+      };
+    }
+  `});
+  const offerSection = `(${byText('div','Offer Safety')}).closest('section')`;
+  const offerElement = `(${offerSection}).querySelector('.ff-heading')`;
+  const supportSection = `(${byText('div','Supporting Detail')}).nextElementSibling`;
+  const shieldGrid = `document.querySelector('button[title="Click to copy"]').parentElement`;
+  async function checkMetricLayout(page, width, fixture) {
+    const layout = await measure(`(()=>{
+      const rect=r=>({left:r.left,right:r.right,top:r.top,bottom:r.bottom});
+      const text=e=>{const range=document.createRange();range.selectNodeContents(e);const rects=[...range.getClientRects()].filter(r=>r.width>0&&r.height>0),box=e.getBoundingClientRect();return {text:e.textContent.trim(),clientWidth:e.clientWidth,scrollWidth:e.scrollWidth,lines:new Set(rects.map(r=>Math.round(r.top))).size,complete:rects.length>0&&rects.every(r=>r.left>=box.left-0.5&&r.right<=box.right+0.5),rects:rects.map(rect)};};
+      const grid=e=>{const values=[...e.children].map(cell=>text(cell.lastElementChild));return {columns:getComputedStyle(e).gridTemplateColumns.split(' ').length,values,noOverlap:values.every((v,i)=>values.slice(i+1).every(w=>v.rects.every(a=>w.rects.every(b=>a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top))))};};
+      return {offer:text(${offerElement}),offerGrid:grid((${offerSection}).querySelector('.grid')),supportGrid:grid((${supportSection}).querySelector('.grid')),shield:${page === 'detail' ? `grid(${shieldGrid})` : 'null'},pageWidth:document.documentElement.scrollWidth,viewport:innerWidth};
+    })()`);
+    console.log('METRIC_LAYOUT',page,width,fixture.name,JSON.stringify(layout));
+    assert.equal(layout.offer.text, `$${fixture.fields.max_safe_offer.toLocaleString('en-US')}`);
+    assert.equal(layout.offer.lines,1,'Main offer must stay on one line');
+    assert.ok(layout.offer.scrollWidth <= layout.offer.clientWidth, `Main offer overflows at ${width}: ${JSON.stringify(layout.offer)}`);
+    assert.ok(layout.offer.complete,'Main offer glyphs must remain inside their element');
+    assert.ok(layout.pageWidth <= layout.viewport, `${page} page must not scroll sideways at ${width}`);
+    assert.equal(layout.offerGrid.columns,width < 640 ? 1 : width < 768 ? 2 : 3);
+    assert.equal(layout.supportGrid.columns,width < 640 ? 1 : width < 768 ? 2 : 4);
+    assert.equal(layout.offerGrid.values[2].text, `$${fixture.fields.total_project_cost.toLocaleString('en-US')}`,'Keep saved cost precision');
+    assert.equal(layout.supportGrid.values[0].text, `${fixture.fields.net_profit < 0 ? '-' : ''}$${Math.abs(fixture.fields.net_profit).toLocaleString('en-US')}`,'Keep saved profit precision/sign');
+    if (layout.shield) {
+      assert.equal(layout.shield.columns,width < 640 ? 2 : width < 768 ? 3 : 5);
+      assert.equal(layout.shield.values[0].text,money(fixture.fields.net_profit));
+      assert.equal(layout.shield.values[3].text,money(fixture.fields.max_safe_offer));
+    }
+    for (const grid of [layout.offerGrid,layout.supportGrid,layout.shield].filter(Boolean)) {
+      assert.ok(grid.noOverlap, `Metric text must not overlap at ${width}`);
+      for (const value of grid.values) assert.ok(value.complete && value.scrollWidth <= value.clientWidth, `Clipped/overflowing metric on ${page} at ${width}: ${JSON.stringify(value)}`);
+    }
+    // Capture the affected sections at native resolution, avoiding duplicate full-page artifacts.
+    if (fixture.name === 'wide-loss' && [375,390,768,1440].includes(width)) {
+      for (const [name,expr] of [['offer',offerSection],['support',supportSection],...(page === 'detail' ? [['shield',shieldGrid]] : [])]) {
+        const clip = await measure(`(()=>{const r=(${expr}).getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1};})()`);
+        const {data} = await cdp('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip});
+        writeFileSync(join(artifacts,`metrics-${page}-${name}-${width}.png`),Buffer.from(data,'base64'));
+      }
+    }
+  }
+  for (const width of [375,390,639,640,767,768,1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});
+    for (const [index,fixture] of metricCases.entries()) {
+      const writesBeforeMetrics = browserApiWrites.length;
+      await cdp('Page.navigate',{url:`http://127.0.0.1:5173/deal/${selected.id}?metricFixture=${index}`});
+      await until(`Boolean(${byText('button','Lender Report')}) && (${scopeInput('Quote date 1')})?.value === '2026-09-12'`);
+      await checkMetricLayout('detail',width,fixture);
+      assert.deepEqual(browserApiWrites.slice(writesBeforeMetrics),[],'Detail metric inspection must not write');
+      await click('a','Create revision');
+      await until(`location.pathname === '/' && (${scopeInput('Quote date 1')})?.value === '2026-09-12' && !(${scopeInput('Unit cost 1')}).matches(':disabled')`);
+      await click('button','Generate Investor Memo');
+      await until(`Boolean(${byText('button','Save New Revision')}) && Boolean(${byText('div','Supporting Detail')})`);
+      await checkMetricLayout('analyzer',width,fixture);
+      assert.deepEqual(browserApiWrites.slice(writesBeforeMetrics),[{url:'http://127.0.0.1:8000/api/analyze',method:'POST'}],'Only the explicit stateless analysis may write a request; never save');
+      assert.deepEqual(await api('/api/deals'),recordsBeforeList);
+    }
+  }
+  await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:metricFixture});
+  checks.push('Detail/analyzer numbers fit without overlap at 375/390/639/640/767/768/1440 with both fonts loaded; million-dollar offer stays inside its box, decimals/signs survive, responsive grids fit, and only explicit analysis requests occur with saved records unchanged');
+
   // Test-only browser injection. Compress the two UI/network timers, and stall
   // reads before headers or during the body. No production auth or test hooks.
   const { identifier: recoveryFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", { source: `

@@ -415,7 +415,7 @@ export default function AnalysisResult({ result, meta }: Props) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8 space-y-6 text-left">
+    <div className="max-w-4xl mx-auto px-0 sm:px-6 py-8 space-y-6 text-left">
       {/* ============ 1. Decision Header ============ */}
       <section className="ff-panel rounded-2xl p-6 space-y-4">
         <div className="ff-kicker text-xs font-semibold uppercase tracking-widest">
@@ -487,7 +487,7 @@ export default function AnalysisResult({ result, meta }: Props) {
           <div className="ff-kicker text-xs font-semibold uppercase tracking-widest mb-2">
             Max Safe Offer
           </div>
-          <div className="ff-heading font-jetbrains text-4xl sm:text-5xl font-bold leading-none pb-1 break-words">
+          <div className="ff-heading font-jetbrains text-2xl sm:text-5xl font-bold leading-none pb-1 whitespace-nowrap">
             ${result.max_safe_offer.toLocaleString()}
           </div>
           <div className="mt-2 text-xs text-white/50">
@@ -495,7 +495,7 @@ export default function AnalysisResult({ result, meta }: Props) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-4 border-t border-white/[0.06] pt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-4 border-t border-white/[0.06] pt-4">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
               Purchase Price
@@ -730,7 +730,7 @@ export default function AnalysisResult({ result, meta }: Props) {
 
       {/* Metrics grid */}
       <section className="ff-panel rounded-2xl p-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-4">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">
               Net Profit
