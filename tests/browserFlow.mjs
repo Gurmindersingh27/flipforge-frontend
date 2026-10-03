@@ -45,6 +45,24 @@ async function evaluate(expression) {
   if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
   return result.result.value;
 }
+async function requireFonts() {
+  const fonts = await evaluate(`(async()=>{
+    const required=[['JetBrains Mono','14px "JetBrains Mono"'],['DM Serif Display','16px "DM Serif Display"']];
+    await Promise.all(required.map(([,spec])=>document.fonts.load(spec)));
+    await document.fonts.ready;
+    return required.map(([family,spec])=>({family,ready:document.fonts.check(spec),faces:[...document.fonts].filter(f=>f.family.replaceAll('"','').replaceAll("'",'')===family).map(f=>({status:f.status,weight:f.weight}))}));
+  })()`);
+  for (const font of fonts) {
+    assert.ok(font.ready, `${font.family} must load before layout assertions`);
+    // FontFaceSet.check alone can return true when the family is not registered at all.
+    assert.ok(font.faces.some(f=>f.status === 'loaded' && f.weight === '400'), `A real ${font.family} regular face must be loaded, not a fallback: ${JSON.stringify(font)}`);
+  }
+  return fonts;
+}
+async function measure(expression) {
+  await requireFonts();
+  return evaluate(expression);
+}
 async function until(expression) {
   for (let i = 0; i < 80; i++) {
     try { if (await evaluate(expression)) return; }
@@ -76,7 +94,7 @@ const inputByAria = label => `Array.from(document.querySelectorAll('[aria-label]
 async function clickVisible(expression) {
   assert.ok(await evaluate(visible(expression)), `Target must be visible: ${expression}`);
   await evaluate(`(${expression}).scrollIntoView({block:'center',inline:'nearest'})`);
-  const point = await evaluate(`(()=>{const e=${expression},r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,inside:r.left>=0 && r.right<=innerWidth};})()`);
+  const point = await measure(`(()=>{const e=${expression},r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,inside:r.left>=0 && r.right<=innerWidth};})()`);
   assert.ok(point.inside, "Target must be reachable without horizontal scrolling");
   assert.ok(await evaluate(`(()=>{const e=${expression};return e.contains(document.elementFromPoint(${point.x},${point.y}));})()`), "Pointer must hit the visible target");
   await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
@@ -98,7 +116,7 @@ async function linkRenderPair(name) {
   await evaluate(`(()=>{document.getElementById('prior-anchor-rules').remove();const a=document.querySelector('[data-original-class]');if(a){a.className=a.dataset.originalClass;delete a.dataset.originalClass;}})()`);
   await pause(200);
   await screenshot(`${name}-after.png`);
-  const contrast = await evaluate(`(()=>{const c=document.createElement('canvas'),x=c.getContext('2d');c.width=c.height=1;const rgba=v=>{x.clearRect(0,0,1,1);x.fillStyle=v;x.fillRect(0,0,1,1);return [...x.getImageData(0,0,1,1).data];};const blend=(a,b)=>a.slice(0,3).map((v,i)=>v*a[3]/255+b[i]*(1-a[3]/255));const luminance=c=>c.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((v,n,i)=>v+n*[.2126,.7152,.0722][i],0);return [...document.querySelectorAll('a')].filter(e=>e.getBoundingClientRect().width&&e.getBoundingClientRect().height&&getComputedStyle(e).visibility!=='hidden').map(e=>{const chain=[];for(let p=e;p;p=p.parentElement)chain.unshift(p);let bg=[0,0,0];for(const p of chain)bg=blend(rgba(getComputedStyle(p).backgroundColor),bg);const fg=blend(rgba(getComputedStyle(e).color),bg),a=luminance(fg),b=luminance(bg);return {text:e.textContent.trim(),ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};});})()`);
+  const contrast = await measure(`(()=>{const c=document.createElement('canvas'),x=c.getContext('2d');c.width=c.height=1;const rgba=v=>{x.clearRect(0,0,1,1);x.fillStyle=v;x.fillRect(0,0,1,1);return [...x.getImageData(0,0,1,1).data];};const blend=(a,b)=>a.slice(0,3).map((v,i)=>v*a[3]/255+b[i]*(1-a[3]/255));const luminance=c=>c.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((v,n,i)=>v+n*[.2126,.7152,.0722][i],0);return [...document.querySelectorAll('a')].filter(e=>e.getBoundingClientRect().width&&e.getBoundingClientRect().height&&getComputedStyle(e).visibility!=='hidden').map(e=>{const chain=[];for(let p=e;p;p=p.parentElement)chain.unshift(p);let bg=[0,0,0];for(const p of chain)bg=blend(rgba(getComputedStyle(p).backgroundColor),bg);const fg=blend(rgba(getComputedStyle(e).color),bg),a=luminance(fg),b=luminance(bg);return {text:e.textContent.trim(),ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};});})()`);
   console.log("LINK_CONTRAST", name, JSON.stringify(contrast));
   assert.ok(contrast.every(link=>link.ratio>=4.5), `Link contrast below 4.5:1: ${JSON.stringify(contrast.filter(link=>link.ratio<4.5))}`);
 
@@ -120,7 +138,7 @@ async function verifyDesktopHover(id, noDraftSource) {
       await pause(200);
       await expectLinkStyle(action, "rgb(255 255 255 / 0.7)", true);
       await evaluate(`(${action}).scrollIntoView({block:'center'})`);
-      const point = await evaluate(`(()=>{const r=(${action}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      const point = await measure(`(()=>{const r=(${action}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
       await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",pointerType:"mouse",...point});
       await until(`(${action}).matches(':hover')`);
       await pause(200);
@@ -135,7 +153,7 @@ async function verifyDesktopHover(id, noDraftSource) {
     await pause(200);
     await expectLinkStyle(reason, "rgb(255 255 255 / 0.6)", "none");
     await evaluate(`(${reason}).scrollIntoView({block:'center',inline:'nearest'})`);
-    const point = await evaluate(`(()=>{const r=(${reason}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+    const point = await measure(`(()=>{const r=(${reason}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
     await cdp("Input.dispatchMouseEvent", {type:"mouseMoved",pointerType:"mouse",...point});
     await until(`(${reason}).matches(':hover')`);
     await pause(200);
@@ -167,6 +185,10 @@ async function enterQuoteDetails(source, date) {
   await toggle("Select quote line 1");
 }
 async function screenshot(name) {
+  if (name !== "failure.png") {
+    await requireFonts();
+    assert.ok(await evaluate('innerWidth !== 390 || document.documentElement.scrollWidth <= innerWidth'), `${name}: page must fit the 390px viewport`);
+  }
   const { cssContentSize } = await cdp("Page.getLayoutMetrics");
   const { data } = await cdp("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width: cssContentSize.width, height: cssContentSize.height, scale: 1 } });
   writeFileSync(join(artifacts, name), Buffer.from(data, "base64"));
@@ -200,7 +222,7 @@ try {
   const beforeSample = await api("/api/deals");
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/?fixtureSignedOut=1" });
   await until(`Boolean(document.querySelector('section[aria-label="Sample deal"]'))`);
-  assert.ok(await evaluate(`(()=>{const button=document.querySelector('[data-hero-analyze]');const sample=document.querySelector('section[aria-label="Sample deal"]');return button.textContent==='Analyze your own deal' && button.getBoundingClientRect().bottom < sample.getBoundingClientRect().top && button.getBoundingClientRect().bottom < innerHeight;})()`));
+  assert.ok(await measure(`(()=>{const button=document.querySelector('[data-hero-analyze]');const sample=document.querySelector('section[aria-label="Sample deal"]');return button.textContent==='Analyze your own deal' && button.getBoundingClientRect().bottom < sample.getBoundingClientRect().top && button.getBoundingClientRect().bottom < innerHeight;})()`));
   await evaluate(`document.querySelector('[data-hero-analyze]').focus()`);
   assert.ok(await evaluate(`document.activeElement.matches('[data-hero-analyze]')`));
   const money = value => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
@@ -216,7 +238,7 @@ try {
     await until(`${metric("max_safe_offer")} === ${JSON.stringify(money(canonical.max_safe_offer))}`);
     assert.equal(await evaluate(metric("net_profit")), money(canonical.net_profit));
     assert.equal(await evaluate(`(${inputByAria(scenario.label)}).getAttribute('aria-pressed')`), "true");
-    const offerChart = await evaluate(`(()=>{const figure=document.querySelector('figure[aria-labelledby="sample-offer-caption"]');return {caption:document.getElementById(figure.getAttribute('aria-labelledby')).textContent,text:figure.textContent,rows:Array.from(figure.querySelectorAll('[data-sample-offer-row]')).map(row=>{const bar=row.querySelector('[data-sample-offer-bar]');const marker=row.querySelector('[data-sample-purchase-marker]');return {text:row.textContent,width:bar.getBoundingClientRect().width / bar.parentElement.getBoundingClientRect().width,marker:parseFloat(marker.style.left),hidden:bar.parentElement.getAttribute('aria-hidden')};})};})()`);
+    const offerChart = await measure(`(()=>{const figure=document.querySelector('figure[aria-labelledby="sample-offer-caption"]');return {caption:document.getElementById(figure.getAttribute('aria-labelledby')).textContent,text:figure.textContent,rows:Array.from(figure.querySelectorAll('[data-sample-offer-row]')).map(row=>{const bar=row.querySelector('[data-sample-offer-bar]');const marker=row.querySelector('[data-sample-purchase-marker]');return {text:row.textContent,width:bar.getBoundingClientRect().width / bar.parentElement.getBoundingClientRect().width,marker:parseFloat(marker.style.left),hidden:bar.parentElement.getAttribute('aria-hidden')};})};})()`);
     assert.equal(offerChart.caption, "Modeled offer comparison");
     assert.ok(offerChart.text.includes(`Dashed marker: ${money(scenario.input.purchase_price)} purchase price`));
     assert.ok(offerChart.rows[0].text.includes(money(SAMPLE_SCENARIOS[0].result.max_safe_offer)));
@@ -239,7 +261,7 @@ try {
   await screenshot("sample-desktop.png");
   await linkRenderPair("links-public-1440");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
-  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  assert.equal(await measure("document.documentElement.scrollWidth > innerWidth"), false);
   await screenshot("sample-mobile.png");
   await linkRenderPair("links-public-390");
   await cdp("Page.reload");
@@ -256,6 +278,12 @@ try {
   checks.push("Signed-out sample makes no browser API requests or saved-record changes");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/" });
+  await until(`Boolean(${byText("button", "Analyze without address lookup ↓")})`);
+  console.log("SITE_FONTS", JSON.stringify(await requireFonts()));
+  for (const width of [390, 1440]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await screenshot(`analyzer-hero-${width}.png`);
+  }
   await click("button", "Analyze without address lookup ↓");
   assert.equal(await evaluate(`Boolean(document.querySelector('section[aria-label="Sample deal"]'))`), false);
   for (const [label, value] of [["Purchase Price", "150000"], ["ARV", "270000"], ["Rehab Budget", "50000"], ["Est. Monthly Rent (optional)", ""]]) await fill(labelInput(label), value);
@@ -310,12 +338,12 @@ try {
   await screenshot("desktop-saved.png");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
   await screenshot("mobile-saved.png");
-  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  assert.equal(await measure("document.documentElement.scrollWidth > innerWidth"), false);
   await click("a", "Create revision");
   await until(`location.pathname === '/' && Boolean(${scopeInput("Unit cost 1")}) && !(${scopeInput("Unit cost 1")}).matches(':disabled')`); await until(`Boolean(${scopeInput("Unit cost 1")})`);
   assert.equal(await evaluate(`(${scopeInput("Unit cost 1")}).value`), "67000");
   await screenshot("mobile-editor.png");
-  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  assert.equal(await measure("document.documentElement.scrollWidth > innerWidth"), false);
   checks.push("Saved comparison and restored editor fit 390px viewport");
   await scoped("Notes 1", "Disposal now included after contractor confirmation. Price unchanged.");
   await click("button", "Generate Investor Memo");
@@ -329,7 +357,7 @@ try {
   await click("a", "View saved version →");
   await until(`document.querySelector('[aria-label="Scope evidence changes"]')?.textContent.includes('Disposal now included after contractor confirmation. Price unchanged.')`);
   assert.ok(await evaluate(`document.querySelector('[aria-label="Scope evidence changes"]').textContent.includes('Disposal excluded; owner allowance requires confirmation.')`));
-  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  assert.equal(await measure("document.documentElement.scrollWidth > innerWidth"), false);
   await screenshot("mobile-evidence-change.png");
   checks.push("Cost-neutral revision shows both exclusion passages, preserves economics and previous record, and fits mobile");
 
@@ -407,7 +435,7 @@ try {
       assert.ok(savedText.includes(value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 })));
     }
   }
-  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  assert.equal(await measure("document.documentElement.scrollWidth > innerWidth"), false);
   await screenshot("bid-impact-mobile.png");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await screenshot("bid-impact-desktop.png");
@@ -428,7 +456,7 @@ try {
   assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Bid B impact"]'))`), false);
   assert.equal(await evaluate(`Boolean(${byText("a", "Continue with Bid B")})`), false);
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
-  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  assert.equal(await measure("document.documentElement.scrollWidth > innerWidth"), false);
   await screenshot("bid-carried-allowance-review.png");
   await toggle(confirmSamePrice);
   await until(`Boolean(document.querySelector('[aria-label="Bid B impact"]'))`);
@@ -503,7 +531,7 @@ try {
     const control = inputByAria(`Compare version #${first.id}`);
     assert.ok(await evaluate(visible(control)));
     assert.equal(await evaluate(`(${control}).closest('[data-saved-version]').tagName`), width === 1279 ? "LI" : "TR");
-    assert.equal(await evaluate(`Array.from(document.querySelectorAll('input[type=checkbox]')).filter(e=>(e.getAttribute('aria-label') ?? e.closest('label')?.textContent.trim()) === 'Compare version #${first.id}' && e.getBoundingClientRect().width>0 && e.getBoundingClientRect().height>0).length`), 1);
+    assert.equal(await measure(`Array.from(document.querySelectorAll('input[type=checkbox]')).filter(e=>(e.getAttribute('aria-label') ?? e.closest('label')?.textContent.trim()) === 'Compare version #${first.id}' && e.getBoundingClientRect().width>0 && e.getBoundingClientRect().height>0).length`), 1);
     assert.equal(await evaluate(`(${control}).getAttribute('aria-label') ?? (${control}).closest('label')?.textContent.trim()`), `Compare version #${first.id}`);
     if (width === 1279) assert.equal(await evaluate(`(${control}).hasAttribute('aria-label')`), false);
     assert.equal(await evaluate(`(${control}).checked`), width === 1280);
@@ -515,13 +543,13 @@ try {
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
   assert.equal(await evaluate(`(${inputByAria(`Compare version #${first.id}`)}).checked`), false);
   for (const label of ['Est. profit', 'Annualized ROI', 'Verdict', 'Max offer', 'Date']) {
-    assert.ok(await evaluate(`Array.from(document.querySelectorAll('[aria-label="Saved deal cards"] dt')).some(e=>e.textContent===${JSON.stringify(label)} && e.getBoundingClientRect().width>0)`));
+    assert.ok(await measure(`Array.from(document.querySelectorAll('[aria-label="Saved deal cards"] dt')).some(e=>e.textContent===${JSON.stringify(label)} && e.getBoundingClientRect().width>0)`));
   }
-  assert.ok(await evaluate(`Array.from(document.querySelectorAll('p')).some(e=>e.textContent.includes('it is not a guaranteed return') && e.getBoundingClientRect().height>0)`));
+  assert.ok(await measure(`Array.from(document.querySelectorAll('p')).some(e=>e.textContent.includes('it is not a guaranteed return') && e.getBoundingClientRect().height>0)`));
   for (const label of [`Open saved version ${selected.id}`, `Create revision from version ${selected.id}`, `Compare version #${selected.id}`]) {
     const control = inputByAria(label);
     assert.ok(await evaluate(visible(control)));
-    assert.ok(await evaluate(`(()=>{const e=${control};const r=(e.type==='checkbox'?e.closest('label'):e).getBoundingClientRect();return r.width>=44 && r.height>=44 && r.left>=0 && r.right<=innerWidth;})()`));
+    assert.ok(await measure(`(()=>{const e=${control};const r=(e.type==='checkbox'?e.closest('label'):e).getBoundingClientRect();return r.width>=44 && r.height>=44 && r.left>=0 && r.right<=innerWidth;})()`));
   }
   assert.deepEqual(await evaluate(`Array.from((${inputByAria(`Compare version #${first.id}`)}).closest('li').querySelectorAll('dd')).slice(0,4).map(e=>e.textContent)`), ["$34,900", `${(first.analysis_result.annualized_roi * 100).toFixed(1)}%`, "BUY", "$155,600"]);
   checks.push("Visible mobile and desktop controls share selection across resizing; cards label all metrics, preserve the ROI disclaimer and provide 44px tap areas");
@@ -540,9 +568,9 @@ try {
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
   await screenshot("comparison-desktop.png");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-  assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
+  assert.ok(await measure("document.documentElement.scrollWidth <= innerWidth"));
   await screenshot("comparison-mobile.png");
-  console.log("COMPARISON_MOBILE_GEOMETRY", JSON.stringify(await evaluate(`Array.from(${comparison}.querySelectorAll('*')).filter(e=>getComputedStyle(e).overflowX==='auto').map(e=>({clientWidth:e.clientWidth,scrollWidth:e.scrollWidth}))`)));
+  console.log("COMPARISON_MOBILE_GEOMETRY", JSON.stringify(await measure(`Array.from(${comparison}.querySelectorAll('*')).filter(e=>getComputedStyle(e).overflowX==='auto').map(e=>({clientWidth:e.clientWidth,scrollWidth:e.scrollWidth}))`)));
   await toggle(`Compare version #${second.id}`);
   assert.equal(await evaluate(`(${inputByAria(`Compare version #${baseline.id}`)}).disabled`), false);
   assert.equal(await evaluate(`(${inputByAria(`Open compared version ${third.id}`)}).getAttribute('href')`), `/deal/${third.id}`);
@@ -573,9 +601,9 @@ try {
     assert.ok(await evaluate(visible(noteButton)));
     assert.equal(await evaluate(`(${noteButton}).getAttribute('aria-expanded')`), "false");
     assert.equal(await evaluate(`getComputedStyle(${noteElement}).whiteSpace`), "pre-line");
-    assert.ok(await evaluate(`(${noteElement}).clientHeight <= parseFloat(getComputedStyle(${noteElement}).lineHeight) * 2 + 1`));
+    assert.ok(await measure(`(${noteElement}).clientHeight <= parseFloat(getComputedStyle(${noteElement}).lineHeight) * 2 + 1`));
     assert.equal(await evaluate(`(${inputByAria(`Create revision from version ${second.id}`)}).closest('[data-saved-version]').querySelector('button[aria-controls]')`), null);
-    assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
+    assert.ok(await measure(`document.documentElement.scrollWidth <= innerWidth`));
     await screenshot(`saved-deals-${width}.png`);
     await linkRenderPair(`links-deals-${width}`);
     await expectLinkStyle(`(${selectedRow}).querySelector('a[aria-label^="Open version"]')`, "rgb(255 255 255 / 0.6)", true);
@@ -592,7 +620,7 @@ try {
     await until(`(${noteButton}).getAttribute('aria-expanded') === 'true'`);
     assert.equal(await evaluate(`(${noteElement}).textContent`), longRevisionNote);
     assert.equal(await evaluate(`getComputedStyle(${noteElement}).whiteSpace`), "pre-line");
-    assert.ok(await evaluate(`(${noteElement}).clientHeight >= (${noteElement}).scrollHeight - 1`));
+    assert.ok(await measure(`(${noteElement}).clientHeight >= (${noteElement}).scrollHeight - 1`));
     await screenshot(`saved-deals-expanded-${width}.png`);
     await clickVisible(noteButton);
     await until(`(${noteButton}).getAttribute('aria-expanded') === 'false'`);
@@ -662,7 +690,7 @@ try {
         assert.equal(await evaluate(`(${byText("div", label)}).nextElementSibling.textContent`), expected);
       }
       assert.ok(await evaluate(visible(byText("button", "Lender Report"))));
-      assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth'));
+      assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'));
       if (!allowed) {
         assert.ok(await evaluate(visible(reason)));
         assert.ok(await evaluate(`(()=>{const e=${reason};return e.tagName==='SPAN' && !e.hasAttribute('href') && !e.hasAttribute('tabindex') && e.tabIndex<0;})()`));
@@ -705,6 +733,7 @@ try {
       await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
       const row = `(${inputByAria(`Open saved version ${selected.id}`)}).closest('[data-saved-version]')`;
       const reason = `Array.from((${row}).querySelectorAll('span')).find(e=>e.textContent.trim()==='Create revision (unavailable: no saved inputs)')`;
+      console.log("LAYOUT_FONTS", JSON.stringify(await requireFonts()));
       assert.ok(await evaluate(visible(reason)));
       assert.equal(await evaluate(`(${row}).querySelector('a[aria-label="Create revision from version ${selected.id}"]')`), null);
       assert.ok(await evaluate(`(()=>{const e=${reason};return e.tagName==='SPAN' && !e.hasAttribute('href') && !e.hasAttribute('tabindex') && e.tabIndex<0;})()`));
@@ -714,7 +743,7 @@ try {
       await expectLinkStyle(inputByAria(`Open saved version ${selected.id}`), width < 1280 ? "#E8C547" : "rgb(255 255 255 / 0.7)", width >= 1280);
       if (mode === 'null') {
         const address = `(${row}).querySelector('[title]')`;
-        const addressLayout = await evaluate(`(()=>{const e=${address},s=getComputedStyle(e),r=document.createRange();r.selectNodeContents(e);return {text:e.textContent,title:e.title,whiteSpace:s.whiteSpace,textOverflow:s.textOverflow,overflowX:s.overflowX,clientWidth:e.clientWidth,scrollWidth:e.scrollWidth,clientHeight:e.clientHeight,scrollHeight:e.scrollHeight,lineCount:new Set([...r.getClientRects()].filter(r=>r.width>0&&r.height>0).map(r=>Math.round(r.top))).size,rowTag:(${row}).tagName};})()`);
+        const addressLayout = await measure(`(()=>{const e=${address},s=getComputedStyle(e),r=document.createRange();r.selectNodeContents(e);return {text:e.textContent,title:e.title,whiteSpace:s.whiteSpace,textOverflow:s.textOverflow,overflowX:s.overflowX,clientWidth:e.clientWidth,scrollWidth:e.scrollWidth,clientHeight:e.clientHeight,scrollHeight:e.scrollHeight,lineCount:new Set([...r.getClientRects()].filter(r=>r.width>0&&r.height>0).map(r=>Math.round(r.top))).size,rowTag:(${row}).tagName};})()`);
         assert.equal(addressLayout.text, longAddress);
         assert.equal(addressLayout.title, longAddress);
         assert.equal(addressLayout.rowTag, width < 1280 ? "LI" : "TR");
@@ -731,10 +760,10 @@ try {
           assert.ok(addressLayout.scrollWidth > addressLayout.clientWidth, "Table fixture must exercise real address truncation");
         }
         console.log("ADDRESS_LAYOUT", width, JSON.stringify(addressLayout));
-        assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"), "Table scrolling must stay inside its wrapper");
+        assert.ok(await measure("document.documentElement.scrollWidth <= innerWidth"), "Table scrolling must stay inside its wrapper");
         if (width >= 1280) {
           const date = `(${row}).cells[6]`;
-          const layout = await evaluate(`(()=>{const e=${date},r=document.createRange();r.selectNodeContents(e);const lines=[...r.getClientRects()].filter(r=>r.width>0&&r.height>0);const wrapper=e.closest('table').parentElement;return {date:e.textContent.trim(),whiteSpace:getComputedStyle(e).whiteSpace,lineCount:new Set(lines.map(r=>Math.round(r.top))).size,clientWidth:wrapper.clientWidth,scrollWidth:wrapper.scrollWidth,overflowX:getComputedStyle(wrapper).overflowX};})()`);
+          const layout = await measure(`(()=>{const e=${date},r=document.createRange();r.selectNodeContents(e);const lines=[...r.getClientRects()].filter(r=>r.width>0&&r.height>0);const wrapper=e.closest('table').parentElement;return {date:e.textContent.trim(),whiteSpace:getComputedStyle(e).whiteSpace,lineCount:new Set(lines.map(r=>Math.round(r.top))).size,clientWidth:wrapper.clientWidth,scrollWidth:wrapper.scrollWidth,overflowX:getComputedStyle(wrapper).overflowX};})()`);
           assert.equal(layout.date, "Sep 28, 2026");
           assert.equal(layout.whiteSpace, "nowrap");
           assert.equal(layout.lineCount, 1, "Long date must occupy exactly one rendered line");
@@ -753,18 +782,45 @@ try {
     await until(`Boolean(${inputByAria(`Create revision from version ${selected.id}`)})`);
     assert.ok(await evaluate(visible(inputByAria(`Create revision from version ${selected.id}`))));
   }
-  // Read-only stress fixture: measure wider figures without making overflow a failure.
-  await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 1000, deviceScaleFactor: 1, mobile: false });
-  await cdp("Page.navigate", { url: "http://127.0.0.1:5173/deals?layoutFixture=wide" });
-  await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
-  const wideRow = `(${inputByAria(`Open saved version ${selected.id}`)}).closest('tr')`;
-  const wideLayout = await evaluate(`(()=>{const row=${wideRow},wrapper=row.closest('table').parentElement;return {profit:row.cells[2].textContent,verdict:row.cells[4].textContent,maxOffer:row.cells[5].textContent,clientWidth:wrapper.clientWidth,scrollWidth:wrapper.scrollWidth,overflowPixels:Math.max(0,wrapper.scrollWidth-wrapper.clientWidth),pageWidth:document.documentElement.scrollWidth,viewportWidth:innerWidth};})()`);
-  console.log("WORST_CASE_TABLE_LAYOUT", 1280, JSON.stringify(wideLayout));
-  await screenshot("worst-case-list-1280-left.png");
-  await evaluate(`(()=>{const wrapper=(${wideRow}).closest('table').parentElement;wrapper.scrollLeft=wrapper.scrollWidth;})()`);
-  await screenshot("worst-case-list-1280-right.png");
-  assert.deepEqual(await api("/api/deals"), recordsBeforeList);
-  checks.push("Cards wrap full addresses below 1280; table truncation and one-line dates remain at 1280/1440, with no standard-fixture table or page overflow; worst-case row measured separately");
+  // Both live actions and the longer unavailable label must fit with real fonts.
+  for (const width of [1280, 1440]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height:1000, deviceScaleFactor:1, mobile:false });
+    for (const mode of ['null', 'valid']) {
+      const writesBeforeWideCase = browserApiWrites.length;
+      await cdp("Page.navigate", { url:`http://127.0.0.1:5173/deals?layoutFixture=wide&draftFixture=${mode}` });
+      await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
+      console.log("LAYOUT_FONTS", JSON.stringify(await requireFonts()));
+      const wideRow = `(${inputByAria(`Open saved version ${selected.id}`)}).closest('tr')`;
+      await evaluate(`(${wideRow}).scrollIntoView({block:'center'})`);
+      const layout = await measure(`(()=>{
+        const row=${wideRow},table=row.closest('table'),wrapper=table.parentElement,wr=wrapper.getBoundingClientRect();
+        const textBox=e=>{const range=document.createRange();range.selectNodeContents(e);const rects=[...range.getClientRects()].filter(r=>r.width>0&&r.height>0),cell=e.closest('td').getBoundingClientRect();return {text:e.textContent.trim(),lines:new Set(rects.map(r=>Math.round(r.top))).size,complete:rects.length>0&&rects.every(r=>r.left>=Math.max(cell.left,wr.left)-1&&r.right<=Math.min(cell.right,wr.right)+1&&r.top>=cell.top-1&&r.bottom<=cell.bottom+1),visible:rects.every(r=>r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight)};};
+        const metrics=[2,3,5,6].map(i=>textBox(row.cells[i]));
+        const actions=[...row.cells[7].querySelectorAll('a,span')].map(textBox);
+        const clientWidth=wrapper.clientWidth,scrollWidth=wrapper.scrollWidth,scrollLeft=wrapper.scrollLeft;
+        const oldWidth=table.style.width;let requiredWidth;
+        try {table.style.width='min-content';requiredWidth=table.getBoundingClientRect().width;} finally {table.style.width=oldWidth;}
+        return {metrics,actions,verdict:row.cells[4].textContent,clientWidth,scrollWidth,scrollLeft,requiredWidth,margin:clientWidth-requiredWidth,pageWidth:document.documentElement.scrollWidth,viewportWidth:innerWidth};
+      })()`);
+      console.log("WORST_CASE_TABLE_LAYOUT", width, mode, JSON.stringify(layout));
+      assert.ok(layout.scrollWidth <= layout.clientWidth + 1, 'Worst-case table must fit without horizontal scrolling');
+      assert.equal(layout.scrollLeft, 0);
+      assert.ok(layout.pageWidth <= layout.viewportWidth);
+      assert.equal(layout.verdict, 'CONDITIONAL');
+      assert.deepEqual(layout.metrics.map(m=>m.text), ['-$123,456', `${(selected.analysis_result.annualized_roi * 100).toFixed(1)}%`, '$1,234,567', 'Sep 28, 2026']);
+      for (const metric of layout.metrics) {
+        assert.equal(metric.lines, 1, 'Amounts and date must stay on one line');
+        assert.ok(metric.complete && metric.visible, 'Amounts and date must be complete and unclipped');
+      }
+      assert.deepEqual(layout.actions.map(a=>a.text), ['Open', mode === 'valid' ? 'Create revision' : 'Create revision (unavailable: no saved inputs)']);
+      assert.ok(layout.actions.every(a=>a.complete && a.visible), 'Every action or unavailable label must be visible without scrolling');
+      const { data } = await cdp("Page.captureScreenshot", {format:'png',captureBeyondViewport:false});
+      writeFileSync(join(artifacts, `worst-case-list-${width}-${mode}.png`), Buffer.from(data, 'base64'));
+      assert.deepEqual(await api('/api/deals'), recordsBeforeList);
+      assert.deepEqual(browserApiWrites.slice(writesBeforeWideCase), [], 'Table fit checks must not write');
+    }
+  }
+  checks.push("Cards wrap full addresses below 1280; standard and worst-case tables fit at 1280/1440 with loaded JetBrains Mono, complete amounts, one-line dates, visible actions/unavailable text and no writes");
   checks.push("Both visible layouts reject null/malformed drafts with nonfocusable reason text, retain Open, and match the analyzer purchase_price presence check without writes");
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: noDraftFixture });
   checks.push("Detail guard matches list/analyzer for null, object, string, array and purchase_price presence; PDF details render, valid/present drafts resume at 390/1440, minimal drafts analyze with blank rent, only the expected stateless analysis POST occurs, and saved records remain unchanged");
@@ -882,7 +938,7 @@ try {
     const calls = await evaluate("window.readFixture.calls");
     await pause(300);
     assert.equal(await evaluate("window.readFixture.calls"), calls, "No automatic retry after a failed read");
-    assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth`));
+    assert.ok(await measure(`document.documentElement.scrollWidth <= innerWidth`));
     await evaluate("window.readFixture.mode = 'pass'");
     await click("button", "Try again");
     if (route === "/deals") await until(`Boolean(${inputByAria(`Open saved version ${selected.id}`)})`);
@@ -1055,7 +1111,7 @@ try {
     assert.equal(await evaluate(`Boolean(${byText("button", "Saved!")})`), false);
     assert.equal(await evaluate(hasStatus("Still waiting for save confirmation")), false);
     assert.ok(await evaluate("window.requestFixture.authenticated.every(Boolean)"));
-    assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"));
+    assert.ok(await measure("document.documentElement.scrollWidth <= innerWidth"));
     const saved = await evaluate("window.requestFixture.saved");
     const afterSave = await api("/api/deals");
     assert.equal(afterSave.length, beforeSave.length + (saved ? 1 : 0));
