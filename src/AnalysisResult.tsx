@@ -73,7 +73,8 @@ function verdictRank(v: string): number {
 
 function fmtMoney(n: number) {
   if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString(undefined, {
+  const amount = Math.abs(n) < 0.5 ? 0 : n;
+  return amount.toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
@@ -150,7 +151,7 @@ function buildOfferGapCallout(purchasePrice: number, mao: number) {
   if (purchasePrice <= 0 || mao <= 0) return null;
   const gap = purchasePrice - mao;
   const absGap = Math.abs(gap);
-  const fmtGap = `$${absGap.toLocaleString()}`;
+  const fmtGap = fmtMoney(absGap);
 
   if (gap > 0) {
     return (
@@ -264,7 +265,7 @@ export default function AnalysisResult({ result, meta }: Props) {
     result.overall_verdict === "BUY" &&
     purchasePriceMeta !== null &&
     purchasePriceMeta > result.max_safe_offer
-      ? `$${(purchasePriceMeta - result.max_safe_offer).toLocaleString()}`
+      ? fmtMoney(purchasePriceMeta - result.max_safe_offer)
       : null;
 
   const verdict = result.overall_verdict;
@@ -488,7 +489,7 @@ export default function AnalysisResult({ result, meta }: Props) {
             Max Safe Offer
           </div>
           <div className="ff-heading font-jetbrains text-2xl sm:text-5xl font-bold leading-none pb-1 whitespace-nowrap">
-            ${result.max_safe_offer.toLocaleString()}
+            {fmtMoney(result.max_safe_offer)}
           </div>
           <div className="mt-2 text-xs text-white/50">
             Your ceiling before the deal breaks.
@@ -502,7 +503,7 @@ export default function AnalysisResult({ result, meta }: Props) {
             </div>
             <div className="font-jetbrains text-lg font-medium text-white/70">
               {purchasePriceMeta !== null
-                ? `$${purchasePriceMeta.toLocaleString()}`
+                ? fmtMoney(purchasePriceMeta)
                 : "—"}
             </div>
           </div>
@@ -522,8 +523,8 @@ export default function AnalysisResult({ result, meta }: Props) {
               {offerGapValue === null
                 ? "—"
                 : offerGapValue > 0
-                ? `$${offerGapValue.toLocaleString()} over`
-                : `$${Math.abs(offerGapValue).toLocaleString()} under`}
+                ? `${fmtMoney(offerGapValue)} over`
+                : `${fmtMoney(Math.abs(offerGapValue))} under`}
             </div>
           </div>
           <div>
@@ -531,7 +532,7 @@ export default function AnalysisResult({ result, meta }: Props) {
               Total Project Cost
             </div>
             <div className="font-jetbrains text-lg font-medium text-white/70">
-              ${result.total_project_cost.toLocaleString()}
+              {fmtMoney(result.total_project_cost)}
             </div>
           </div>
           <div>
@@ -736,8 +737,7 @@ export default function AnalysisResult({ result, meta }: Props) {
               Net Profit
             </div>
             <div className="font-jetbrains text-lg font-medium text-white/70">
-              {result.net_profit < 0 ? "-" : ""}$
-              {Math.abs(result.net_profit).toLocaleString()}
+              {fmtMoney(result.net_profit)}
             </div>
           </div>
           <div>
@@ -761,7 +761,7 @@ export default function AnalysisResult({ result, meta }: Props) {
               ARV
             </div>
             <div className="font-jetbrains text-lg font-medium text-white/70">
-              {arvMeta !== null ? `$${arvMeta.toLocaleString()}` : "—"}
+              {arvMeta !== null ? fmtMoney(arvMeta) : "—"}
             </div>
           </div>
           <div>
