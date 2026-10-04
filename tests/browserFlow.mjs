@@ -898,11 +898,19 @@ try {
   const metricCases = [
     {name:'saved-decimals', fields:{net_profit:selected.analysis_result.net_profit, max_safe_offer:selected.analysis_result.max_safe_offer, total_project_cost:selected.analysis_result.total_project_cost}},
     {name:'wide-loss', fields:{net_profit:-123456, max_safe_offer:1234567, total_project_cost:1234567.875}},
+    {name:'positive-half', fields:{net_profit:13880.5,max_safe_offer:1234567.875,total_project_cost:13880.5}, meta:{purchase_price:150000.5,arv:270000.5}, expected:{offer:'$1,234,568',cost:'$13,881',profit:'$13,881'}, locale:'de-DE'},
+    {name:'negative-half', fields:{net_profit:-2.5,max_safe_offer:150000,total_project_cost:13880.5}, expected:{offer:'$150,000',cost:'$13,881',profit:'-$3'}},
+    {name:'rounded-zero-over', fields:{net_profit:-0.4,max_safe_offer:149999.6,total_project_cost:-0.4}, expected:{offer:'$150,000',cost:'$0',profit:'$0',gap:'$0 over',callout:'$0 over',negotiate:'NEGOTIATE FIRST • $0 over MAO'}},
+    {name:'rounded-zero-under', fields:{net_profit:-0.4,max_safe_offer:150000.4,total_project_cost:-0.4}, expected:{offer:'$150,000',cost:'$0',profit:'$0',gap:'$0 under',callout:'within $0',negotiate:null}},
+    {name:'rounded-zero-offer', fields:{net_profit:-0.4,max_safe_offer:-0.4,total_project_cost:-0.4}, expected:{offer:'$0',cost:'$0',profit:'$0'}},
+    {name:'zero', fields:{net_profit:0,max_safe_offer:150000,total_project_cost:0}, expected:{offer:'$150,000',cost:'$0',profit:'$0'}},
+    {name:'missing', fields:{net_profit:null,max_safe_offer:150000,total_project_cost:null}, expected:{offer:'$150,000',cost:'—',profit:'—'}},
   ];
   const {identifier: metricFixture} = await cdp('Page.addScriptToEvaluateOnNewDocument', {source:`
     const metricIndex = new URLSearchParams(location.search).get('metricFixture');
     if (metricIndex !== null) {
       const fields = ${JSON.stringify(metricCases.map(c=>c.fields))}[Number(metricIndex)];
+      const meta = ${JSON.stringify(metricCases.map(c=>c.meta ?? null))}[Number(metricIndex)];
       const nativeFetch = window.fetch.bind(window);
       window.fetch = async (...args) => {
         const response = await nativeFetch(...args);
@@ -910,6 +918,10 @@ try {
         if (response.ok && (path === '/api/deals/${selected.id}' || path === '/api/finalize-and-analyze')) {
           const data = await response.json();
           const patched = path === '/api/finalize-and-analyze' ? {...data,...fields} : {...data,analysis_result:{...data.analysis_result,...fields}};
+          if (meta && path !== '/api/finalize-and-analyze') {
+            patched.draft_input = {...data.draft_input};
+            for (const [key,value] of Object.entries(meta)) patched.draft_input[key] = {...data.draft_input[key],value};
+          }
           return new Response(JSON.stringify(patched), {status:200,headers:{'Content-Type':'application/json'}});
         }
         return response;
@@ -919,6 +931,7 @@ try {
   const offerSection = `(${byText('div','Offer Safety')}).closest('section')`;
   const offerElement = `(${offerSection}).querySelector('.ff-heading')`;
   const supportSection = `(${byText('div','Supporting Detail')}).nextElementSibling`;
+  const decisionSection = `(${offerSection}).previousElementSibling`;
   const shieldGrid = `document.querySelector('button[title="Click to copy"]').parentElement`;
   const metricLayoutFailures = [];
   async function checkMetricLayout(page, width, fixture) {
@@ -930,23 +943,45 @@ try {
     })()`);
     console.log('METRIC_LAYOUT',page,width,fixture.name,JSON.stringify(layout));
     try {
-      assert.equal(layout.offer.text, `$${fixture.fields.max_safe_offer.toLocaleString('en-US')}`);
+      assert.equal(layout.offer.text, fixture.expected?.offer ?? money(fixture.fields.max_safe_offer));
       assert.equal(layout.offer.lines,1,'Main offer must stay on one line');
       assert.ok(layout.offer.scrollWidth <= layout.offer.clientWidth, `Main offer overflows at ${width}: ${JSON.stringify(layout.offer)}`);
       assert.ok(layout.offer.complete,'Main offer glyphs must remain inside their element');
       assert.ok(layout.pageWidth <= layout.viewport, `${page} page must not scroll sideways at ${width}`);
       assert.equal(layout.offerGrid.columns,width < 640 ? 1 : width < 768 ? 2 : 3);
       assert.equal(layout.supportGrid.columns,width < 640 ? 1 : width < 768 ? 2 : width < 1024 ? 3 : 4);
-      assert.equal(layout.offerGrid.values[2].text, `$${fixture.fields.total_project_cost.toLocaleString('en-US')}`,'Keep saved cost precision');
-      assert.equal(layout.supportGrid.values[0].text, `${fixture.fields.net_profit < 0 ? '-' : ''}$${Math.abs(fixture.fields.net_profit).toLocaleString('en-US')}`,'Keep saved profit precision/sign');
+      assert.equal(layout.offerGrid.values[2].text, fixture.expected?.cost ?? money(fixture.fields.total_project_cost),'Round displayed cost, not stored precision');
+      assert.equal(layout.supportGrid.values[0].text, fixture.expected?.profit ?? money(fixture.fields.net_profit),'Round displayed profit and retain its sign');
+      if (fixture.meta) {
+        assert.equal(layout.offerGrid.values[0].text,'$150,001');
+        assert.equal(layout.supportGrid.values[3].text,'$270,001');
+        assert.equal(await evaluate('Intl.NumberFormat().resolvedOptions().locale'),'de-DE','Prove the browser default is non-US');
+      }
       if (layout.shield) {
         assert.equal(layout.shield.columns,width < 640 ? 1 : width < 1024 ? 3 : 5);
-        assert.equal(layout.shield.values[0].text,money(fixture.fields.net_profit));
-        assert.equal(layout.shield.values[3].text,money(fixture.fields.max_safe_offer));
+        // ShieldHeader keeps its existing locale/negative-zero behavior for the separate component PR.
+        if (!fixture.expected) {
+          assert.equal(layout.shield.values[0].text,money(fixture.fields.net_profit));
+          assert.equal(layout.shield.values[3].text,money(fixture.fields.max_safe_offer));
+        }
       }
       for (const grid of [layout.offerGrid,layout.supportGrid,layout.shield].filter(Boolean)) {
         assert.ok(grid.noOverlap, `Metric text must not overlap at ${width}`);
         for (const value of grid.values) assert.ok(value.complete && value.scrollWidth <= value.clientWidth, `Clipped/overflowing metric on ${page} at ${width}: ${JSON.stringify(value)}`);
+      }
+      const ownedText = [layout.offer.text,...layout.offerGrid.values.map(v=>v.text),...layout.supportGrid.values.map(v=>v.text)].join(' ');
+      assert.ok(!ownedText.includes('-$0'),'No negative rounded zero in AnalysisResult metrics');
+      if (fixture.expected) {
+        const copyText = await evaluate(`(async()=>{let copied;Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{copied=text;}}});[...(${decisionSection}).querySelectorAll('button')].find(b=>b.textContent.trim()==='Copy Summary').click();await Promise.resolve();return copied;})()`);
+        assert.ok(copyText.includes('Offer ' + fixture.expected.offer),copyText);
+        if (fixture.fields.net_profit !== null) assert.ok(copyText.includes('Net ' + fixture.expected.profit),copyText);
+        assert.ok(!copyText.includes('-$0'),'No negative rounded zero in copied AnalysisResult summary');
+        if (fixture.expected.gap) {
+          assert.equal(layout.offerGrid.values[1].text,fixture.expected.gap);
+          assert.equal(await evaluate(`(${offerSection}).querySelector('p span.font-semibold').textContent`),fixture.expected.callout);
+          const negotiate = await evaluate(`[...(${decisionSection}).querySelectorAll('span')].find(e=>e.textContent.startsWith('NEGOTIATE FIRST'))?.textContent ?? null`);
+          assert.equal(negotiate,fixture.expected.negotiate,'Direction and decision threshold must follow the unrounded gap');
+        }
       }
     } catch (error) {
       if (!(error instanceof assert.AssertionError)) throw error;
@@ -965,6 +1000,9 @@ try {
   for (const width of [375,390,639,640,767,768,1023,1024,1440]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});
     for (const [index,fixture] of metricCases.entries()) {
+      // Keep all nine layout widths; targeted rounding edges additionally run on both pages at phone/desktop widths.
+      if (fixture.expected && ![375,1440].includes(width)) continue;
+      await cdp('Emulation.setLocaleOverride',{locale:fixture.locale ?? 'en-US'});
       const writesBeforeMetrics = browserApiWrites.length;
       await cdp('Page.navigate',{url:`http://127.0.0.1:5173/deal/${selected.id}?metricFixture=${index}`});
       await until(`Boolean(${byText('button','Lender Report')}) && (${scopeInput('Quote date 1')})?.value === '2026-09-12'`);
@@ -979,9 +1017,10 @@ try {
       assert.deepEqual(await api('/api/deals'),recordsBeforeList);
     }
   }
+  await cdp('Emulation.setLocaleOverride',{locale:''});
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:metricFixture});
   assert.deepEqual(metricLayoutFailures, [], 'Every metric layout must pass; collect all widths before failing');
-  checks.push('Detail/analyzer numbers fit without overlap at 375/390/639/640/767/768/1023/1024/1440 with both fonts loaded; million-dollar offer stays inside its box, decimals/signs survive, responsive grids fit, and only explicit analysis requests occur with saved records unchanged');
+  checks.push('Detail/analyzer whole-dollar numbers fit at all nine widths with both fonts loaded; half-dollar and tiny-negative rounding, missing values, unrounded gap direction, US format under de-DE and copied summaries pass; only explicit analysis requests occur and saved precision stays unchanged');
 
   // Test-only browser injection. Compress the two UI/network timers, and stall
   // reads before headers or during the body. No production auth or test hooks.
