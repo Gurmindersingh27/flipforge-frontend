@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import assert from "node:assert/strict";
 import { SAMPLE_SCENARIOS } from "../src/lib/sampleDeal.ts";
+import { restoreItemForm, buildSavedItemInputs } from "../src/lib/savedItems.ts";
+import { roundTripCases } from "./savedItems.test.ts";
 
 const root = process.cwd();
 const backend = resolve(process.env.BACKEND_DIR ?? "../flipforge-backend");
@@ -197,9 +199,9 @@ async function screenshot(name) {
 }
 
 try {
-  writeFileSync(join(temp, "fixture.py"), `import os\nos.environ['DATABASE_URL'] = ${JSON.stringify(`sqlite:///${temp}/fixture.db`)}\nos.environ['CLERK_JWKS_URL'] = ''\nfrom app.main import app\nfrom app.auth import get_current_user_id\napp.dependency_overrides[get_current_user_id] = lambda: 'browser-fixture'\n`);
+  writeFileSync(join(temp, "fixture.py"), `import os\nos.environ['DATABASE_URL'] = ${JSON.stringify(`sqlite:///${temp}/fixture.db`)}\nos.environ['CLERK_JWKS_URL'] = ''\nfrom app.main import app\nfrom app.auth import get_current_user_id\nfrom fastapi import Header\ndef fixture_owner(authorization: str = Header(default='Bearer browser-fixture')):\n    return authorization.removeprefix('Bearer ')\napp.dependency_overrides[get_current_user_id] = fixture_owner\n`);
   // Signed-out selection exists only in this temporary fixture, never in production.
-  writeFileSync(join(temp, "clerk.ts"), `const signedIn=!new URLSearchParams(location.search).has('fixtureSignedOut');const auth={getToken:async()=>{const fixture=window.authFixture;if(fixture){fixture.calls++;await new Promise(resolve=>setTimeout(resolve,fixture.delayMs));}return "browser-fixture";},isSignedIn:signedIn,isLoaded:true};export const useAuth=()=>auth;export const SignedIn=({children})=>signedIn?children:null;export const SignedOut=({children})=>signedIn?null:children;export const ClerkProvider=({children})=>children;export const UserButton=()=>null;export const SignInButton=({children})=>children;export const SignUpButton=({children})=>children;`);
+  writeFileSync(join(temp, "clerk.ts"), `import {useSyncExternalStore} from 'react';const signedIn=!new URLSearchParams(location.search).has('fixtureSignedOut');let state={isSignedIn:signedIn,isLoaded:true,userId:signedIn?'browser-fixture':null};const listeners=new Set();window.switchFixtureUser=userId=>{state={isSignedIn:Boolean(userId),isLoaded:true,userId};listeners.forEach(fn=>fn());};const subscribe=fn=>{listeners.add(fn);return()=>listeners.delete(fn);};const getToken=async()=>{const user=state.userId;const fixture=window.authFixture;if(fixture){fixture.calls++;await new Promise(resolve=>setTimeout(resolve,fixture.delayMs));}return user;};export const useAuth=()=>({...useSyncExternalStore(subscribe,()=>state),getToken});export const SignedIn=({children})=>useAuth().isSignedIn?children:null;export const SignedOut=({children})=>useAuth().isSignedIn?null:children;export const ClerkProvider=({children})=>children;export const UserButton=()=>null;export const SignInButton=({children})=>children;export const SignUpButton=({children})=>children;`);
   writeFileSync(join(temp, "vite.mjs"), `import base from ${JSON.stringify(join(root, "vite.config.ts"))};export default {...base,root:${JSON.stringify(root)},resolve:{alias:{'@clerk/clerk-react':${JSON.stringify(join(temp, "clerk.ts"))}}},server:{host:'127.0.0.1',port:5173,strictPort:true,fs:{allow:[${JSON.stringify(root)},${JSON.stringify(temp)}]}}};`);
   start(process.env.PYTHON ?? "python", ["-m", "uvicorn", "fixture:app", "--host", "127.0.0.1", "--port", "8000"], { PYTHONPATH: `${backend}:${temp}` });
   start(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "--config", join(temp, "vite.mjs"), "--configLoader", "native"], { VITE_API_BASE_URL: "http://127.0.0.1:8000" });
@@ -1453,6 +1455,179 @@ try {
   assert.ok(browserApiWrites.slice(itemWriteStart).every(r=>r.url.endsWith('/api/items/analyze')));
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:itemsFixture});
   checks.push("Items makes only explicit public stateless analysis POSTs, with no authorization headers or saved-record changes");
+  // Save/list/reopen additions. All preceding 43 checks retain their assertions.
+  async function itemApi(path, body, owner = 'browser-fixture', expected = 200) {
+    const res = await fetch(`http://127.0.0.1:8000${path}`, { headers: { 'Content-Type':'application/json', Authorization:`Bearer ${owner}` }, ...(body === undefined ? {} : { method:'POST', body:JSON.stringify(body) }) });
+    assert.equal(res.status, expected, await res.clone().text()); return res.json();
+  }
+  for (const original of roundTripCases()) {
+    const rebuilt = buildSavedItemInputs(restoreItemForm(original)); assert.ok(rebuilt.ok);
+    const [before, after] = await Promise.all([itemApi('/api/items/analyze', original), itemApi('/api/items/analyze', rebuilt.payload)]);
+    assert.deepEqual(after, before, `Real-engine round trip: ${JSON.stringify(original)}`);
+  }
+  checks.push('267 representative/generated restore-and-rebuild requests match the complete real backend analysis, including assumptions and sources');
+  const { identifier: savedItemsFixture } = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+    const nativeFetch=window.fetch.bind(window), nativeTimeout=window.setTimeout.bind(window);
+    window.setTimeout=(fn,ms,...args)=>nativeTimeout(fn,ms===120000?160:ms===8000?40:ms,...args);
+    window.savedItemRequests=[];window.savedItemMode='pass';
+    window.fetch=async(input,init={})=>{
+      const url=new URL(typeof input==='string'?input:input.url,location.href);
+      if(!url.pathname.startsWith('/api/items') || url.pathname==='/api/items/analyze')return nativeFetch(input,init);
+      const request={path:url.pathname,method:init.method??'GET',auth:new Headers(init.headers).get('Authorization'),body:init.body?JSON.parse(init.body):null};window.savedItemRequests.push(request);
+      const mode=window.savedItemMode;
+      if(mode==='headers')return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError'))));
+      if(mode==='body')return new Response(new ReadableStream({start(controller){init.signal.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')));}}),{status:200});
+      if(['403','404','422','500'].includes(mode))return Response.json({detail:mode==='422'?[{loc:['body','notes'],msg:'Invalid notes fixture'}]:'Rejected fixture'},{status:Number(mode)});
+      if(mode==='slow')await new Promise(resolve=>nativeTimeout(resolve,70));
+      const response=await nativeFetch(input,init);
+      if(mode==='lost' && init.method==='POST'){window.lastCommittedItem=await response.json();throw new TypeError('Confirmation lost');}
+      if(mode==='delayed-read' && request.method==='GET' && request.auth==='Bearer browser-fixture')await new Promise(resolve=>nativeTimeout(resolve,600));
+      if(mode==='hostile-link' && url.pathname==='/api/items'){const data=await response.json();data.items=data.items.map(item=>({...item,listing_url:'javascript:alert(1)',notes:'<img src=x onerror=alert(1)>'}));return Response.json(data);}
+      return response;
+    };
+  ` });
+  async function signedItems(values = {}) {
+    await cdp('Page.navigate', {url:'http://127.0.0.1:5173/items'});
+    await until(`Boolean(${itemInput('purchase_price')})`);
+    await evaluate(`document.querySelectorAll('form input[type="checkbox"]:checked').forEach(e=>e.click())`);
+    for (const [field,value] of Object.entries(values)) await fill(itemInput(field), value);
+  }
+  async function saveCurrent(label='Save item') {
+    await click('button',label); await until(hasStatus('Saved version #'));
+    return (await api('/api/items')).items[0];
+  }
+  const originalHouses = await api('/api/deals');
+  let sourceItem;
+  for (const width of [390,1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    await signedItems(fractional);
+    await fill(itemInput('item_name'),`Oak dresser ${width}`);
+    await fill(`document.getElementById('item-notes')`,'Small scratch; seller contact details excluded.');
+    await fill(`document.getElementById('item-listing-url')`,'https://example.com/dresser');
+    await fill(itemInput('fee_pct'),'14.3');
+    await calculateItems('skip');
+    const screen = await evaluate(`document.querySelector('[data-item-status]').getAttribute('data-item-status')`);
+    const saved = await saveCurrent(); sourceItem=saved;
+    assert.equal(saved.analysis_result.status,screen); assert.equal(saved.inputs.fee_pct,0.143);
+    assert.equal(await evaluate('window.savedItemRequests.filter(r=>r.method==="POST").length'),1);
+    assert.ok(await evaluate('window.savedItemRequests.every(r=>r.auth==="Bearer browser-fixture")'));
+    await screenshot(`items-saved-${width}.png`);
+    await click('a','My Flips'); await until(`Boolean(document.querySelector('[data-saved-item="${saved.id}"]'))`);
+    assert.equal(await evaluate(`document.querySelector('[data-saved-item="${saved.id}"] a[target="_blank"]').rel`),'noopener noreferrer');
+    await screenshot(`items-my-flips-${width}.png`);
+    await evaluate(`document.querySelector('[aria-label="Reopen saved item ${saved.id}"]').click()`);
+    await until(`Boolean(document.getElementById('item-notes'))`);
+    assert.equal(await evaluate(`(${itemInput('fee_pct')}).value`),'14.3');
+    assert.equal(await evaluate(`document.getElementById('item-notes').value`),saved.notes);
+    await fill(`document.getElementById('item-notes')`,'Notes-only new version.');
+    const child = await saveCurrent('Save new version');
+    assert.equal(child.parent_item_id,saved.id); assert.equal(child.root_item_id,saved.id);
+    assert.deepEqual(child.analysis_result,saved.analysis_result);
+    assert.deepEqual(await api(`/api/items/${saved.id}`),saved);
+    await screenshot(`items-reopened-${width}.png`);
+    await signedItems({...dresser,purchase_price:''});
+    const offerOnly=await saveCurrent(); assert.equal(offerOnly.analysis_result.status,'offer_only');
+    await signedItems();
+    const incomplete=await saveCurrent(); assert.equal(incomplete.analysis_result.status,'needs_info');
+  }
+  checks.push('390/1440 real UI saves current inputs, lists and reopens versions, preserves notes-only results and root links, and saves offer-only/incomplete finds without changing originals');
+
+  await signedItems(dresser);
+  await fill(itemInput('repairs'),'12abc');
+  await click('button','Save item'); await until(hasAlert('Check the highlighted inputs'));
+  assert.equal(await evaluate('window.savedItemRequests.length'),0);
+  await fill(itemInput('repairs'),'0'); await fill(itemInput('item_name'),'NUL\0name');
+  await click('button','Save item'); await until(`document.body.textContent.includes('NUL')`);
+  assert.equal(await evaluate('window.savedItemRequests.length'),0);
+  await fill(itemInput('item_name'),'Valid');
+  await evaluate('window.authFixture={calls:0,delayMs:250}');
+  await evaluate(`(()=>{const b=${byText('button','Save item')};b.click();b.click();})()`);
+  await until(hasStatus('Saved version #'));
+  assert.equal(await evaluate('window.authFixture.calls'),1);
+  assert.equal(await evaluate('window.savedItemRequests.filter(r=>r.method==="POST").length'),1);
+  checks.push('Save blocks invalid screen values and NUL before requests, locks before token retrieval, and sends one write on duplicate clicks');
+
+  for (const mode of ['headers','body','403','422','500','lost']) {
+    await signedItems(dresser); await evaluate(`window.savedItemMode=${JSON.stringify(mode)}`);
+    const before=(await api('/api/items')).items.map(i=>i.id);
+    await click('button','Save item');
+    await until(hasAlert(mode==='403'?'session':mode==='422'?'Invalid notes':'may already be saved'));
+    assert.equal(await evaluate('window.savedItemRequests.length'),1);
+    assert.equal(await evaluate(`(${itemInput('purchase_price')}).value`),'0');
+    if (!['403','422'].includes(mode)) assert.ok(await evaluate(`(${byText('button','Save item')}).disabled`));
+    else { await evaluate('window.savedItemMode="pass"'); await saveCurrent(); }
+    if(mode==='lost') {
+      const committed=await evaluate('window.lastCommittedItem'); assert.ok(!before.includes(committed.id));
+      await evaluate('window.savedItemMode="pass"'); await click('a','My Flips');
+      await until(`Boolean(document.querySelector('[data-saved-item="${committed.id}"]'))`);
+    }
+  }
+  checks.push('Save header/body timeouts, server errors and lost confirmations never retry; definite 403/422 rejections allow correction, and committed lost saves are discoverable in My Flips');
+
+  // Signed-out direct reopen and list make no authenticated read.
+  for(const path of [`/items?saved=${sourceItem.id}&fixtureSignedOut=1`,'/my-flips?fixtureSignedOut=1']) {
+    await cdp('Page.navigate',{url:`http://127.0.0.1:5173${path}`});
+    await until(`document.body.textContent.includes('Sign in to')`);
+    assert.equal(await evaluate('window.savedItemRequests.length'),0);
+  }
+  await signedItems();
+  await evaluate(`window.switchFixtureUser('other-user')`);
+  await click('a','My Flips'); await until(`document.body.textContent.includes('No saved items yet')`);
+  await cdp('Page.navigate',{url:`http://127.0.0.1:5173/items?saved=9999999`});
+  await until(hasAlert('Item not found.'));
+  const missingText=await evaluate(`document.querySelector('[role="alert"] p').textContent`);
+  await cdp('Page.navigate',{url:`http://127.0.0.1:5173/items?saved=${sourceItem.id}`});
+  await until(`Boolean(document.getElementById('item-notes'))`);
+  await evaluate(`window.switchFixtureUser('other-user')`);
+  await until(hasAlert('Item not found.'));
+  assert.equal(await evaluate(`document.querySelector('[role="alert"] p').textContent`),missingText);
+  assert.equal(await evaluate(`document.body.textContent.includes('Saved result for')`),false);
+  assert.equal(await evaluate(`Boolean(document.getElementById('item-notes'))`),false);
+  checks.push('Signed-out reopen/list issue no requests, owner changes clear restored data, and foreign/missing IDs show identical not-found messages');
+
+  await signedItems(dresser); await fill(`document.getElementById('item-notes')`,'private note');
+  await calculateItems('stretch');
+  await evaluate(`window.switchFixtureUser('other-user')`);
+  await until(`document.getElementById('item-notes')?.value === ''`);
+  assert.equal(await evaluate(`(${itemInput('purchase_price')}).value`),'');
+  assert.equal(await evaluate(`Boolean(document.querySelector('[data-item-status]'))`),false);
+  await evaluate(`window.switchFixtureUser(null)`);
+  await until(`document.body.textContent.includes('Sign in to save item')`);
+  await signedItems(dresser); await evaluate(`window.authFixture={calls:0,delayMs:350}`);
+  await click('button','Save item'); await evaluate(`window.switchFixtureUser('other-user')`); await pause(450);
+  assert.equal(await evaluate('window.savedItemRequests.filter(r=>r.method==="POST").length'),0);
+  // A read already on the wire may finish after the new account's 404.
+  await signedItems(); await evaluate(`window.savedItemMode='delayed-read'`);
+  await click('a','My Flips'); await until(`window.savedItemRequests.length>0`);
+  await evaluate(`window.switchFixtureUser('other-user')`); await pause(750);
+  assert.ok(await evaluate(`document.body.textContent.includes('No saved items yet')`));
+  assert.equal(await evaluate(`document.querySelectorAll('[data-saved-item]').length`),0);
+  checks.push('Account switches clear unsaved/restored forms, notes, results and lists, cancel pre-token saves and suppress stale owner responses');
+
+  for(let i=0;i<22;i++) await itemApi('/api/items/save',{inputs:{item_name:`Paging ${i}`}},'browser-fixture',201);
+  await cdp('Page.navigate',{url:'http://127.0.0.1:5173/my-flips'});
+  await until(`document.querySelectorAll('[data-saved-item]').length===20`);
+  const firstPage=await evaluate(`[...document.querySelectorAll('[data-saved-item]')].map(e=>Number(e.dataset.savedItem))`);
+  await click('button','Load more'); await until(`document.querySelectorAll('[data-saved-item]').length>20`);
+  const allPage=await evaluate(`[...document.querySelectorAll('[data-saved-item]')].map(e=>Number(e.dataset.savedItem))`);
+  assert.deepEqual(allPage.slice(0,20),firstPage); assert.equal(new Set(allPage).size,allPage.length);
+  assert.deepEqual(allPage,[...allPage].sort((a,b)=>b-a));
+  await signedItems(); await evaluate(`window.savedItemMode='hostile-link'`); await click('a','My Flips');
+  await until(`document.querySelectorAll('[data-saved-item]').length===20`);
+  assert.equal(await evaluate(`document.querySelectorAll('[data-saved-item] a[target="_blank"]').length`),0);
+  assert.equal(await evaluate(`document.querySelectorAll('[data-saved-item] img').length`),0);
+  checks.push('My Flips paginates newest-first without fake grouping or duplicate cards and rejects hostile stored links while rendering notes as text');
+
+  for(const mode of ['headers','body','403']) {
+    await signedItems(); await evaluate(`window.savedItemMode=${JSON.stringify(mode)}`); await click('a','My Flips');
+    await until(hasAlert(mode==='403'?'session':'took too long'));
+    assert.equal(await evaluate('window.savedItemRequests.length'),1);
+    await evaluate(`window.savedItemMode='pass'`); await click('button','Try loading again');
+    await until(`document.querySelectorAll('[data-saved-item]').length>0`);
+  }
+  assert.deepEqual(await api('/api/deals'),originalHouses);
+  checks.push('Saved list read deadlines and auth errors recover only on user retry; existing house records remain unchanged');
+  await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:savedItemsFixture});
   assert.deepEqual(errors, []);
   checks.push("No browser runtime exceptions");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));

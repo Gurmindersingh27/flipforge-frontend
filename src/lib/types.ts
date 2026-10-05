@@ -39,6 +39,29 @@ export interface ItemAnalyzeResponse {
   low: ItemScenario | null;
   high: ItemScenario | null;
 }
+export interface SaveItemRequest {
+  inputs: ItemAnalyzeRequest;
+  listing_url?: string | null;
+  notes?: string | null;
+  parent_item_id?: number | null;
+}
+export interface SavedItem {
+  id: number;
+  schema_version: 1;
+  created_at: string;
+  parent_item_id: number | null;
+  root_item_id: number;
+  inputs: ItemAnalyzeRequest;
+  analysis_result: ItemAnalyzeResponse;
+  listing_url: string | null;
+  notes: string | null;
+}
+export interface SavedItemList {
+  items: SavedItem[];
+  limit: number;
+  offset: number;
+  next_offset: number | null;
+}
 export type Verdict = "BUY" | "CONDITIONAL" | "PASS";
 export type Strategy = "flip" | "brrrr" | "wholesale";
 

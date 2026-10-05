@@ -46,7 +46,7 @@ try {
   assert.ok(paths.some(p => p.endsWith('.js')) && paths.some(p => p.endsWith('.css')), 'Expected Vite JS/CSS assets');
   // Direct requests exercise hosting rewrites, not Vite's local SPA fallback.
   // These load only the public shell, never a signed-in saved-deal record.
-  for (const route of ['/deals', '/deal/1', '/items']) {
+  for (const route of ['/deals', '/deal/1', '/items', '/my-flips', '/items?saved=1']) {
     const response = await request(`${frontend}${route}`);
     assert.ok(response.headers.get('content-type')?.includes('text/html'), `${route}: expected HTML`);
     const routeHtml = await response.text();
@@ -54,6 +54,9 @@ try {
     assert.deepEqual(assets(routeHtml), paths, `${route}: different app assets`);
     check('Direct application route serves the app shell', { route });
   }
+  const privateItems = await request(`${backend}/api/items`, {}, 403);
+  assert.equal((await privateItems.json()).detail, 'Not authenticated');
+  check('Saved Items requires authentication without accessing or writing records');
   const deployed = new Map(await Promise.all(paths.map(async path => [path, Buffer.from(await (await request(frontend + path)).arrayBuffer())])));
   const javascript = [...deployed].filter(([p]) => p.endsWith('.js')).map(([, bytes]) => bytes.toString()).join('\n');
   assert.ok(javascript.includes(backend), 'Production bundle must target the expected API');

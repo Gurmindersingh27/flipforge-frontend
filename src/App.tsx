@@ -4,6 +4,7 @@ import { useAuth, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } 
 import AnalysisResult from "./AnalysisResult";
 import DealsPage from "./components/DealsPage";
 import ItemsPage from "./components/ItemsPage";
+import MyFlipsPage from "./components/MyFlipsPage";
 import DealPage from "./components/DealPage";
 import RehabScopeEditor from "./components/RehabScopeEditor";
 import RevisionComparison from "./components/RevisionComparison";
@@ -1582,6 +1583,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<AnalyzerPage />} />
       <Route path="/items" element={<ItemsPage />} />
+      <Route path="/my-flips" element={<MyFlipsPage />} />
       <Route path="/deals" element={<DealsPage />} />
       <Route path="/deal/:id" element={<DealPage />} />
     </Routes>
