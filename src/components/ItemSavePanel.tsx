@@ -39,7 +39,7 @@ export default function ItemSavePanel({ form, initial, parentId, editVersion, on
     setErrors(built.ok ? {} : built.errors); onErrors(built.ok ? {} : built.errors);
     if (!built.ok) return;
     locked.current = true; const current = ++sequence.current;
-    setBusy(true); onBusy(true); setMessage("");
+    setBusy(true); onBusy(true); setMessage(""); setSavedVersion(null);
     try {
       const token = await getToken();
       if (current !== sequence.current) return;
@@ -62,18 +62,18 @@ export default function ItemSavePanel({ form, initial, parentId, editVersion, on
     <fieldset disabled={busy} className="min-w-0 space-y-4">
       <div><label htmlFor="item-listing-url">Listing link (optional)</label>
         <input id="item-listing-url" type="url" value={link} maxLength={2048} className={inputClass} aria-invalid={Boolean(errors.listing_url)}
-          onChange={event => { setLink(event.target.value); setSavedVersion(null); setErrors({}); }} />
+          onChange={event => { setLink(event.target.value); setSavedVersion(null); setErrors({}); if (!uncertain) setMessage(""); }} />
         {errors.listing_url && <p role="alert" className="text-sm text-red-300">{errors.listing_url}</p>}</div>
       <div><label htmlFor="item-notes">Item notes (optional)</label>
         <textarea id="item-notes" value={notes} maxLength={5000} rows={3} className={inputClass} aria-invalid={Boolean(errors.notes)}
-          onChange={event => { setNotes(event.target.value); setSavedVersion(null); setErrors({}); }} />
+          onChange={event => { setNotes(event.target.value); setSavedVersion(null); setErrors({}); if (!uncertain) setMessage(""); }} />
         {errors.notes && <p role="alert" className="text-sm text-red-300">{errors.notes}</p>}</div>
     </fieldset>
     {isLoaded && (isSignedIn ? <button type="button" disabled={busy || uncertain || savedVersion === editVersion}
       onClick={save} className="min-h-11 rounded-xl bg-amber-300 px-5 py-3 font-semibold text-slate-950 disabled:opacity-60">
       {busy ? "Saving…" : savedVersion === editVersion ? "Saved" : parentId ? "Save new version" : "Save item"}
     </button> : <SignInButton mode="modal"><button type="button" className="min-h-11 rounded-lg border border-white/30 px-4 py-2">Sign in to save item</button></SignInButton>)}
-    {message && <p role={uncertain || (!busy && savedVersion === null) ? "alert" : "status"} className="whitespace-pre-line text-sm">{message}</p>}
+    {message && (savedVersion === null || savedVersion === editVersion) && <p role={uncertain || (!busy && savedVersion === null) ? "alert" : "status"} className="whitespace-pre-line text-sm">{message}</p>}
     {uncertain && <p className="text-sm">Open My Flips and reopen the saved version if it appears. This page will not repeat an unconfirmed save.</p>}
     <Link to="/my-flips" className="inline-block min-h-11 py-2 text-amber-200 underline">My Flips</Link>
   </section>;

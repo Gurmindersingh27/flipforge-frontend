@@ -6,7 +6,7 @@ import type { ItemAnalyzeRequest } from '../src/lib/types.ts';
 
 // Exported cases are also checked through the real engine by browserFlow.mjs.
 export function roundTripCases(): ItemAnalyzeRequest[] {
-  const cases: ItemAnalyzeRequest[] = [{}, { item_name: '', category: '  oak  ' }, { personal_defaults: null }];
+  const cases: ItemAnalyzeRequest[] = [{}, { item_name: '', category: '  oak\nwood\r\n  ' }, { personal_defaults: null }];
   const base = { purchase_price: 40, resale_low: 300, resale_high: 450, repairs: 60, pickup: 40, delivery: 0, storage: 0, fee_fixed: 0, hours: 5, fee_pct: 0, target_profit: 150 };
   for (const field of ITEM_PREFERENCES) {
     for (const personal of [undefined, null, 0, field.endsWith('_pct') ? 0.143 : 20]) {

@@ -1501,7 +1501,7 @@ try {
   for (const width of [390,1440]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
     await signedItems(fractional);
-    await fill(itemInput('item_name'),`Oak dresser ${width}`);
+    await fill(itemInput('item_name'),`Oak dresser ${width}\nSolid wood`);
     await fill(`document.getElementById('item-notes')`,'Small scratch; seller contact details excluded.');
     await fill(`document.getElementById('item-listing-url')`,'https://example.com/dresser');
     await fill(itemInput('fee_pct'),'14.3');
@@ -1509,6 +1509,7 @@ try {
     const screen = await evaluate(`document.querySelector('[data-item-status]').getAttribute('data-item-status')`);
     const saved = await saveCurrent(); sourceItem=saved;
     assert.equal(saved.analysis_result.status,screen); assert.equal(saved.inputs.fee_pct,0.143);
+    assert.equal(saved.inputs.item_name,`Oak dresser ${width}\nSolid wood`);
     assert.equal(await evaluate('window.savedItemRequests.filter(r=>r.method==="POST").length'),1);
     assert.ok(await evaluate('window.savedItemRequests.every(r=>r.auth==="Bearer browser-fixture")'));
     await screenshot(`items-saved-${width}.png`);

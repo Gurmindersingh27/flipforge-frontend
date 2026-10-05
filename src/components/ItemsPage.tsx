@@ -183,7 +183,7 @@ function ItemsEditor({ savedId }: { savedId: string | null }) {
           <div className="mt-4 grid min-w-0 gap-4 sm:grid-cols-2">
             {(["item_name", "category"] as const).map(field => <div key={field} className="min-w-0">
               <label htmlFor={`item-${field}`} className="mb-2 block text-sm">{field === "item_name" ? "Item name (optional)" : "Category (optional)"}</label>
-              <input id={`item-${field}`} type="text" value={form[field]} maxLength={field === "item_name" ? 200 : 100}
+              <textarea id={`item-${field}`} rows={2} value={form[field]} maxLength={field === "item_name" ? 200 : 100}
                 onChange={event => edit(previous => ({ ...previous, [field]: event.target.value, literalEmptyText: { ...previous.literalEmptyText, [field]: false } }))} className={inputClass} />
               {errors[field] && <p className="mt-1 text-sm text-red-300">{errors[field]}</p>}
             </div>)}
