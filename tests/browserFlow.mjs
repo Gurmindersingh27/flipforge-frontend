@@ -1487,9 +1487,11 @@ try {
     };
   ` });
   async function signedItems(values = {}) {
+    await evaluate('window.beforeSavedItemsNavigation = true');
     await cdp('Page.navigate', {url:'http://127.0.0.1:5173/items'});
-    await until(`Boolean(${itemInput('purchase_price')})`);
+    await until(`!window.beforeSavedItemsNavigation && Boolean(${itemInput('purchase_price')})`);
     await evaluate(`document.querySelectorAll('form input[type="checkbox"]:checked').forEach(e=>e.click())`);
+    await until(`!(${itemInput('hourly_value')}).disabled && !(${itemInput('contingency_pct')}).disabled`);
     for (const [field,value] of Object.entries(values)) await fill(itemInput(field), value);
   }
   async function saveCurrent(label='Save item') {
@@ -1515,6 +1517,7 @@ try {
     await screenshot(`items-saved-${width}.png`);
     await click('a','My Flips'); await until(`Boolean(document.querySelector('[data-saved-item="${saved.id}"]'))`);
     assert.equal(await evaluate(`document.querySelector('[data-saved-item="${saved.id}"] a[target="_blank"]').rel`),'noopener noreferrer');
+    assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'));
     await screenshot(`items-my-flips-${width}.png`);
     await evaluate(`document.querySelector('[aria-label="Reopen saved item ${saved.id}"]').click()`);
     await until(`Boolean(document.getElementById('item-notes'))`);
@@ -1525,6 +1528,7 @@ try {
     assert.equal(child.parent_item_id,saved.id); assert.equal(child.root_item_id,saved.id);
     assert.deepEqual(child.analysis_result,saved.analysis_result);
     assert.deepEqual(await api(`/api/items/${saved.id}`),saved);
+    assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'));
     await screenshot(`items-reopened-${width}.png`);
     await signedItems({...dresser,purchase_price:''});
     const offerOnly=await saveCurrent(); assert.equal(offerOnly.analysis_result.status,'offer_only');
@@ -1636,6 +1640,7 @@ try {
 } catch (error) {
   console.error(error);
   if (socket && sessionId) {
+    try { console.error('FAILURE_UI', await evaluate(`JSON.stringify({path:location.pathname+location.search,text:document.body.innerText.slice(-7000),requests:window.savedItemRequests})`)); } catch {}
     try { writeFileSync(join(artifacts, "failure.html"), await evaluate("document.documentElement.outerHTML")); await screenshot("failure.png"); } catch {}
   }
   process.exitCode = 1;
