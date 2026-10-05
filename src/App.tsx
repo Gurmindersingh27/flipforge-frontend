@@ -3,6 +3,7 @@ import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { useAuth, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import AnalysisResult from "./AnalysisResult";
 import DealsPage from "./components/DealsPage";
+import ItemsPage from "./components/ItemsPage";
 import DealPage from "./components/DealPage";
 import RehabScopeEditor from "./components/RehabScopeEditor";
 import RevisionComparison from "./components/RevisionComparison";
@@ -702,10 +703,11 @@ function AnalyzerPage() {
     <div className="min-h-screen bg-[#0f1115] text-slate-100">
       {/* Nav bar */}
       <div className="border-b border-white/10 bg-black/40 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-5">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <span className="text-sm font-bold tracking-wide text-white">
             Flip<span className="text-amber-400">Forge</span>
           </span>
+          <Link to="/items" className="text-xs font-semibold text-white/70 hover:text-amber-300 transition-colors">Items</Link>
           <SignedIn>
             <Link
               to="/"
@@ -1579,6 +1581,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<AnalyzerPage />} />
+      <Route path="/items" element={<ItemsPage />} />
       <Route path="/deals" element={<DealsPage />} />
       <Route path="/deal/:id" element={<DealPage />} />
     </Routes>

@@ -1291,6 +1291,166 @@ try {
   assert.deepEqual(await api("/api/deals"), beforeAbandonedSave);
   checks.push("Starting a new analysis during token retrieval cancels the obsolete save before any write");
   await cdp("Page.removeScriptToEvaluateOnNewDocument", { identifier: analyzerFixture });
+
+  // Items additions run after all prior house scenarios; the 36 existing checks
+  // above/below remain intact. Backend CI is pinned to released Items #26.
+  for (const width of [390, 1440]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    await cdp("Page.navigate", { url: "http://127.0.0.1:5173/" });
+    await until(`Boolean(document.querySelector('a[href="/items"]'))`);
+    await requireFonts();
+    const bodyMetrics = () => measure(`(()=>{const nav=document.querySelector('a[href="/items"]').parentElement.parentElement;const top=nav.getBoundingClientRect().bottom;return [...nav.parentElement.children].filter(e=>e!==nav).map(e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y-top,width:r.width,height:r.height,text:e.textContent};});})()`);
+    const after = await bodyMetrics();
+    assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth'), "House nav must not add overflow");
+    await screenshot(`items-house-nav-${width}-after.png`);
+    // Reproduce exactly the previous nav without changing house content or data.
+    await evaluate(`(()=>{const a=document.querySelector('a[href="/items"]');a.style.display='none';a.parentElement.dataset.currentClass=a.parentElement.className;a.parentElement.className='flex items-center gap-5';})()`);
+    const before = await bodyMetrics();
+    assert.deepEqual(after, before, "House content outside nav must retain layout and text");
+    await screenshot(`items-house-nav-${width}-before.png`);
+    await evaluate(`(()=>{const a=document.querySelector('a[href="/items"]');a.style.display='';a.parentElement.className=a.parentElement.dataset.currentClass;})()`);
+  }
+  checks.push("House screens at 390/1440 retain content and layout outside the additive Items navigation; no overflow; before/after renders captured");
+
+  const { identifier: itemsFixture } = await cdp("Page.addScriptToEvaluateOnNewDocument", { source: `
+    if (location.pathname === '/items') {
+      const nativeFetch=window.fetch.bind(window), nativeTimeout=window.setTimeout.bind(window);
+      window.itemRequests=[]; window.itemMode='pass'; window.itemRelease=null; window.itemHeld=false;
+      window.setTimeout=(callback,ms,...args)=>nativeTimeout(callback,ms===8000?50:ms===120000?1400:ms,...args);
+      window.fetch=async(input,init={})=>{
+        const url=new URL(input,location.href);
+        if(url.pathname!=='/api/items/analyze') return nativeFetch(input,init);
+        window.itemRequests.push({body:JSON.parse(init.body),wire:init.body,auth:new Headers(init.headers).get('Authorization')});
+        const mode=window.itemMode;
+        if(mode==='headers') return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(init.signal.reason),{once:true}));
+        if(mode==='body') return new Response(new ReadableStream({start(controller){init.signal.addEventListener('abort',()=>controller.error(init.signal.reason),{once:true});}}),{headers:{'Content-Type':'application/json'}});
+        if(mode==='422') return Response.json({detail:[{loc:['body','fee_pct'],msg:'Value error, must have at most 6 decimal places'}]},{status:422});
+        const response=await nativeFetch(input,init);
+        if(mode==='hold') { const body=await response.text(); window.itemHeld=true; await new Promise(resolve=>window.itemRelease=resolve); return new Response(body,{status:response.status,headers:{'Content-Type':'application/json'}}); }
+        return response;
+      };
+    }
+  ` });
+  const itemInput = field => `document.getElementById(${JSON.stringify(`item-${field}`)})`;
+  const dresser = { purchase_price: '0', resale_low: '300', resale_high: '450', repairs: '60', pickup: '40', delivery: '0', storage: '0', fee_fixed: '0', hours: '5', hourly_value: '20', target_profit: '150', contingency_pct: '0', fee_pct: '0' };
+  const fractional = { ...dresser, purchase_price: '77', resale_high: '300', repairs: '40', pickup: '15', fee_fixed: '1.10', hours: '2', target_profit: '100', contingency_pct: '10', fee_pct: '7.5' };
+  const itemStatus = status => `document.querySelector('[data-item-status]')?.getAttribute('data-item-status') === ${JSON.stringify(status)}`;
+  async function openItems(values) {
+    await cdp("Page.navigate", { url: "http://127.0.0.1:5173/items?fixtureSignedOut=1" });
+    await until(`Boolean(${itemInput('purchase_price')})`);
+    assert.ok(await evaluate(`!document.body.textContent.includes('Sign In')`), "Items must work signed out");
+    await evaluate(`document.querySelectorAll('form input[type="checkbox"]:checked').forEach(e=>e.click())`);
+    for (const [field, value] of Object.entries(values)) await fill(itemInput(field), value);
+  }
+  async function calculateItems(status) {
+    await click("button", "Calculate my flip");
+    await until(itemStatus(status));
+  }
+  const lowItem = selector => `document.querySelector('section[aria-label="Low resale results"] ${selector}')?.textContent`;
+  const itemsSavedBefore = await api('/api/deals');
+  const itemWriteStart = browserApiWrites.length;
+  for (const width of [390, 1440]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    await openItems(dresser);
+    for (const [price,status,cash,profit,shortfall] of [['0','stretch','$200.00','$100.00','$50.00'],['40','stretch','$160.00','$60.00','$90.00'],['100','stretch','$100.00','$0.00','$150.00'],['100.01','skip','$99.99','-$0.01','$150.01']]) {
+      await fill(itemInput('purchase_price'), price); await calculateItems(status);
+      assert.equal(await evaluate(lowItem('[data-item-offer]')), '-$50');
+      assert.equal(await evaluate(lowItem('[data-item-cash]')), cash);
+      assert.equal(await evaluate(lowItem('[data-item-profit]')), profit);
+      assert.equal(await evaluate(lowItem('[data-item-shortfall]')), shortfall);
+    }
+    await screenshot(`items-dresser-${width}.png`);
+    await fill(itemInput('purchase_price'), ''); await calculateItems('offer_only');
+    assert.equal(await evaluate(`document.querySelectorAll('[data-item-cash],[data-item-profit],[data-item-shortfall]').length`), 0);
+    assert.equal(await evaluate(lowItem('[data-item-offer]')), '-$50');
+    await screenshot(`items-offer-only-${width}.png`);
+    await fill(itemInput('repairs'), ''); await calculateItems('needs_info');
+    assert.equal(await evaluate(`document.querySelectorAll('[data-item-offer]').length`), 0);
+    assert.ok(await evaluate(`document.querySelector('[data-item-status]').textContent.includes('Repairs and hired repair labor')`));
+    await screenshot(`items-needs-info-${width}.png`);
+    await openItems(fractional);
+    for (const [price,status,profit] of [['77','within_budget','$100.40'],['77.40','within_budget','$100.00'],['77.41','skip','$99.99']]) {
+      await fill(itemInput('purchase_price'), price); await calculateItems(status);
+      assert.equal(await evaluate(lowItem('[data-item-offer]')), '$77');
+      assert.equal(await evaluate(lowItem('[data-item-profit]')), profit);
+    }
+    await screenshot(`items-fractional-${width}.png`);
+    for (const [percent,wire] of [['14.3','0.143'],['2.9','0.029'],['7.5','0.075']]) {
+      await fill(itemInput('fee_pct'), percent); await calculateItems(percent === '2.9' ? 'within_budget' : 'skip');
+      assert.ok((await evaluate('window.itemRequests.at(-1).wire')).includes(`"fee_pct":${wire}`));
+    }
+    assert.ok(await measure(`document.documentElement.scrollWidth <= innerWidth`));
+    assert.ok(await evaluate(`Array.from(document.querySelectorAll('input')).every(e=>e.labels.length>0 || e.getAttribute('aria-label'))`));
+    assert.ok(await evaluate(`window.itemRequests.every(r=>r.auth===null)`));
+    await screenshot(`items-percent-${width}.png`);
+  }
+  checks.push("Signed-out Items at 390/1440 passes all dresser and fractional-price rows, missing/offer-only states, exact percentage wire text, labels and overflow checks through the real backend");
+
+  await openItems(fractional);
+  await fill(itemInput('fee_pct'), '12abc');
+  const invalidCalls = await evaluate('window.itemRequests.length');
+  await click('button','Calculate my flip'); await until(`Boolean(document.querySelector('[role="alert"]'))`);
+  assert.equal(await evaluate('window.itemRequests.length'),invalidCalls);
+  await fill(itemInput('fee_pct'),'7.5');
+  await evaluate(`Array.from(document.querySelectorAll('summary')).find(e=>e.textContent==='Personal defaults for this page').click()`);
+  assert.equal(await evaluate(`Boolean(${inputByAria('Use my personal default for Selling fee (%)')})`),false);
+  await fill(`document.getElementById('personal-fee_pct')`,'14.3');
+  await toggle('Use my personal default for Selling fee (%)');
+  await calculateItems('skip');
+  const inheritedItem = await evaluate('window.itemRequests.at(-1).body');
+  assert.equal(Object.hasOwn(inheritedItem,'fee_pct'),false);
+  assert.equal(inheritedItem.personal_defaults.fee_pct,0.143);
+  await toggle('Use my personal default for Selling fee (%)');
+  await fill(itemInput('fee_pct'),''); await calculateItems('needs_info');
+  assert.equal(await evaluate('window.itemRequests.at(-1).body.fee_pct'),null);
+  assert.ok(await evaluate(`document.querySelector('[data-item-status]').textContent.includes('default is off and no value was entered')`));
+  await fill(`document.getElementById('personal-fee_pct')`,'');
+  assert.equal(await evaluate(`Boolean(${inputByAria('Use my personal default for Selling fee (%)')})`),false);
+  await cdp('Page.reload'); await until(`Boolean(${itemInput('purchase_price')})`);
+  assert.equal(await evaluate(`document.getElementById('personal-fee_pct').value`),'');
+  assert.equal(await evaluate(`(${itemInput('hourly_value')}).disabled`),true);
+  assert.equal(await evaluate(`(${itemInput('contingency_pct')}).disabled`),true);
+  await calculateItems('needs_info');
+  const initialItem = await evaluate('window.itemRequests.at(-1).body');
+  assert.equal(Object.hasOwn(initialItem,'hourly_value'),false);
+  assert.equal(Object.hasOwn(initialItem,'contingency_pct'),false);
+  checks.push("Items rejects invalid text without a request, preserves default/null/zero semantics, exposes personal fee defaults only when supplied, and forgets page defaults on reload");
+
+  await openItems({ ...dresser, purchase_price:'1', resale_low:'1',resale_high:'1',repairs:'0',pickup:'0',hours:'0',target_profit:'0',fee_pct:'0.01' });
+  await calculateItems('skip');
+  assert.equal(await evaluate(lowItem('[data-item-offer]')),'$0');
+  assert.equal(await evaluate(lowItem('[data-item-profit]')),'$0.00');
+  assert.ok(await evaluate(`document.querySelector('[data-item-status]').textContent.includes('does not necessarily mean a cash loss')`));
+  checks.push("Items renders server skip at a sub-cent boundary without recomputing status from displayed zero profit or cent-rounded ceilings");
+
+  await openItems(dresser);
+  await evaluate(`window.itemMode='hold'; document.querySelector('form').requestSubmit(); document.querySelector('form').requestSubmit()`);
+  await until('window.itemHeld');
+  assert.equal(await evaluate('window.itemRequests.length'),1);
+  await fill(itemInput('purchase_price'),'100.01');
+  await evaluate(`window.itemMode='pass'`); await calculateItems('skip');
+  await evaluate('window.itemRelease()'); await pause(150);
+  assert.ok(await evaluate(itemStatus('skip')));
+  assert.equal(await evaluate(lowItem('[data-item-profit]')),'-$0.01');
+  await fill(itemInput('purchase_price'),'0');
+  assert.equal(await evaluate(`Boolean(document.querySelector('[data-item-status]'))`),false);
+  checks.push("Items locks duplicate submissions, clears edited results and ignores old responses after edit/resubmit");
+
+  for (const mode of ['headers','body','422']) {
+    await openItems(fractional); await evaluate(`window.itemMode=${JSON.stringify(mode)}`);
+    await click('button','Calculate my flip');
+    if(mode!=='422') await until(hasStatus('taking longer than usual'));
+    await until(hasAlert(mode==='422'?'Selling fee (%)':'took too long'));
+    assert.equal(await evaluate('window.itemRequests.length'),1);
+    assert.equal(await evaluate(`(${itemInput('purchase_price')}).value`),'77');
+    await evaluate(`window.itemMode='pass'`); await calculateItems('within_budget');
+    assert.equal(await evaluate('window.itemRequests.length'),2);
+  }
+  checks.push("Items 120-second header/body deadlines and readable 422 errors preserve inputs, explain cold starts and retry only on user action");
+  assert.deepEqual(await api('/api/deals'),itemsSavedBefore);
+  assert.ok(browserApiWrites.slice(itemWriteStart).every(r=>r.url.endsWith('/api/items/analyze')));
+  await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:itemsFixture});
+  checks.push("Items makes only explicit public stateless analysis POSTs, with no authorization headers or saved-record changes");
   assert.deepEqual(errors, []);
   checks.push("No browser runtime exceptions");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));

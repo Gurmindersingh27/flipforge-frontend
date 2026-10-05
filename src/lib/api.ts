@@ -9,7 +9,10 @@ import type {
   PhotoRehabAnalysisResponse,
   SaveDealRequest,
   SavedDeal,
+  ItemAnalyzeRequest,
+  ItemAnalyzeResponse,
 } from "./types";
+import { ITEM_LABELS } from "./itemAnalysis";
 
 /**
  * API base URL resolution:
@@ -87,6 +90,35 @@ export async function analyzeDeal(
 
     return await res.json();
   }, "Analysis took too long. Your inputs are still here. Try generating the memo again.");
+}
+
+export async function analyzeItem(payload: ItemAnalyzeRequest): Promise<ItemAnalyzeResponse> {
+  return withStartupDeadline(async signal => {
+    const res = await fetch(`${API_BASE_URL}/api/items/analyze`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload), signal,
+    });
+    const data = await res.json().catch((error: unknown) => {
+      if (signal.aborted || res.ok) throw error;
+      return null;
+    });
+    if (!res.ok) {
+      if (res.status === 422 && Array.isArray(data?.detail)) {
+        const details = data.detail.map((entry: { loc?: unknown[]; msg?: unknown }) => {
+          const key = String(entry.loc?.at(-1) ?? "");
+          const label = ITEM_LABELS[key as keyof typeof ITEM_LABELS] ?? (key === "body" ? "Inputs" : key);
+          const prefix = entry.loc?.includes("personal_defaults") ? "Personal default: " : "";
+          return `${prefix}${label}: ${typeof entry.msg === "string" ? entry.msg : "Check this value."}`;
+        });
+        throw new Error(details.join("\n"));
+      }
+      throw new Error(`Items analysis could not complete (HTTP ${res.status}). Your inputs are still here. Try again.`);
+    }
+    if (data?.schema_version !== 1 || !["needs_info", "offer_only", "within_budget", "stretch", "skip"].includes(data?.status)) {
+      throw new Error("The server returned an unsupported Items response. Your inputs are still here.");
+    }
+    return data as ItemAnalyzeResponse;
+  }, "Items analysis took too long. Your inputs are still here. Try again.");
 }
 
 // NEW — Draft from URL

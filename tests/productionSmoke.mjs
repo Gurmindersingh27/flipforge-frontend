@@ -46,13 +46,13 @@ try {
   assert.ok(paths.some(p => p.endsWith('.js')) && paths.some(p => p.endsWith('.css')), 'Expected Vite JS/CSS assets');
   // Direct requests exercise hosting rewrites, not Vite's local SPA fallback.
   // These load only the public shell, never a signed-in saved-deal record.
-  for (const route of ['/deals', '/deal/1']) {
+  for (const route of ['/deals', '/deal/1', '/items']) {
     const response = await request(`${frontend}${route}`);
     assert.ok(response.headers.get('content-type')?.includes('text/html'), `${route}: expected HTML`);
     const routeHtml = await response.text();
     assert.ok(routeHtml.includes('<div id="root"></div>'), `${route}: missing app root`);
     assert.deepEqual(assets(routeHtml), paths, `${route}: different app assets`);
-    check('Direct saved-deal route serves the app shell', { route });
+    check('Direct application route serves the app shell', { route });
   }
   const deployed = new Map(await Promise.all(paths.map(async path => [path, Buffer.from(await (await request(frontend + path)).arrayBuffer())])));
   const javascript = [...deployed].filter(([p]) => p.endsWith('.js')).map(([, bytes]) => bytes.toString()).join('\n');
@@ -138,6 +138,31 @@ try {
   await protectedResponse.body?.cancel();
   assert.ok([401, 403].includes(protectedResponse.status), `Saved list allowed unauthenticated access: ${protectedResponse.status}`);
   check('Saved-deal list rejects unauthenticated access', { status: protectedResponse.status });
+  assert.ok(schema.paths['/api/items/analyze']?.post, 'Items endpoint must be deployed');
+  const itemsCors = await request(`${backend}/api/items/analyze`, { method: 'OPTIONS', headers: {
+    Origin: frontend, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type',
+  } });
+  assert.equal(itemsCors.headers.get('access-control-allow-origin'), frontend);
+  check('Public Items endpoint and production-origin CORS');
+  const dresser = { resale_low:300,resale_high:450,repairs:60,pickup:40,delivery:0,storage:0,
+    fee_fixed:0,fee_pct:0,contingency_pct:0,hours:5,hourly_value:20,target_profit:150 };
+  const itemCases = [
+    ['dresser free', {...dresser,purchase_price:0}, 'stretch', -50, 100],
+    ['dresser above target', {...dresser,purchase_price:100.01}, 'skip', -50, -0.01],
+    ['dresser offer-only', dresser, 'offer_only', -50, null],
+    ['fractional ceiling', {...dresser,purchase_price:77,resale_high:300,repairs:40,pickup:15,fee_fixed:1.10,
+      fee_pct:0.075,contingency_pct:0.1,hours:2,target_profit:100}, 'within_budget',77,100.40],
+  ];
+  for (const [name,input,status,offer,profit] of itemCases) {
+    const response = await (await request(`${backend}/api/items/analyze`, {
+      method:'POST',headers:{'Content-Type':'application/json',Origin:frontend},body:JSON.stringify(input),
+    })).json();
+    assert.equal(response.schema_version,1); assert.equal(response.status,status);
+    assert.equal(response.low.max_offer,offer); assert.ok(Number.isInteger(response.low.max_offer));
+    assert.equal(response.low.profit_after_time,profit);
+    assert.deepEqual(response.missing_inputs,[]);
+    check(`Live Items ${name}`,{status,offer,profit});
+  }
   evidence.result = 'PASS';
 } catch (error) {
   evidence.result = 'FAIL';

@@ -1,4 +1,44 @@
 export type Severity = "critical" | "moderate" | "mild";
+
+// Items v1, mirroring app/item_models.py. House contracts below are unchanged.
+export type ItemStatus = "needs_info" | "offer_only" | "within_budget" | "stretch" | "skip";
+export type ItemPreference = "hourly_value" | "target_profit" | "contingency_pct" | "fee_pct";
+export type ItemFinancialInput = ItemPreference | "purchase_price" | "resale_low" | "resale_high"
+  | "repairs" | "pickup" | "delivery" | "storage" | "fee_fixed" | "hours";
+export type ItemPersonalDefaults = Partial<Record<ItemPreference, number | null>>;
+export type ItemAnalyzeRequest = Partial<Record<ItemFinancialInput, number | null>> & {
+  item_name?: string | null;
+  category?: string | null;
+  personal_defaults?: ItemPersonalDefaults | null;
+};
+export interface ItemAssumption<T = number> {
+  value: T | null;
+  source: "user_entered" | "default" | null;
+  default_origin: "personal" | "application" | null;
+}
+export type ItemAssumptions = Record<ItemFinancialInput, ItemAssumption> & {
+  item_name: ItemAssumption<string>;
+  category: ItemAssumption<string>;
+};
+export interface ItemScenario {
+  resale: number;
+  contingency: number;
+  selling_fees: number;
+  own_time_value: number;
+  raw_max_offer: number;
+  max_offer: number; // Integer on the wire; already floored by the server.
+  cash_left: number | null;
+  profit_after_time: number | null;
+  target_shortfall: number | null;
+}
+export interface ItemAnalyzeResponse {
+  schema_version: 1;
+  status: ItemStatus;
+  missing_inputs: ItemFinancialInput[];
+  assumptions: ItemAssumptions;
+  low: ItemScenario | null;
+  high: ItemScenario | null;
+}
 export type Verdict = "BUY" | "CONDITIONAL" | "PASS";
 export type Strategy = "flip" | "brrrr" | "wholesale";
 
