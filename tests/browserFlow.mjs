@@ -1406,7 +1406,9 @@ try {
   assert.ok(await evaluate(`document.querySelector('[data-item-status]').textContent.includes('default is off and no value was entered')`));
   await fill(`document.getElementById('personal-fee_pct')`,'');
   assert.equal(await evaluate(`Boolean(${inputByAria('Use my personal default for Selling fee (%)')})`),false);
-  await cdp('Page.reload'); await until(`Boolean(${itemInput('purchase_price')})`);
+  await evaluate('window.itemsBeforeReload = true');
+  await cdp('Page.reload');
+  await until(`!window.itemsBeforeReload && Boolean(${itemInput('purchase_price')}) && Boolean(document.getElementById('personal-fee_pct'))`);
   assert.equal(await evaluate(`document.getElementById('personal-fee_pct').value`),'');
   assert.equal(await evaluate(`(${itemInput('hourly_value')}).disabled`),true);
   assert.equal(await evaluate(`(${itemInput('contingency_pct')}).disabled`),true);
