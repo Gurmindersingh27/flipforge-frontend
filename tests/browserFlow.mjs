@@ -201,7 +201,7 @@ async function screenshot(name) {
 try {
   writeFileSync(join(temp, "fixture.py"), `import os\nos.environ['DATABASE_URL'] = ${JSON.stringify(`sqlite:///${temp}/fixture.db`)}\nos.environ['CLERK_JWKS_URL'] = ''\nfrom app.main import app\nfrom app.auth import get_current_user_id\nfrom fastapi import Header\ndef fixture_owner(authorization: str = Header(default='Bearer browser-fixture')):\n    return authorization.removeprefix('Bearer ')\napp.dependency_overrides[get_current_user_id] = fixture_owner\n`);
   // Signed-out selection exists only in this temporary fixture, never in production.
-  writeFileSync(join(temp, "clerk.ts"), `import {useSyncExternalStore} from 'react';const signedIn=!new URLSearchParams(location.search).has('fixtureSignedOut');let state={isSignedIn:signedIn,isLoaded:true,userId:signedIn?'browser-fixture':null};const listeners=new Set();window.switchFixtureUser=userId=>{state={isSignedIn:Boolean(userId),isLoaded:true,userId};listeners.forEach(fn=>fn());};const subscribe=fn=>{listeners.add(fn);return()=>listeners.delete(fn);};const getToken=async()=>{const user=state.userId;const fixture=window.authFixture;if(fixture){fixture.calls++;await new Promise(resolve=>setTimeout(resolve,fixture.delayMs));}return user;};export const useAuth=()=>({...useSyncExternalStore(subscribe,()=>state),getToken});export const SignedIn=({children})=>useAuth().isSignedIn?children:null;export const SignedOut=({children})=>useAuth().isSignedIn?null:children;export const ClerkProvider=({children})=>children;export const UserButton=()=>null;export const SignInButton=({children})=>children;export const SignUpButton=({children})=>children;`);
+  writeFileSync(join(temp, "clerk.ts"), `import {useSyncExternalStore} from 'react';const signedIn=!new URLSearchParams(location.search).has('fixtureSignedOut');let state={isSignedIn:signedIn,isLoaded:!new URLSearchParams(location.search).has('fixtureAuthLoading'),userId:signedIn?'browser-fixture':null};const listeners=new Set();window.switchFixtureUser=userId=>{state={isSignedIn:Boolean(userId),isLoaded:true,userId};listeners.forEach(fn=>fn());};const subscribe=fn=>{listeners.add(fn);return()=>listeners.delete(fn);};const getToken=async()=>{const user=state.userId;const fixture=window.authFixture;if(fixture){fixture.calls++;await new Promise(resolve=>setTimeout(resolve,fixture.delayMs));}return user;};export const useAuth=()=>({...useSyncExternalStore(subscribe,()=>state),getToken});export const SignedIn=({children})=>useAuth().isSignedIn?children:null;export const SignedOut=({children})=>useAuth().isSignedIn?null:children;export const ClerkProvider=({children})=>children;export const UserButton=()=>null;export const SignInButton=({children})=>children;export const SignUpButton=({children})=>children;`);
   writeFileSync(join(temp, "vite.mjs"), `import base from ${JSON.stringify(join(root, "vite.config.ts"))};export default {...base,root:${JSON.stringify(root)},resolve:{alias:{'@clerk/clerk-react':${JSON.stringify(join(temp, "clerk.ts"))}}},server:{host:'127.0.0.1',port:5173,strictPort:true,fs:{allow:[${JSON.stringify(root)},${JSON.stringify(temp)}]}}};`);
   start(process.env.PYTHON ?? "python", ["-m", "uvicorn", "fixture:app", "--host", "127.0.0.1", "--port", "8000"], { PYTHONPATH: `${backend}:${temp}` });
   start(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "--config", join(temp, "vite.mjs"), "--configLoader", "native"], { VITE_API_BASE_URL: "http://127.0.0.1:8000" });
@@ -1498,6 +1498,42 @@ try {
     await click('button',label); await until(hasStatus('Saved version #'));
     return (await api('/api/items')).items[0];
   }
+  for (const width of [390,1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    for (const loading of [false,true]) {
+      await evaluate('window.beforeSignInDraft = true');
+      await cdp('Page.navigate',{url:`http://127.0.0.1:5173/items?fixtureSignedOut=1${loading ? '&fixtureAuthLoading=1' : ''}`});
+      await until(`!window.beforeSignInDraft && Boolean(${itemInput('purchase_price')})`);
+      await fill(itemInput('purchase_price'),'123');
+      await fill(itemInput('resale_low'),'300');
+      await fill(itemInput('item_name'),'Garage dresser');
+      await fill(`document.getElementById('item-notes')`,'Check the drawer runners.');
+      if (!loading) await click('button','Sign in to save item');
+      assert.equal(await evaluate('window.savedItemRequests.length'),0);
+      await evaluate(`window.switchFixtureUser(${loading ? 'null' : "'browser-fixture'"})`);
+      await until(`document.body.textContent.includes(${JSON.stringify(loading ? 'Sign in to save item' : 'Save item')})`);
+      assert.equal(await evaluate(`(${itemInput('purchase_price')}).value`),'123');
+      assert.equal(await evaluate(`(${itemInput('resale_low')}).value`),'300');
+      if (loading) {
+        await click('button','Sign in to save item');
+        await evaluate(`window.switchFixtureUser('browser-fixture')`);
+      }
+      await until(`Boolean(${byText('button','Save item')})`);
+      const saved = await saveCurrent();
+      assert.equal(saved.inputs.purchase_price,123);
+      assert.equal(saved.inputs.resale_low,300);
+      assert.equal(saved.inputs.item_name,'Garage dresser');
+      assert.equal(saved.notes,'Check the drawer runners.');
+      assert.equal(await evaluate('window.savedItemRequests.filter(r=>r.method==="POST").length'),1);
+      await screenshot(`items-sign-in-preserved-${width}-${loading}.png`);
+      await evaluate(`window.switchFixtureUser(null)`);
+      await until(`document.body.textContent.includes('Sign in to save item')`);
+      assert.equal(await evaluate(`(${itemInput('purchase_price')}).value`),'');
+      assert.equal(await evaluate(`document.getElementById('item-notes').value`),'');
+      assert.equal(await evaluate(`Boolean(document.querySelector('[data-item-status]'))`),false);
+    }
+  }
+  checks.push('390/1440 anonymous drafts survive auth loading and sign-in, save the entered numbers and notes once, and clear private saved data on sign-out');
   const originalHouses = await api('/api/deals');
   let sourceItem;
   for (const width of [390,1440]) {

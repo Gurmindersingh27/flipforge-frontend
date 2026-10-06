@@ -50,9 +50,16 @@ export default function ItemsPage() {
   const { isLoaded, isSignedIn, userId } = useAuth();
   const [params] = useSearchParams();
   const saved = params.get("saved");
+  const [identity, setIdentity] = useState({ userId: isLoaded ? userId ?? null : null, generation: 0 });
+  const resolvedUser = userId ?? null;
+  if (isLoaded && identity.userId !== resolvedUser) {
+    // Anonymous drafts survive sign-in. Leaving an established account clears
+    // the entire editor, including pending saves and any private saved data.
+    setIdentity({ userId: resolvedUser, generation: identity.generation + (identity.userId === null ? 0 : 1) });
+  }
   if (saved !== null && !isLoaded) return <p role="status">Loading sign-in…</p>;
   if (saved !== null && !isSignedIn) return <div className="space-y-4 py-8"><p>Sign in to reopen this saved item.</p><SignInButton mode="modal"><button className="min-h-11 rounded-lg border border-white/30 px-4 py-2">Sign in to reopen item</button></SignInButton><Link to="/items" className="block py-2 text-amber-200 underline">New item</Link></div>;
-  return <ItemsEditor key={`${isLoaded ? userId ?? "signed-out" : "loading"}:${saved ?? "new"}`} savedId={saved} />;
+  return <ItemsEditor key={`${identity.generation}:${saved ?? "new"}`} savedId={saved} />;
 }
 
 function ItemsEditor({ savedId }: { savedId: string | null }) {
