@@ -22,7 +22,10 @@ def photo_provider(payload):
     text = json.loads(payload['messages'][0]['content'][-1]['text'])
     prices = [65, 75] if mode == 'short' else [65, 75, 90]
     listings = [dict(title='Used wood dining chair', url='https://example.com/chair/' + str(i), price=p, currency='USD', condition='Used, good condition', comparable=True, single_item=True, market='local_pickup', location='Atlanta') for i, p in enumerate(prices)]
-    report = dict(item_name='Wood dining chair', category='Chair', asking_price=text.get('asking_price', 20), repairs=[dict(job_id='sand_seat', reason='Visible scratches on the seat')], repair_unknowns=[], listings=listings)
+    asking = text.get('asking_price')
+    if asking is None and 'twenty' in text.get('description', ''):
+        asking = 20
+    report = dict(item_name='Wood dining chair', category='Chair', asking_price=asking, repairs=[dict(job_id='sand_seat', reason='Visible scratches on the seat')], repair_unknowns=[], listings=listings)
     return dict(stop_reason='end_turn', usage=dict(input_tokens=12000, output_tokens=1000, server_tool_use=dict(web_search_requests=2)), content=[dict(type='text', text=json.dumps(report), citations=[dict(type='web_search_result_location', url=row['url'], cited_text='Used chair $' + str(row['price']) + ', local pickup.') for row in listings])])
 ai.call_provider = photo_provider
 @app.post('/browser-fixture/ai/{mode}')
@@ -85,14 +88,15 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await until(`Boolean(${input('quick-description')})`);
     const count = await calls();
     await fill(input('quick-description'), 'Wood chair, scratched seat, they want twenty.');
-    await fill(input('quick-asking'), '20');
+    const askingInput = width === 390 ? '20' : '';
+    await fill(input('quick-asking'), askingInput);
     await upload();
     await geometry(); await screenshot(`photo-entry-${width}.png`);
     assert.equal(await calls(), count);
     await evaluate(`window.switchFixtureUser('browser-fixture')`);
     await until(`Boolean(document.querySelector('[data-quick-assess]'))`);
     assert.equal(await evaluate(`${input('quick-description')}.value`), 'Wood chair, scratched seat, they want twenty.');
-    assert.equal(await evaluate(`${input('quick-asking')}.value`), '20');
+    assert.equal(await evaluate(`${input('quick-asking')}.value`), askingInput);
     assert.equal(await evaluate(`document.querySelectorAll('.quick-photo img').length`), 1);
     await runAI();
     assert.equal(await calls(), count + 1);
@@ -158,7 +162,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   assert.equal((await api('/api/items')).items[0].inputs.fee_pct, .143);
   checks.push('Photo requests reject invalid numbers before spending, lock before token lookup, ignore duplicate taps, and recalculate 14.3% through the server without losing notes');
 
-  await mode('short'); await open(); await upload(); await runAI();
+  await mode('short'); await open(); await upload(); await fill(input('quick-asking'), '20'); await runAI();
   await until(`Boolean(document.getElementById('quick-resale_low'))`);
   await fill(input('quick-resale_low'), '90'); await calculate('within_budget');
   await click('button', 'Save item'); await savedConfirmation();
@@ -181,7 +185,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   }
   checks.push('Disabled AI and paused budget preserve the public short calculator, offer-only results and honest skip wording without any provider call');
 
-  await mode('overloaded'); await open(); await upload(); await runAI();
+  await mode('overloaded'); await open(); await upload(); await fill(input('quick-asking'), '20'); await runAI();
   await until(`document.querySelector('[role=alert]')?.textContent.includes("AI couldn't finish")`);
   assert.ok(await evaluate(`!document.querySelector('[data-quick-assess]').disabled`));
   await mode('normal'); await runAI(); await calculate('within_budget');
