@@ -103,10 +103,23 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false, 'No offer before repairs are confirmed');
     await fill(input('item-notes'), 'Scratched seat. Check the joints.');
     await calculate('within_budget');
-    assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes('Good buy at $20.00.')`));
+    assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes('Good buy at $20.')`));
     assert.equal(await evaluate(`document.querySelector('[data-quick-offer]').textContent`), '$22');
-    assert.equal(await evaluate(`document.querySelector('[data-quick-cash]').textContent`), '$32.75');
-    assert.equal(await evaluate(`document.querySelector('[data-quick-profit]').textContent`), '$32.75');
+    assert.equal(await evaluate(`document.querySelector('[data-quick-keep]').textContent`), '$32.75');
+    assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-cash], [data-quick-profit]'))`), false);
+    assert.ok(await evaluate(`document.querySelector('.quick-assumptions').textContent.includes('Assumes local pickup, no fees, $30 profit goal')`));
+    if (width === 390) {
+      await evaluate(`document.querySelector('.quick-assumptions button').click()`);
+      assert.equal(await evaluate(`document.activeElement.id`), 'quick-target_profit');
+      await fill(input('quick-hours'), '1');
+      await calculate('skip');
+      assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-keep]'))`), false);
+      assert.equal(await evaluate(`document.querySelector('[data-quick-cash]').textContent`), '$32.75');
+      assert.equal(await evaluate(`document.querySelector('[data-quick-profit]').textContent`), '$12.75');
+      assert.ok(await evaluate(`document.querySelector('.quick-assumptions').textContent.includes('Uses your entered costs')`));
+      await fill(input('quick-hours'), '0'); await calculate('within_budget');
+      await evaluate(`document.querySelector('.quick-details').open=false`);
+    }
     assert.equal(await evaluate(`${input('item-notes')}.value`), 'Scratched seat. Check the joints.');
     await geometry(); await screenshot(`photo-answer-${width}.png`);
     await evaluate(`document.querySelector('.quick-sources').open=true`);
@@ -136,6 +149,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   checks.push('Photo UI at 390/1440 preserves anonymous photos/text through sign-in, confirms repairs before real server math, and shows matching low/high money without overflow');
   checks.push('Photo finds save evidence, confirmed repairs and inputs through the real API; notes-only linked versions preserve results without another paid request');
   checks.push('Photo reopen ownership is enforced; switching accounts clears private inputs, results and notes');
+  checks.push('Zero-hour results show one keep amount; entered hours restore distinct cash/profit, compact assumptions reflect edits, and Change focuses the costs');
 
   await open(`?find=${savedFind.id}&fixtureSignedOut=1`);
   await until(`document.body.textContent.includes('Sign in to reopen item')`);
@@ -174,11 +188,13 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   for (const kind of ['disabled', 'cap']) {
     await mode(kind); const before = await calls(); await open();
     await until(`Boolean(document.getElementById('quick-resale_low'))`);
+    assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Photo estimate"], [data-quick-assess]'))`), false, 'Known unavailable AI must not show a dead photo box');
     if (kind === 'cap') assert.ok(await evaluate(`document.body.textContent.includes('AI estimates are paused until the 1st')`));
     await fill(input('quick-resale_low'), '65'); await fill(input('quick-repairs'), '15');
     await calculate('offer_only');
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-cash]'))`), false);
     await fill(input('quick-purchase_price'), '60'); await calculate('skip');
+    assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes("I'd pass at $60. Offer $17 or walk.")`));
     assert.ok(await evaluate(`document.body.textContent.includes("doesn't necessarily mean a cash loss")`));
     assert.equal(await calls(), before);
     await geometry(); await screenshot(`photo-${kind}-fallback.png`);

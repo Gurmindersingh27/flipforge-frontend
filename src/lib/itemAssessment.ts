@@ -1,6 +1,7 @@
 import { formatItemMoney, parseItemNumber } from "./itemAnalysis.ts";
 import { restoreItemForm } from "./savedItems.ts";
 import type { ItemAnalyzeResponse, ItemAssessmentPhoto, ItemAssessmentRequest, ItemAssessmentResult } from "./types.ts";
+import type { SavedItemForm } from "./savedItems.ts";
 
 export function newQuickItemForm() {
   // Explicit local cash-sale preset, disclosed beside the confirmation button.
@@ -21,13 +22,26 @@ export function suggestedRepairTotal(result: ItemAssessmentResult): string {
   const cents = result.repair_suggestions.reduce((sum, repair) => sum + BigInt(repair.materials_cost.toFixed(2).replace(".", "")), 0n);
   return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
 }
+export function formatItemHeadlineMoney(value: number | null): string {
+  return formatItemMoney(value, Number.isInteger(value));
+}
+export function quickAssumptionsSummary(form: SavedItemForm): string {
+  let goal: number | null;
+  try { goal = parseItemNumber(form.useDefault.target_profit ? form.personalDefaults.target_profit : form.values.target_profit, "target_profit"); }
+  catch { return "Check your costs and profit goal"; }
+  const goalText = goal === null ? "profit goal unknown" : `${formatItemHeadlineMoney(goal)} profit goal`;
+  const preset = newQuickItemForm();
+  const unchanged = (["pickup", "delivery", "storage", "fee_fixed", "fee_pct", "hours", "hourly_value", "contingency_pct"] as const)
+    .every(key => form.values[key] === preset.values[key]);
+  return `${unchanged ? "Assumes local pickup, no fees" : "Uses your entered costs"}, ${goalText}`;
+}
 export function itemDecision(result: ItemAnalyzeResponse): string {
   const offer = result.low ? formatItemMoney(result.low.max_offer, true) : "";
   const price = result.assumptions.purchase_price.value;
   switch (result.status) {
-    case "within_budget": return `Good buy at ${formatItemMoney(price)}.`;
+    case "within_budget": return `Good buy at ${formatItemHeadlineMoney(price)}.`;
     case "stretch": return result.low && result.low.max_offer >= 0 ? `Offer up to ${offer}.` : "The profit is too tight at this price.";
-    case "skip": return `I'd pass at ${formatItemMoney(price)}.`;
+    case "skip": return `I'd pass at ${formatItemHeadlineMoney(price)}. ${result.low && result.low.max_offer >= 0 ? `Offer ${offer} or walk.` : "Even free misses your profit goal."}`;
     case "offer_only": return result.low && result.low.max_offer >= 0 ? `Offer up to ${offer}.` : "Even free is a tight flip.";
     case "needs_info": return "A couple of details first.";
   }

@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { SignInButton, useAuth, UserButton } from "@clerk/clerk-react";
 import { analyzeItem, assessItem, getItem, getItemAIBudget, getItemAssessment, ItemAssessmentError } from "../lib/api";
 import { formatItemMoney, ITEM_LABELS, parseItemNumber } from "../lib/itemAnalysis";
-import { buildAssessmentRequest, itemDecision, newQuickItemForm, prepareItemPhoto, suggestedRepairTotal } from "../lib/itemAssessment";
+import { buildAssessmentRequest, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../lib/itemAssessment";
 import { buildSavedItemInputs, restoreItemForm, safeItemLink } from "../lib/savedItems";
 import type { SavedItemForm } from "../lib/savedItems";
 import type { ItemAIBudget, ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResponse, ItemAssessmentResult, ItemFinancialInput, SavedItem } from "../lib/types";
@@ -208,11 +208,16 @@ function QuickEditor({ findId }: { findId: string | null }) {
   if (findId && !initial) return <main className="quick-main"><h1>Your saved find</h1>{busy ? <p role="status">Reopening your item…</p> : <div role="alert"><p>{error}</p><button className="quick-secondary" onClick={() => { setBusy("reopen"); setError(""); setLoadAttempt(n => n + 1); }}>Try reopening again</button></div>}<Link to="/my-flips">Back to My Flips</Link></main>;
   const blocked = Boolean(busy);
   const aiAvailable = !pilotDenied && (!budget || budget.available);
+  const noTime = result?.assumptions.hours.value === 0;
+  function openCosts() {
+    if (costsRef.current) costsRef.current.open = true;
+    document.getElementById("quick-target_profit")?.focus();
+  }
   return <main className="quick-main">
-    <header className="quick-intro"><p className="quick-eyebrow">A GOOD FIND STARTS HERE</p><h1>{snapshot ? "Back to your find." : <>See potential?<br /><em>Let's work it out.</em></>}</h1><p>Snap a photo. Tell us what you know.<br />Get a starting offer and a plan for the work.</p></header>
+    <header className="quick-intro"><p className="quick-eyebrow">A GOOD FIND STARTS HERE</p><h1>{snapshot ? "Back to your find." : <>See potential?<br /><em>Let's work it out.</em></>}</h1><p>{aiAvailable ? <>Snap a photo. Tell us what you know.<br />Get a starting offer and a plan for the work.</> : <>Enter what you know.<br />We'll help you work out an offer.</>}</p></header>
     <div className="quick-layout">
       <div className="quick-flow">
-        {!snapshot && !evidence && <section className="quick-card" aria-label="Photo estimate">
+        {!snapshot && !evidence && aiAvailable && <section className="quick-card" aria-label="Photo estimate">
           <fieldset disabled={blocked || pendingId !== null}>
             <div className="quick-section-title"><span className="quick-step">01</span><h2>What did you find?</h2><span className="quick-muted">Up to 3 photos</span></div>
             <div className="quick-photos">
@@ -255,8 +260,9 @@ function QuickEditor({ findId }: { findId: string | null }) {
             <details ref={costsRef} className="quick-details"><summary>Change costs & profit goal</summary>
               <div className="quick-fields">{field("target_profit", "Profit you'd like to make ($)")}{field("pickup", "Pickup cost ($)")}{field("delivery", "Delivery cost ($)")}{field("storage", "Storage cost ($)")}{field("hours", "Your time (hours)")}{field("hourly_value", "Value of your time ($/hour)")}{field("fee_pct", "Selling fees (%)")}{field("fee_fixed", "Fixed selling fee ($)")}{field("contingency_pct", "Repair buffer (%)")}</div>
               <p className="quick-small">Blank means unknown. Fees apply to the sale price; the buffer applies only to repairs.</p>
+              <p className="quick-small">Starting setup: local pickup, $0 transport/storage, no selling fees, no charge for your time, a 15% repair buffer and a $30 profit goal. Your entered changes replace these values.</p>
             </details>
-            <div className="quick-assumptions"><strong>Before we work it out</strong><p>Starting setup: local pickup, $0 transport/storage, no selling fees, no charge for your time, a 15% repair buffer and a $30 profit goal. Use “Change costs & profit goal” above if yours differ.</p><p>Your entered changes replace that starting setup. Confirm the repairs and these costs below.</p></div>
+            <p className="quick-assumptions">{quickAssumptionsSummary(form)} · <button type="button" className="quick-text-button" onClick={openCosts}>Change</button></p>
             {Object.keys(errors).length > 0 && <div className="quick-error" role="alert">{Object.entries(errors).map(([key, message]) => <p key={key}>{ITEM_LABELS[key as ItemFinancialInput] ?? key}: {message}</p>)}</div>}
             <button data-quick-calculate className="quick-primary" type="button" onClick={() => void calculate()}>{busy === "calculate" ? "Working it out…" : evidence && !confirmation ? "Looks right - show my offer" : "Calculate my offer"}<span aria-hidden="true">→</span></button>
           </fieldset>
@@ -266,12 +272,12 @@ function QuickEditor({ findId }: { findId: string | null }) {
       <aside className="quick-answer-column">
         {result ? <section ref={resultRef} tabIndex={-1} className={`quick-answer tone-${result.status}`} aria-label="Your offer" data-quick-status={result.status}>
           <p className="quick-eyebrow">YOUR STARTING POINT</p><h2>{itemDecision(result)}</h2>
-          <button className="quick-text-button" type="button" onClick={() => { if (costsRef.current) costsRef.current.open = true; document.getElementById("quick-target_profit")?.focus(); }}>Profit goal: {formatItemMoney(result.assumptions.target_profit.value)} · Change</button>
+          <button className="quick-text-button" type="button" onClick={openCosts}>Profit goal: {formatItemMoney(result.assumptions.target_profit.value)} · Change</button>
           {result.status === "needs_info" ? <><p>Fill in these missing details before we can give you an offer.</p><ul>{result.missing_inputs.map(key => <li key={key}>{ITEM_LABELS[key]}</li>)}</ul></> : result.low && result.high && <>
             <p>{result.status === "skip" ? "It misses your profit goal even if it sells well. That doesn't necessarily mean a cash loss." : result.status === "stretch" ? "At their price, you'd need a stronger sale to meet your goal." : "Based on these costs and the low end of the sale estimate. Check the item before buying."}</p>
             <div className="quick-offer"><span>Most you should pay, including any fees or tax</span><strong data-quick-offer>{formatItemMoney(result.low.max_offer, true)}</strong></div>
             {result.low.max_offer < 0 && <p>Even free misses your profit goal at the low sale estimate. This isn't a negative price to offer the seller.</p>}
-            {result.status !== "offer_only" && <><div className="quick-profits"><div><span>Cash left</span><strong data-quick-cash>{formatItemMoney(result.low.cash_left)}</strong><small>After costs & repair buffer</small></div><div><span>Profit after your time</span><strong data-quick-profit>{formatItemMoney(result.low.profit_after_time)}</strong><small>If it sells for {formatItemMoney(result.low.resale)}</small></div></div><p className="quick-high">If it sells well at {formatItemMoney(result.high.resale)}, profit after your time would be {formatItemMoney(result.high.profit_after_time)}.</p></>}
+            {result.status !== "offer_only" && <>{noTime ? <p className="quick-keep">You'd keep <strong data-quick-keep>{formatItemMoney(result.low.cash_left)}</strong><small>If it sells for {formatItemMoney(result.low.resale)}, after costs & repair buffer.</small></p> : <div className="quick-profits"><div><span>Cash left</span><strong data-quick-cash>{formatItemMoney(result.low.cash_left)}</strong><small>After costs & repair buffer</small></div><div><span>Profit after your time</span><strong data-quick-profit>{formatItemMoney(result.low.profit_after_time)}</strong><small>If it sells for {formatItemMoney(result.low.resale)}</small></div></div>}<p className="quick-high">If it sells well at {formatItemMoney(result.high.resale)}, {noTime ? "you'd keep " : "profit after your time would be "}{formatItemMoney(result.high.profit_after_time)}.</p></>}
             {result.status === "offer_only" && <p>Add an asking price to see how much you'd keep. If it sells well, the offer ceiling is {formatItemMoney(result.high.max_offer, true)}.</p>}
             <p className="quick-small">{ownResale ? "Sale price: your estimate." : "Sale prices: online listings, not confirmed sales."} Before income tax and costs not entered. This is a budget, not an inspection.</p>
           </>}

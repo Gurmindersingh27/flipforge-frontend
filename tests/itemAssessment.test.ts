@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAssessmentRequest, itemDecision, newQuickItemForm, suggestedRepairTotal } from "../src/lib/itemAssessment.ts";
+import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, quickAssumptionsSummary, suggestedRepairTotal } from "../src/lib/itemAssessment.ts";
 import { buildSavedItemInputs } from "../src/lib/savedItems.ts";
 import type { ItemAnalyzeResponse, ItemAssessmentPhoto, ItemAssessmentResult } from "../src/lib/types.ts";
 
@@ -40,7 +40,7 @@ test("repair catalog cents sum without floating-point artifacts and empty sugges
 });
 test("decision copy follows server status even when rounded ceiling equals asking price", () => {
   const result = { status: "skip", low: { max_offer: 100, raw_max_offer: 100.04 }, assumptions: { purchase_price: { value: 100.04 } } } as ItemAnalyzeResponse;
-  assert.equal(itemDecision(result), "I'd pass at $100.04.");
+  assert.equal(itemDecision(result), "I'd pass at $100.04. Offer $100 or walk.");
   assert.equal(itemDecision({ ...result, status: "within_budget" }), "Good buy at $100.04.");
   assert.equal(itemDecision({ ...result, status: "stretch" }), "Offer up to $100.");
   assert.equal(itemDecision({ ...result, status: "offer_only" }), "Offer up to $100.");
@@ -50,5 +50,27 @@ test("negative offers stay negative in results and never become a positive buy h
   const result = { status: "offer_only", low: { max_offer: -50 }, assumptions: { purchase_price: { value: null } } } as ItemAnalyzeResponse;
   assert.equal(itemDecision(result), "Even free is a tight flip.");
   assert.equal(itemDecision({ ...result, status: "stretch" }), "The profit is too tight at this price.");
+  assert.equal(itemDecision({ ...result, status: "skip", assumptions: { purchase_price: { value: 60 } } } as ItemAnalyzeResponse), "I'd pass at $60. Even free misses your profit goal.");
   assert.equal(result.low?.max_offer, -50);
+});
+test("headline dollars omit only unnecessary cents, preserving fractional boundaries and money elsewhere", () => {
+  assert.equal(formatItemHeadlineMoney(20), "$20");
+  assert.equal(formatItemHeadlineMoney(20.01), "$20.01");
+  assert.equal(formatItemHeadlineMoney(-50), "-$50");
+  assert.equal(formatItemHeadlineMoney(0), "$0");
+  assert.equal(formatItemHeadlineMoney(null), "Not available");
+});
+test("compact assumptions reflect changed goals and never describe edited costs as the preset", () => {
+  const form = newQuickItemForm();
+  assert.equal(quickAssumptionsSummary(form), "Assumes local pickup, no fees, $30 profit goal");
+  form.values.target_profit = "40.50";
+  assert.equal(quickAssumptionsSummary(form), "Assumes local pickup, no fees, $40.50 profit goal");
+  form.values.fee_pct = "14.3";
+  assert.equal(quickAssumptionsSummary(form), "Uses your entered costs, $40.50 profit goal");
+  form.values.target_profit = "";
+  assert.equal(quickAssumptionsSummary(form), "Uses your entered costs, profit goal unknown");
+  form.values.target_profit = "1e3";
+  assert.equal(quickAssumptionsSummary(form), "Check your costs and profit goal");
+  form.useDefault.target_profit = true; form.personalDefaults.target_profit = "55";
+  assert.equal(quickAssumptionsSummary(form), "Uses your entered costs, $55 profit goal");
 });
