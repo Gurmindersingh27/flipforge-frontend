@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { SAMPLE_SCENARIOS } from "../src/lib/sampleDeal.ts";
 import { restoreItemForm, buildSavedItemInputs } from "../src/lib/savedItems.ts";
 import { roundTripCases } from "./savedItems.test.ts";
+import { photoBackendFixture, runPhotoItemChecks } from "./itemPhotoFlow.mjs";
 
 const root = process.cwd();
 const backend = resolve(process.env.BACKEND_DIR ?? "../flipforge-backend");
@@ -199,7 +200,7 @@ async function screenshot(name) {
 }
 
 try {
-  writeFileSync(join(temp, "fixture.py"), `import os\nos.environ['DATABASE_URL'] = ${JSON.stringify(`sqlite:///${temp}/fixture.db`)}\nos.environ['CLERK_JWKS_URL'] = ''\nfrom app.main import app\nfrom app.auth import get_current_user_id\nfrom fastapi import Header\ndef fixture_owner(authorization: str = Header(default='Bearer browser-fixture')):\n    return authorization.removeprefix('Bearer ')\napp.dependency_overrides[get_current_user_id] = fixture_owner\n`);
+  writeFileSync(join(temp, "fixture.py"), `import os\nos.environ['DATABASE_URL'] = ${JSON.stringify(`sqlite:///${temp}/fixture.db`)}\nos.environ['CLERK_JWKS_URL'] = ''\nfrom app.main import app\nfrom app.auth import get_current_user_id\nfrom fastapi import Header\ndef fixture_owner(authorization: str = Header(default='Bearer browser-fixture')):\n    return authorization.removeprefix('Bearer ')\napp.dependency_overrides[get_current_user_id] = fixture_owner\n${photoBackendFixture}`);
   // Signed-out selection exists only in this temporary fixture, never in production.
   writeFileSync(join(temp, "clerk.ts"), `import {useSyncExternalStore} from 'react';const signedIn=!new URLSearchParams(location.search).has('fixtureSignedOut');let state={isSignedIn:signedIn,isLoaded:!new URLSearchParams(location.search).has('fixtureAuthLoading'),userId:signedIn?'browser-fixture':null};const listeners=new Set();window.switchFixtureUser=userId=>{state={isSignedIn:Boolean(userId),isLoaded:true,userId};listeners.forEach(fn=>fn());};const subscribe=fn=>{listeners.add(fn);return()=>listeners.delete(fn);};const getToken=async()=>{const user=state.userId;const fixture=window.authFixture;if(fixture){fixture.calls++;await new Promise(resolve=>setTimeout(resolve,fixture.delayMs));}return user;};export const useAuth=()=>({...useSyncExternalStore(subscribe,()=>state),getToken});export const SignedIn=({children})=>useAuth().isSignedIn?children:null;export const SignedOut=({children})=>useAuth().isSignedIn?null:children;export const ClerkProvider=({children})=>children;export const UserButton=()=>null;export const SignInButton=({children})=>children;export const SignUpButton=({children})=>children;`);
   writeFileSync(join(temp, "vite.mjs"), `import base from ${JSON.stringify(join(root, "vite.config.ts"))};export default {...base,root:${JSON.stringify(root)},resolve:{alias:{'@clerk/clerk-react':${JSON.stringify(join(temp, "clerk.ts"))}}},server:{host:'127.0.0.1',port:5173,strictPort:true,fs:{allow:[${JSON.stringify(root)},${JSON.stringify(temp)}]}}};`);
@@ -1338,7 +1339,7 @@ try {
   const fractional = { ...dresser, purchase_price: '77', resale_high: '300', repairs: '40', pickup: '15', fee_fixed: '1.10', hours: '2', target_profit: '100', contingency_pct: '10', fee_pct: '7.5' };
   const itemStatus = status => `document.querySelector('[data-item-status]')?.getAttribute('data-item-status') === ${JSON.stringify(status)}`;
   async function openItems(values) {
-    await cdp("Page.navigate", { url: "http://127.0.0.1:5173/items?fixtureSignedOut=1" });
+    await cdp("Page.navigate", { url: "http://127.0.0.1:5173/items?manual=1&fixtureSignedOut=1" });
     await until(`Boolean(${itemInput('purchase_price')})`);
     assert.ok(await evaluate(`!document.body.textContent.includes('Sign In')`), "Items must work signed out");
     await evaluate(`document.querySelectorAll('form input[type="checkbox"]:checked').forEach(e=>e.click())`);
@@ -1488,7 +1489,7 @@ try {
   ` });
   async function signedItems(values = {}) {
     await evaluate('window.beforeSavedItemsNavigation = true');
-    await cdp('Page.navigate', {url:'http://127.0.0.1:5173/items'});
+    await cdp('Page.navigate', {url:'http://127.0.0.1:5173/items?manual=1'});
     await until(`!window.beforeSavedItemsNavigation && Boolean(${itemInput('purchase_price')})`);
     await evaluate(`document.querySelectorAll('form input[type="checkbox"]:checked').forEach(e=>e.click())`);
     await until(`!(${itemInput('hourly_value')}).disabled && !(${itemInput('contingency_pct')}).disabled`);
@@ -1502,7 +1503,7 @@ try {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
     for (const loading of [false,true]) {
       await evaluate('window.beforeSignInDraft = true');
-      await cdp('Page.navigate',{url:`http://127.0.0.1:5173/items?fixtureSignedOut=1${loading ? '&fixtureAuthLoading=1' : ''}`});
+      await cdp('Page.navigate',{url:`http://127.0.0.1:5173/items?manual=1&fixtureSignedOut=1${loading ? '&fixtureAuthLoading=1' : ''}`});
       await until(`!window.beforeSignInDraft && Boolean(${itemInput('purchase_price')})`);
       await fill(itemInput('purchase_price'),'123');
       await fill(itemInput('resale_low'),'300');
@@ -1669,6 +1670,7 @@ try {
   assert.deepEqual(await api('/api/deals'),originalHouses);
   checks.push('Saved list read deadlines and auth errors recover only on user retry; existing house records remain unchanged');
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:savedItemsFixture});
+  await runPhotoItemChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
   assert.deepEqual(errors, []);
   checks.push("No browser runtime exceptions");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));

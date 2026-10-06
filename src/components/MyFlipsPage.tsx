@@ -57,7 +57,7 @@ function SavedList() {
           {item.analysis_result.low && item.analysis_result.low.max_offer < 0 && <p className="text-sm text-white/70">Even a free item misses your target under the low resale estimate.</p>}
           {item.notes && <details><summary className="cursor-pointer py-2 text-sm">Notes</summary><p className="whitespace-pre-wrap break-words text-sm">{item.notes}</p></details>}
           <div className="flex flex-wrap gap-4">
-            <Link to={`/items?saved=${item.id}`} className="min-h-11 py-2 text-amber-200 underline" aria-label={`Reopen saved item ${item.id}`}>Reopen</Link>
+            <Link to={`/items?${item.assessment ? "find" : "saved"}=${item.id}`} className="min-h-11 py-2 text-amber-200 underline" aria-label={`Reopen saved item ${item.id}`}>Reopen</Link>
             {link && <a href={link} target="_blank" rel="noopener noreferrer" className="min-h-11 py-2 text-white/80 underline">Listing</a>}
           </div>
         </article>;

@@ -173,6 +173,7 @@ function ItemsEditor({ savedId }: { savedId: string | null }) {
     <nav aria-label="Items navigation" className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 py-4">
       <Link to="/" className="text-sm font-bold text-white">Flip<span className="text-amber-400">Forge</span></Link>
       <Link to="/my-flips" className="rounded py-2 text-sm text-amber-200 underline">My Flips</Link>
+      <Link to="/items" className="rounded py-2 text-sm text-amber-200 underline">Photo estimate</Link>
       <Link to="/" className="rounded py-2 text-sm text-white/80 underline underline-offset-4">Back to Houses</Link>
     </nav>
     <main className="mx-auto max-w-5xl min-w-0 space-y-6 py-6">

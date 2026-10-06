@@ -3,7 +3,7 @@ import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { useAuth, SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/clerk-react";
 import AnalysisResult from "./AnalysisResult";
 import DealsPage from "./components/DealsPage";
-import ItemsPage from "./components/ItemsPage";
+import PhotoItemsPage from "./components/PhotoItemsPage";
 import MyFlipsPage from "./components/MyFlipsPage";
 import DealPage from "./components/DealPage";
 import RehabScopeEditor from "./components/RehabScopeEditor";
@@ -1582,7 +1582,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<AnalyzerPage />} />
-      <Route path="/items" element={<ItemsPage />} />
+      <Route path="/items" element={<PhotoItemsPage />} />
       <Route path="/my-flips" element={<MyFlipsPage />} />
       <Route path="/deals" element={<DealsPage />} />
       <Route path="/deal/:id" element={<DealPage />} />

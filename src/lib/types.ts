@@ -44,6 +44,8 @@ export interface SaveItemRequest {
   listing_url?: string | null;
   notes?: string | null;
   parent_item_id?: number | null;
+  assessment_id?: string | null;
+  assessment_confirmation?: ItemAssessmentConfirmation | null;
 }
 export interface SavedItem {
   id: number;
@@ -55,12 +57,61 @@ export interface SavedItem {
   analysis_result: ItemAnalyzeResponse;
   listing_url: string | null;
   notes: string | null;
+  assessment?: SavedItemAssessment | null;
 }
 export interface SavedItemList {
   items: SavedItem[];
   limit: number;
   offset: number;
   next_offset: number | null;
+}
+
+// Release A: app/item_assessment_models.py. Photos exist only in request memory.
+export interface ItemAssessmentPhoto {
+  media_type: "image/jpeg" | "image/png" | "image/webp";
+  data: string;
+}
+export interface ItemAssessmentRequest {
+  request_id: string;
+  description: string;
+  photos: ItemAssessmentPhoto[];
+  asking_price?: number | null;
+  location?: string | null;
+}
+export interface ItemListingEvidence {
+  title: string; url: string; price: number; currency: "USD"; source: string;
+  condition: string; market: "local_pickup" | "national_shipping" | "unknown";
+  location: string | null; retrieved_at: string; price_type: "asking";
+  eligible: boolean; exclusion_reason: string | null; supporting_quotes: string[];
+}
+export interface ItemAssessmentConfirmation {
+  repairs: { job_id: string; materials_cost: number }[];
+  resale_source: "assessment" | "user_estimate";
+  preset_acknowledged: boolean;
+}
+export interface ItemAssessmentResult {
+  schema_version: 1;
+  item_name: string; category: string; asking_price: number | null;
+  asking_price_source: "user_entered" | "description_extraction";
+  listings: ItemListingEvidence[];
+  resale: { low: number; high: number; source: "online_asking_prices";
+    eligible_count: number; method: "linear_quartiles_v1"; label: string } | null;
+  repair_suggestions: { job_id: string; label: string; materials_cost: number; reason: string; confirmed: false }[];
+  repair_unknowns: string[]; repair_catalog_version: string; assessed_at: string; questions: string[];
+  preset: { id: string; label: string; values: ItemAnalyzeRequest };
+  inputs: ItemAnalyzeRequest; analysis_result: ItemAnalyzeResponse;
+}
+export interface ItemAssessmentResponse {
+  id: string; schema_version: 1; status: "processing" | "completed" | "failed" | "uncertain";
+  result: ItemAssessmentResult | null; failure_code: string | null; actual_cost: number | null; message: string | null;
+}
+export interface ItemAIBudget {
+  month: string; spent: number; reserved: number; target: number; reservation_per_run: number;
+  warning: boolean; available: boolean; reason: string | null; message: string | null; resets_at: string;
+}
+export interface SavedItemAssessment {
+  assessment_id: string; evidence: ItemAssessmentResult; confirmation: ItemAssessmentConfirmation;
+  effective_inputs: ItemAnalyzeRequest;
 }
 export type Verdict = "BUY" | "CONDITIONAL" | "PASS";
 export type Strategy = "flip" | "brrrr" | "wholesale";
