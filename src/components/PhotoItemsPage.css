@@ -77,8 +77,9 @@ body:has(.items-quick) { background: #faf6ee; color-scheme: light; }
 .quick-details { margin: 24px 0; border-block: 1px solid var(--line); padding: 14px 0; }
 .quick-details summary, .quick-sources summary { min-height: 44px; display: list-item; align-content: center; color: var(--green); font-size: 14px; font-weight: 600; }
 .quick-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-.quick-assumptions { padding: 16px; border-radius: 12px; background: #f3efdf; font-size: 12px; color: #435045; }
-.quick-assumptions p { margin-top: 7px; }
+.quick-assumptions { font-size: 12px; color: #435045; }
+.quick-answer .quick-keep { margin: 24px 0; font-size: 22px; }
+.quick-keep small { display: block; margin-top: 6px; font-size: 12px; color: #435045; }
 .quick-answer { border: 1px solid #aec2b0; border-radius: 20px; padding: 30px; background: #edf3e9; }
 .quick-answer h2 { font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.15; margin-bottom: 18px; }
 .quick-answer > p { font-size: 14px; }

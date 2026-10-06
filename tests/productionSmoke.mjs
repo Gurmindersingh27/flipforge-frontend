@@ -64,7 +64,7 @@ try {
   const deployed = new Map(await Promise.all(paths.map(async path => [path, Buffer.from(await (await request(frontend + path)).arrayBuffer())])));
   const javascript = [...deployed].filter(([p]) => p.endsWith('.js')).map(([, bytes]) => bytes.toString()).join('\n');
   assert.ok(javascript.includes(backend), 'Production bundle must target the expected API');
-  for (const text of ['Save New Revision', 'Itemized rehab scope', 'What changed since the previous version', 'rehab_scope', 'parent_deal_id']) {
+  for (const text of ['Save New Revision', 'Itemized rehab scope', 'What changed since the previous version', 'rehab_scope', 'parent_deal_id', 'Tell me about it', 'Full manual calculator']) {
     assert.ok(javascript.includes(text), `Missing release feature: ${text}`);
   }
   check('Production HTML and assets load with expected API and revision features');
