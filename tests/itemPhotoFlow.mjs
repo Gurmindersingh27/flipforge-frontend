@@ -55,16 +55,23 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await until(`Boolean(document.querySelector('input[type=file]'))`);
     await evaluate(`(async()=>{const c=document.createElement('canvas');c.width=1800;c.height=1200;const x=c.getContext('2d');x.fillStyle='#ded5c4';x.fillRect(0,0,1800,1200);x.strokeStyle='#765536';x.lineWidth=45;x.strokeRect(620,240,560,390);x.beginPath();x.moveTo(620,630);x.lineTo(560,950);x.moveTo(1180,630);x.lineTo(1240,950);x.moveTo(590,760);x.lineTo(1210,760);x.stroke();const blob=await new Promise(resolve=>c.toBlob(resolve,'image/jpeg'));const d=new DataTransfer();d.items.add(new File([blob],'chair-fixture.jpg',{type:'image/jpeg'}));const e=document.querySelector('input[type=file]');e.files=d.files;e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     await until(`document.querySelectorAll('.quick-photo img').length === 1 && !document.body.textContent.includes('Preparing your photos')`);
+    await until(`document.querySelector('.quick-photo img')?.naturalWidth === 1568`);
   }
   async function runAI() {
+    const before = await calls();
     await until(`document.querySelector('[data-quick-assess]') && !document.querySelector('[data-quick-assess]').disabled`);
     await evaluate(`document.querySelector('[data-quick-assess]').click()`);
-    await until(`Boolean(document.querySelector('.quick-resale')) || Boolean(document.querySelector('[role=alert]')) || Boolean(document.getElementById('quick-resale_low'))`);
+    for (let attempt = 0; attempt < 80 && await calls() === before; attempt++) await pause(50);
+    assert.equal(await calls(), before + 1);
+    await until(`Boolean(document.querySelector('.quick-resale')) || Boolean(document.querySelector('[role=alert]')) || Boolean(document.querySelector('.quick-sources'))`);
     await until(`!document.querySelector('[aria-label="Confirm estimate"] fieldset')?.disabled`);
   }
   async function calculate(status) {
     await evaluate(`document.querySelector('[data-quick-calculate]').click()`);
     await until(`document.querySelector('[data-quick-status]')?.dataset.quickStatus === ${JSON.stringify(status)}`);
+  }
+  async function savedConfirmation() {
+    await until(`document.querySelector('[aria-label="Save item"] [role="status"]')?.textContent.startsWith('Saved version #')`);
   }
   async function geometry() {
     assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'), 'Photo flow must not overflow');
@@ -101,7 +108,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await evaluate(`document.querySelector('.quick-sources').open=true`);
     assert.ok(await evaluate(`Array.from(document.querySelectorAll('.quick-sources a')).every(a=>a.rel==='noopener noreferrer'&&a.protocol==='https:')`));
     await click('button', 'Save item');
-    await until(`document.body.textContent.includes('Saved version #')`);
+    await savedConfirmation();
     savedFind = (await api('/api/items')).items[0];
     assert.equal(savedFind.inputs.repairs, 15); assert.equal(savedFind.notes, 'Scratched seat. Check the joints.');
     assert.equal(savedFind.assessment.confirmation.preset_acknowledged, true);
@@ -111,7 +118,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await open(`?find=${savedFind.id}`);
     await until(`Boolean(document.querySelector('[data-quick-status]'))`);
     await fill(input('item-notes'), 'Notes-only new version.');
-    await click('button', 'Save new version'); await until(`document.body.textContent.includes('Saved version #')`);
+    await click('button', 'Save new version'); await savedConfirmation();
     const child = (await api('/api/items')).items[0];
     assert.equal(child.parent_item_id, savedFind.id); assert.equal(child.root_item_id, savedFind.root_item_id);
     assert.deepEqual(child.analysis_result, savedFind.analysis_result);
@@ -147,14 +154,14 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false);
   await calculate('stretch');
   assert.equal(await evaluate(`${input('item-notes')}.value`), 'Keep this note through cost changes.');
-  await click('button', 'Save item'); await until(`document.body.textContent.includes('Saved version #')`);
+  await click('button', 'Save item'); await savedConfirmation();
   assert.equal((await api('/api/items')).items[0].inputs.fee_pct, .143);
   checks.push('Photo requests reject invalid numbers before spending, lock before token lookup, ignore duplicate taps, and recalculate 14.3% through the server without losing notes');
 
   await mode('short'); await open(); await upload(); await runAI();
   await until(`Boolean(document.getElementById('quick-resale_low'))`);
   await fill(input('quick-resale_low'), '90'); await calculate('within_budget');
-  await click('button', 'Save item'); await until(`document.body.textContent.includes('Saved version #')`);
+  await click('button', 'Save item'); await savedConfirmation();
   const own = (await api('/api/items')).items[0];
   assert.equal(own.assessment.confirmation.resale_source, 'user_estimate');
   assert.equal(own.inputs.resale_low, 90); assert.equal(own.inputs.resale_high, 90);
@@ -187,6 +194,17 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   assert.equal(await evaluate(`${input('quick-description')}.value`), '');
   assert.equal(await evaluate(`document.querySelectorAll('.quick-photo').length`), 0);
   checks.push('Account changes while waiting for the sign-in token cancel photo submissions and clear uploaded photos');
+
+  await open(); await upload();
+  await evaluate(`(()=>{const original=window.fetch;window.fetch=async(input,init)=>{const response=await original(input,init);if(new URL(typeof input==='string'?input:input.url).pathname==='/api/items/assess')await new Promise(resolve=>setTimeout(resolve,600));return response;};})()`);
+  const onWire = await calls();
+  await evaluate(`document.querySelector('[data-quick-assess]').click()`);
+  for (let i=0;i<80 && await calls()===onWire;i++) await pause(25);
+  assert.equal(await calls(), onWire + 1);
+  await evaluate(`window.switchFixtureUser('other-user')`); await pause(800);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status], .quick-sources'))`), false);
+  assert.equal(await evaluate(`document.querySelectorAll('.quick-photo').length`), 0);
+  checks.push('An assessment response arriving after an account switch cannot restore the previous account\'s evidence or photos');
 
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();

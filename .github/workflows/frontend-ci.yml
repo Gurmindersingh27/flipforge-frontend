@@ -61,3 +61,8 @@ jobs:
         with:
           name: browser-flow-evidence
           path: frontend/browser-artifacts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: photo-flow-evidence
+          path: frontend/browser-artifacts/photo-*.png
