@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { analyzeItem } from "../lib/api";
+import { Link, useSearchParams } from "react-router-dom";
+import { SignInButton, useAuth } from "@clerk/clerk-react";
+import { analyzeItem, getItem } from "../lib/api";
 import {
-  buildItemRequest, emptyItemForm, formatItemMoney, formatItemPercent, hasPersonalDefault,
+  formatItemMoney, formatItemPercent, hasPersonalDefault,
   ITEM_FIELDS, ITEM_LABELS, ITEM_PREFERENCES, ITEM_STATUS_TEXT,
 } from "../lib/itemAnalysis";
-import type { ItemForm } from "../lib/itemAnalysis";
-import type { ItemAnalyzeResponse, ItemFinancialInput, ItemPreference, ItemScenario } from "../lib/types";
+import { buildSavedItemInputs, newSavedItemForm, restoreItemForm, safeItemLink } from "../lib/savedItems";
+import type { SavedItemForm } from "../lib/savedItems";
+import type { ItemAnalyzeResponse, ItemFinancialInput, ItemPreference, ItemScenario, SavedItem } from "../lib/types";
+import ItemSavePanel from "./ItemSavePanel";
 
 const inputClass = "w-full min-w-0 rounded-lg border border-white/20 bg-[#0f1115] px-3 py-2.5 text-base text-white focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-60";
 const panelClass = "ff-panel min-w-0 rounded-2xl p-4 sm:p-6";
@@ -44,7 +47,32 @@ function Scenario({ value, high, offersOnly }: { value: ItemScenario; high?: boo
 }
 
 export default function ItemsPage() {
-  const [form, setForm] = useState(emptyItemForm);
+  const { isLoaded, isSignedIn, userId } = useAuth();
+  const [params] = useSearchParams();
+  const saved = params.get("saved");
+  const [identity, setIdentity] = useState({ userId: isLoaded ? userId ?? null : null, generation: 0 });
+  const resolvedUser = userId ?? null;
+  if (isLoaded && identity.userId !== resolvedUser) {
+    // Anonymous drafts survive sign-in. Leaving an established account clears
+    // the entire editor, including pending saves and any private saved data.
+    setIdentity({ userId: resolvedUser, generation: identity.generation + (identity.userId === null ? 0 : 1) });
+  }
+  if (saved !== null && !isLoaded) return <p role="status">Loading sign-in…</p>;
+  if (saved !== null && !isSignedIn) return <div className="space-y-4 py-8"><p>Sign in to reopen this saved item.</p><SignInButton mode="modal"><button className="min-h-11 rounded-lg border border-white/30 px-4 py-2">Sign in to reopen item</button></SignInButton><Link to="/items" className="block py-2 text-amber-200 underline">New item</Link></div>;
+  return <ItemsEditor key={`${identity.generation}:${saved ?? "new"}`} savedId={saved} />;
+}
+
+function ItemsEditor({ savedId }: { savedId: string | null }) {
+  const { getToken } = useAuth();
+  const [form, setForm] = useState(newSavedItemForm);
+  const [snapshot, setSnapshot] = useState<SavedItem | null>(null);
+  const [initial, setInitial] = useState<SavedItem | null>(null);
+  const [reopening, setReopening] = useState(savedId !== null);
+  const [reopenError, setReopenError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [editVersion, setEditVersion] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [savedResult, setSavedResult] = useState(false);
   const [result, setResult] = useState<ItemAnalyzeResponse | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [requestError, setRequestError] = useState("");
@@ -54,6 +82,26 @@ export default function ItemsPage() {
   const inFlight = useRef(false);
   const resultsRef = useRef<HTMLElement>(null);
 
+  useEffect(() => {
+    if (savedId === null) return;
+    let active = true;
+    void (async () => {
+      try {
+        if (!/^[1-9]\d*$/.test(savedId) || !Number.isSafeInteger(Number(savedId))) throw new Error("Item not found.");
+        const token = await getToken();
+        if (!active) return;
+        if (!token) throw new Error("Sign in again to reopen this item.");
+        const saved = await getItem(Number(savedId), token);
+        if (!active) return;
+        setForm(restoreItemForm(saved.inputs)); setSnapshot(saved); setInitial(saved);
+        setResult(saved.analysis_result); setSavedResult(true); setReopenError("");
+      } catch (error) {
+        if (active) setReopenError(error instanceof Error ? error.message : "Could not reopen this item.");
+      } finally { if (active) setReopening(false); }
+    })();
+    return () => { active = false; };
+  }, [savedId, getToken, loadAttempt]);
+
   useEffect(() => () => { sequence.current++; inFlight.current = false; }, []);
   useEffect(() => {
     if (!loading) return;
@@ -62,26 +110,27 @@ export default function ItemsPage() {
   }, [loading]);
   useEffect(() => { if (result) resultsRef.current?.focus(); }, [result]);
 
-  function edit(update: (previous: ItemForm) => ItemForm) {
+  function edit(update: (previous: SavedItemForm) => SavedItemForm) {
     // Editing invalidates an outstanding request immediately, not after a render.
     sequence.current++;
     inFlight.current = false;
     setLoading(false); setSlow(false); setResult(null); setErrors({}); setRequestError("");
     setForm(update);
+    setEditVersion(value => value + 1); setSavedResult(false);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (inFlight.current) return;
+    if (inFlight.current || saving) return;
     const current = ++sequence.current;
     setResult(null); setRequestError(""); setErrors({}); setSlow(false);
-    const built = buildItemRequest(form);
+    const built = buildSavedItemInputs(form);
     if (!built.ok) { setErrors(built.errors); return; }
     inFlight.current = true;
     setLoading(true);
     try {
       const response = await analyzeItem(built.payload);
-      if (current === sequence.current) setResult(response);
+      if (current === sequence.current) { setResult(response); setSavedResult(false); }
     } catch (error) {
       if (current === sequence.current) setRequestError(error instanceof Error ? error.message : "Analysis failed. Your inputs are still here. Try again.");
     } finally {
@@ -118,25 +167,31 @@ export default function ItemsPage() {
     </div>;
   }
 
+  if (reopening || reopenError) return <main className="space-y-4 py-8"><Link to="/my-flips" className="text-amber-200 underline">My Flips</Link>{reopening ? <p role="status">Reopening your saved item. The service may take a moment to start.</p> : <div role="alert"><p>{reopenError}</p><button type="button" onClick={() => { setReopening(true); setReopenError(""); setLoadAttempt(value => value + 1); }} className="min-h-11 py-2 text-amber-200 underline">Try reopening again</button></div>}</main>;
+
   return <div className="min-h-screen min-w-0 bg-[#0f1115] text-slate-100">
     <nav aria-label="Items navigation" className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 py-4">
       <Link to="/" className="text-sm font-bold text-white">Flip<span className="text-amber-400">Forge</span></Link>
+      <Link to="/my-flips" className="rounded py-2 text-sm text-amber-200 underline">My Flips</Link>
       <Link to="/" className="rounded py-2 text-sm text-white/80 underline underline-offset-4">Back to Houses</Link>
     </nav>
     <main className="mx-auto max-w-5xl min-w-0 space-y-6 py-6">
       <header>
         <p className="text-xs font-semibold uppercase tracking-widest text-amber-200">Items / Manual furniture calculator</p>
         <h1 className="mt-3 font-serif-display text-white" style={{ fontSize: "clamp(1.8rem, 4vw, 2.5rem)", lineHeight: 1.15 }}>Is this flip worth your time?</h1>
-        <p className="mt-3 max-w-2xl text-sm text-white/75">Enter your estimates to see your purchase budget, cash left and profit after your time. No sign-in needed. Nothing here is saved.</p>
+        <p className="mt-3 max-w-2xl text-sm text-white/75">Enter your estimates to see your purchase budget, cash left and profit after your time. No sign-in needed to calculate. Items are saved only when you choose Save.</p>
+        {snapshot && <p className="mt-3 text-sm text-amber-200">Version #{snapshot.id}. Saving again creates a new linked version; this saved version stays unchanged.</p>}
+        {initial && safeItemLink(initial.listing_url) && <a href={safeItemLink(initial.listing_url)!} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block py-2 text-sm underline">Saved listing</a>}
       </header>
       <form onSubmit={submit} noValidate className="space-y-5">
+        <fieldset disabled={saving} className="min-w-0 space-y-5">
         <section className={panelClass} aria-label="Item details">
           <h2 className="text-lg font-semibold">The item</h2>
           <div className="mt-4 grid min-w-0 gap-4 sm:grid-cols-2">
             {(["item_name", "category"] as const).map(field => <div key={field} className="min-w-0">
               <label htmlFor={`item-${field}`} className="mb-2 block text-sm">{field === "item_name" ? "Item name (optional)" : "Category (optional)"}</label>
-              <input id={`item-${field}`} type="text" value={form[field]} maxLength={field === "item_name" ? 200 : 100}
-                onChange={event => edit(previous => ({ ...previous, [field]: event.target.value }))} className={inputClass} />
+              <textarea id={`item-${field}`} rows={2} value={form[field]} maxLength={field === "item_name" ? 200 : 100}
+                onChange={event => edit(previous => ({ ...previous, [field]: event.target.value, literalEmptyText: { ...previous.literalEmptyText, [field]: false } }))} className={inputClass} />
               {errors[field] && <p className="mt-1 text-sm text-red-300">{errors[field]}</p>}
             </div>)}
           </div>
@@ -148,7 +203,7 @@ export default function ItemsPage() {
         </fieldset>)}
         <details className={panelClass}>
           <summary className="cursor-pointer rounded py-1 font-semibold focus-visible:outline-2 focus-visible:outline-amber-300">Personal defaults for this page</summary>
-          <p className="mt-3 text-sm text-white/70">Optional. Enter a default here, then select “Use my personal default” above. Blank means no personal default supplied. These values disappear when you leave or reload this page.</p>
+          <p className="mt-3 text-sm text-white/70">Optional. Enter a default here, then select “Use my personal default” above. Blank means no personal default supplied. Unsaved values disappear when you leave or reload this page. Saving keeps them with this item only.</p>
           <div className="mt-4 grid min-w-0 gap-5 sm:grid-cols-2">
             {ITEM_PREFERENCES.map(field => <div key={field} className="min-w-0">
               <label htmlFor={`personal-${field}`} className="mb-2 block text-sm">Personal default: {ITEM_LABELS[field]}</label>
@@ -171,9 +226,14 @@ export default function ItemsPage() {
           {loading ? "Calculating…" : "Calculate my flip"}
         </button>
         {loading && <p role="status" className="text-sm text-white/75">{slow ? "This is taking longer than usual while the service starts. Your inputs are still here." : "Calculating your offers…"}</p>}
+        </fieldset>
       </form>
+      <ItemSavePanel form={form} initial={initial} parentId={snapshot?.id ?? null} editVersion={editVersion} onErrors={setErrors}
+        onBusy={busy => { setSaving(busy); if (busy) { sequence.current++; inFlight.current = false; setLoading(false); } }}
+        onSaved={saved => { setSnapshot(saved); setResult(saved.analysis_result); setSavedResult(true); }} />
       {result && <section ref={resultsRef} tabIndex={-1} aria-label="Items analysis result" data-item-status={result.status} className="min-w-0 space-y-4 rounded-xl focus-visible:outline-2 focus-visible:outline-amber-300">
         <header className={panelClass}>
+          {savedResult && <p className="mb-2 text-sm text-amber-200">Saved result for version #{snapshot?.id}</p>}
           <h2 className="text-xl font-semibold">{ITEM_STATUS_TEXT[result.status].title}</h2>
           <p className="mt-2 text-sm text-white/80">{ITEM_STATUS_TEXT[result.status].explanation}</p>
           <p className="mt-2 text-xs text-white/65">Based only on your estimates. Not an inspection, price prediction or AI assessment.</p>

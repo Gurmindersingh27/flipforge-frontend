@@ -11,8 +11,62 @@ import type {
   SavedDeal,
   ItemAnalyzeRequest,
   ItemAnalyzeResponse,
+  SaveItemRequest,
+  SavedItem,
+  SavedItemList,
 } from "./types";
 import { ITEM_LABELS } from "./itemAnalysis";
+
+export class ItemApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) { super(message); this.status = status; }
+}
+export class UnconfirmedItemSaveError extends Error {
+  constructor() { super("This item may already be saved. Check My Flips before saving again."); }
+}
+async function itemRejection(res: Response): Promise<ItemApiError> {
+  const data = await res.json().catch(() => null);
+  const detail = res.status === 422 && Array.isArray(data?.detail)
+    ? data.detail.map((entry: { loc?: unknown[]; msg?: string }) => `${entry.loc?.filter(v => v !== "body").join(" / ") || "Inputs"}: ${entry.msg || "Check this value."}`).join("\n")
+    : res.status === 404 ? "Item not found."
+    : res.status === 401 || res.status === 403 ? "Your session could not be verified. Sign in again to access saved items."
+    : `Items request failed (HTTP ${res.status}). Try again.`;
+  return new ItemApiError(res.status, detail);
+}
+export async function saveItem(payload: SaveItemRequest, token: string): Promise<SavedItem> {
+  let rejection: ItemApiError | null = null;
+  try {
+    return await withStartupDeadline(async signal => {
+      const res = await fetch(`${API_BASE_URL}/api/items/save`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload), signal,
+      });
+      if (!res.ok) {
+        // Remember a definite rejection even if reading its body times out.
+        if (res.status >= 400 && res.status < 500) rejection = new ItemApiError(res.status, `Save rejected (HTTP ${res.status}). Check your inputs or sign in again.`);
+        const error = await itemRejection(res);
+        if (rejection) rejection = error;
+        throw error;
+      }
+      const saved: SavedItem = await res.json();
+      if (!saved || !Number.isSafeInteger(saved.id) || saved.id <= 0 || saved.schema_version !== 1 || !saved.analysis_result || !saved.inputs) throw new UnconfirmedItemSaveError();
+      return saved;
+    }, "Save confirmation took too long.");
+  } catch { throw rejection ?? new UnconfirmedItemSaveError(); }
+}
+async function readItem<T>(path: string, token: string): Promise<T> {
+  return withStartupDeadline(async signal => {
+    const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal });
+    if (!res.ok) throw await itemRejection(res);
+    return await res.json();
+  }, "Loading saved items took too long. Try again.");
+}
+export function getItems(token: string, offset = 0): Promise<SavedItemList> {
+  return readItem(`/api/items?limit=20&offset=${offset}`, token);
+}
+export function getItem(id: number, token: string): Promise<SavedItem> {
+  return readItem(`/api/items/${id}`, token);
+}
 
 /**
  * API base URL resolution:
