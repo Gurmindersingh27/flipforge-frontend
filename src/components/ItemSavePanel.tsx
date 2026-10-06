@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { saveItem, UnconfirmedItemSaveError } from "../lib/api";
 import { buildItemSave } from "../lib/savedItems";
 import type { SavedItemForm } from "../lib/savedItems";
-import type { SavedItem } from "../lib/types";
+import type { SavedItem, SaveItemRequest } from "../lib/types";
 
 interface Props {
   form: SavedItemForm;
@@ -14,8 +14,11 @@ interface Props {
   onErrors: (errors: Record<string, string>) => void;
   onBusy: (busy: boolean) => void;
   onSaved: (saved: SavedItem) => void;
+  assessment?: Pick<SaveItemRequest, "assessment_id" | "assessment_confirmation">;
+  light?: boolean;
+  disabled?: boolean;
 }
-export default function ItemSavePanel({ form, initial, parentId, editVersion, onErrors, onBusy, onSaved }: Props) {
+export default function ItemSavePanel({ form, initial, parentId, editVersion, onErrors, onBusy, onSaved, assessment, light, disabled }: Props) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [link, setLink] = useState(initial?.listing_url ?? "");
@@ -34,7 +37,7 @@ export default function ItemSavePanel({ form, initial, parentId, editVersion, on
   }, [busy]);
 
   async function save() {
-    if (locked.current || !isSignedIn || uncertain) return;
+    if (locked.current || !isSignedIn || uncertain || disabled) return;
     const built = buildItemSave(form, notes, link, parentId);
     setErrors(built.ok ? {} : built.errors); onErrors(built.ok ? {} : built.errors);
     if (!built.ok) return;
@@ -44,7 +47,7 @@ export default function ItemSavePanel({ form, initial, parentId, editVersion, on
       const token = await getToken();
       if (current !== sequence.current) return;
       if (!token) throw new Error("Sign in again to save this item.");
-      const saved = await saveItem(built.payload, token);
+      const saved = await saveItem({ ...built.payload, ...assessment }, token);
       if (current !== sequence.current) return;
       setSavedVersion(editVersion); setMessage(`Saved version #${saved.id}.`); onSaved(saved);
     } catch (error) {
@@ -56,7 +59,7 @@ export default function ItemSavePanel({ form, initial, parentId, editVersion, on
     }
   }
   const inputClass = "mt-2 w-full min-w-0 rounded-lg border border-white/20 bg-[#0f1115] p-3 text-base";
-  return <section aria-label="Save item" className="ff-panel min-w-0 space-y-4 rounded-2xl p-4 sm:p-6">
+  return <section aria-label="Save item" className={`${light ? "quick-save" : "ff-panel"} min-w-0 space-y-4 rounded-2xl p-4 sm:p-6`}>
     <h2 className="text-lg font-semibold">Keep this find</h2>
     <p className="text-sm text-white/75">Incomplete finds can be saved. Saved items can’t be deleted yet. Keep seller phone numbers and home addresses out of notes.</p>
     <fieldset disabled={busy} className="min-w-0 space-y-4">
@@ -69,7 +72,7 @@ export default function ItemSavePanel({ form, initial, parentId, editVersion, on
           onChange={event => { setNotes(event.target.value); setSavedVersion(null); setErrors({}); if (!uncertain) setMessage(""); }} />
         {errors.notes && <p role="alert" className="text-sm text-red-300">{errors.notes}</p>}</div>
     </fieldset>
-    {isLoaded && (isSignedIn ? <button type="button" disabled={busy || uncertain || savedVersion === editVersion}
+    {isLoaded && (isSignedIn ? <button type="button" disabled={disabled || busy || uncertain || savedVersion === editVersion}
       onClick={save} className="min-h-11 rounded-xl bg-amber-300 px-5 py-3 font-semibold text-slate-950 disabled:opacity-60">
       {busy ? "Saving…" : savedVersion === editVersion ? "Saved" : parentId ? "Save new version" : "Save item"}
     </button> : <SignInButton mode="modal"><button type="button" className="min-h-11 rounded-lg border border-white/30 px-4 py-2">Sign in to save item</button></SignInButton>)}

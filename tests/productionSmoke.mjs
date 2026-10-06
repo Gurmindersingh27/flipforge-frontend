@@ -46,7 +46,7 @@ try {
   assert.ok(paths.some(p => p.endsWith('.js')) && paths.some(p => p.endsWith('.css')), 'Expected Vite JS/CSS assets');
   // Direct requests exercise hosting rewrites, not Vite's local SPA fallback.
   // These load only the public shell, never a signed-in saved-deal record.
-  for (const route of ['/deals', '/deal/1', '/items', '/my-flips', '/items?saved=1']) {
+  for (const route of ['/deals', '/deal/1', '/items', '/my-flips', '/items?saved=1', '/items?manual=1', '/items?find=1']) {
     const response = await request(`${frontend}${route}`);
     assert.ok(response.headers.get('content-type')?.includes('text/html'), `${route}: expected HTML`);
     const routeHtml = await response.text();
@@ -57,6 +57,10 @@ try {
   const privateItems = await request(`${backend}/api/items`, {}, 403);
   assert.equal((await privateItems.json()).detail, 'Not authenticated');
   check('Saved Items requires authentication without accessing or writing records');
+  for (const path of ['/api/items/ai-budget', '/api/items/assessments/00000000-0000-4000-8000-000000000001']) {
+    assert.equal((await (await request(backend + path, {}, 403)).json()).detail, 'Not authenticated');
+  }
+  check('Items AI read routes require authentication; no paid assessment requested');
   const deployed = new Map(await Promise.all(paths.map(async path => [path, Buffer.from(await (await request(frontend + path)).arrayBuffer())])));
   const javascript = [...deployed].filter(([p]) => p.endsWith('.js')).map(([, bytes]) => bytes.toString()).join('\n');
   assert.ok(javascript.includes(backend), 'Production bundle must target the expected API');
@@ -85,6 +89,10 @@ try {
   assert.deepEqual(health, { status: 'ok' });
   check('Backend health');
   const schema = await (await request(`${backend}/openapi.json`)).json();
+  assert.ok(schema.paths['/api/items/assess']?.post);
+  assert.ok(schema.components.schemas.SaveItemRequest.properties.assessment_id);
+  assert.ok(schema.components.schemas.ItemAssessmentResponse);
+  check('Photo assessment and saved evidence contracts are live');
   for (const name of ['RehabScope', 'RehabScopeItem']) assert.ok(schema.components.schemas[name], `Missing ${name}`);
   for (const name of ['SaveDealRequest', 'SavedDealResponse']) {
     for (const field of ['rehab_scope', 'parent_deal_id', 'revision_note']) {

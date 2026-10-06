@@ -14,6 +14,9 @@ import type {
   SaveItemRequest,
   SavedItem,
   SavedItemList,
+  ItemAssessmentRequest,
+  ItemAssessmentResponse,
+  ItemAIBudget,
 } from "./types";
 import { ITEM_LABELS } from "./itemAnalysis";
 
@@ -66,6 +69,40 @@ export function getItems(token: string, offset = 0): Promise<SavedItemList> {
 }
 export function getItem(id: number, token: string): Promise<SavedItem> {
   return readItem(`/api/items/${id}`, token);
+}
+
+export class ItemAssessmentError extends Error {
+  status: number;
+  constructor(status: number, message: string) { super(message); this.status = status; }
+}
+async function itemAIRequest<T>(path: string, token: string, payload?: ItemAssessmentRequest): Promise<T> {
+  return withStartupDeadline(async signal => {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: payload ? "POST" : "GET", signal,
+      headers: { Authorization: `Bearer ${token}`, ...(payload ? { "Content-Type": "application/json" } : {}) },
+      ...(payload ? { body: JSON.stringify(payload) } : {}),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      const detail = data?.detail;
+      const message = response.status === 404 ? "Assessment not found."
+        : Array.isArray(detail) ? detail.map((entry: { loc?: unknown[]; msg?: string }) => `${entry.loc?.filter(x => x !== "body").join(" / ") || "Inputs"}: ${entry.msg ?? "Check this value."}`).join("\n")
+        : typeof detail?.message === "string" ? detail.message
+        : typeof detail === "string" ? detail : "AI couldn't finish. You can still enter your own estimate.";
+      throw new ItemAssessmentError(response.status, message);
+    }
+    if (!data) throw new Error("The estimate wasn't confirmed. Check its status before trying another photo estimate.");
+    return data as T;
+  }, "The estimate wasn't confirmed in time. Check its status before trying another photo estimate.");
+}
+export function assessItem(payload: ItemAssessmentRequest, token: string): Promise<ItemAssessmentResponse> {
+  return itemAIRequest("/api/items/assess", token, payload);
+}
+export function getItemAssessment(id: string, token: string): Promise<ItemAssessmentResponse> {
+  return itemAIRequest(`/api/items/assessments/${encodeURIComponent(id)}`, token);
+}
+export function getItemAIBudget(token: string): Promise<ItemAIBudget> {
+  return itemAIRequest("/api/items/ai-budget", token);
 }
 
 /**
