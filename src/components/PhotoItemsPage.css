@@ -102,6 +102,7 @@ body:has(.items-quick) { background: #faf6ee; color-scheme: light; }
 .quick-save button { background: var(--green); color: #fffdf8; }
 .quick-save [class*="text-red-"] { color: #94391f; }
 .quick-save a { color: var(--green); }
+.quick-save > a { display: block; width: fit-content; margin-top: 12px; }
 .quick-footer { max-width: 1120px; padding: 24px 32px 36px; margin: auto; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .quick-footer a { text-decoration: underline; text-underline-offset: 4px; }
 @media (max-width: 760px) {
