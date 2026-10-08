@@ -9,8 +9,17 @@ from app.services import item_assessment_service as ai
 from app.services import item_ai_budget_service as budget
 from app.db.session import SessionLocal
 from app.db.models.item_ai_budget import ItemAIMonth
-os.environ.update(ITEMS_AI_ALLOWED_USER_IDS='browser-fixture,other-user', ITEMS_ANTHROPIC_API_KEY='browser-test-only', ITEMS_ANTHROPIC_WORKSPACE_ID='browser-test', ITEMS_AI_WORKSPACE_LIMIT_CONFIRMED='20', ITEMS_REPAIR_CATALOG_APPROVED='2026-10-06-draft1')
+os.environ.update(ITEMS_AI_ALLOWED_USER_IDS='browser-fixture,other-user', ITEMS_ANTHROPIC_API_KEY='browser-test-only', ITEMS_ANTHROPIC_WORKSPACE_ID='browser-test', ITEMS_AI_WORKSPACE_LIMIT_CONFIRMED='20', ITEMS_REPAIR_CATALOG_APPROVED='2026-10-06-draft2')
 fixture_ai = {'mode': 'normal', 'calls': 0}
+# Only the legacy fixture substitutes the old catalog to create a real draft1
+# assessment/save before switching back to the current server catalog.
+current_suggestions = ai.suggestions
+def fixture_suggestions(report):
+    if fixture_ai['mode'] != 'legacy':
+        return current_suggestions(report)
+    old = {'clean': ('Clean and degrease', 5), 'paint_dresser': ('Prep and paint a small dresser', 35), 'refinish_top': ('Sand and refinish a small top', 25)}
+    return [dict(job_id=r.job_id, label=old[r.job_id][0], materials_cost=old[r.job_id][1], reason=r.reason, confirmed=False) for r in report.repairs], []
+ai.suggestions = fixture_suggestions
 def photo_provider(payload):
     fixture_ai['calls'] += 1
     mode = fixture_ai['mode']
@@ -26,12 +35,22 @@ def photo_provider(payload):
     if asking is None and 'twenty' in text.get('description', ''):
         asking = 20
     report = dict(item_name='Wood dining chair', category='Chair', asking_price=asking, repairs=[dict(job_id='sand_seat', reason='Visible scratches on the seat')], repair_unknowns=[], listings=listings)
+    jobs = {
+        'paint_chair': ['clean', 'scratch_touchup', 'paint_chair'],
+        'paint_dresser': ['clean', 'scratch_touchup', 'paint_dresser'],
+        'surfaces': ['clean', 'scratch_touchup', 'sand_seat', 'refinish_top'],
+        'overlap': ['clean', 'paint_dresser', 'refinish_top'],
+        'legacy': ['clean', 'paint_dresser', 'refinish_top'],
+    }.get(mode)
+    if jobs:
+        report['repairs'] = [dict(job_id=job, reason='Visible work: ' + job) for job in jobs]
     return dict(stop_reason='end_turn', usage=dict(input_tokens=12000, output_tokens=1000, server_tool_use=dict(web_search_requests=2)), content=[dict(type='text', text=json.dumps(report), citations=[dict(type='web_search_result_location', url=row['url'], cited_text='Used chair $' + str(row['price']) + ', local pickup.') for row in listings])])
 ai.call_provider = photo_provider
 @app.post('/browser-fixture/ai/{mode}')
 def ai_mode(mode: str):
     fixture_ai['mode'] = mode
-    os.environ['ITEMS_REPAIR_CATALOG_APPROVED'] = '' if mode == 'disabled' else '2026-10-06-draft1'
+    ai.VERSION = '2026-10-06-draft1' if mode == 'legacy' else '2026-10-06-draft2'
+    os.environ['ITEMS_REPAIR_CATALOG_APPROVED'] = '' if mode == 'disabled' else ai.VERSION
     with SessionLocal() as db:
         row = db.get(ItemAIMonth, budget.month_key())
         if row is None:
@@ -150,6 +169,113 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   checks.push('Photo finds save evidence, confirmed repairs and inputs through the real API; notes-only linked versions preserve results without another paid request');
   checks.push('Photo reopen ownership is enforced; switching accounts clears private inputs, results and notes');
   checks.push('Zero-hour results show one keep amount; entered hours restore distinct cash/profit, compact assumptions reflect edits, and Change focuses the costs');
+
+  const repairRows = () => evaluate(`Array.from(document.querySelectorAll('.quick-repairs li')).map(e=>({label:e.querySelector('strong').textContent,reason:e.querySelector('p').textContent,cost:e.querySelector('span').textContent}))`);
+  const supplyNote = "Assumes supplies you already own; if buying new, replace the allowance with what you'll spend, including tax.";
+  async function repairGeometry() {
+    await geometry();
+    assert.ok(await measure(`Array.from(document.querySelectorAll('.quick-repairs li')).every(e=>{
+      const row=e.getBoundingClientRect(),text=e.querySelector('div').getBoundingClientRect(),price=e.querySelector('span').getBoundingClientRect();
+      const range=document.createRange();range.selectNodeContents(e.querySelector('strong'));
+      return row.left>=0 && row.right<=innerWidth && text.right<=price.left && price.right<=row.right &&
+        e.scrollWidth<=e.clientWidth && [...range.getClientRects()].every(r=>r.left>=text.left-1 && r.right<=price.left);
+    })`), 'Long scope labels must wrap without covering or clipping the price');
+    assert.ok(await evaluate(`document.querySelector('.quick-repairs').textContent.includes(${JSON.stringify(supplyNote)})`));
+  }
+  for (const width of [390, 1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    for (const [kind, total] of [['paint_chair', 25], ['paint_dresser', 50], ['surfaces', 58]]) {
+      await mode(kind); await open(); await upload(); await fill(input('quick-asking'), '20'); await runAI();
+      const rows = await repairRows();
+      assert.equal(rows.length, kind === 'surfaces' ? 4 : 3);
+      assert.deepEqual(rows.slice(0, 2).map(r=>r.cost), kind === 'surfaces' ? ['$5.00', '$8.00'] : ['$0.00', '$0.00']);
+      assert.deepEqual(rows.slice(0, 2).map(r=>r.reason), ['Visible work: clean', 'Visible work: scratch_touchup']);
+      assert.equal(rows.filter(r=>r.label.includes('Included in')).length, kind === 'surfaces' ? 0 : 2);
+      if (kind === 'surfaces') assert.equal(rows.filter(r=>r.label.includes('This surface only')).length, 2);
+      assert.equal(await evaluate(`Boolean(${input('quick-repairs')})`), false);
+      await calculate(kind === 'paint_chair' ? 'stretch' : 'skip');
+      await click('button', 'Save item'); await savedConfirmation();
+      const suggested = (await api('/api/items')).items[0];
+      assert.equal(suggested.inputs.repairs, total);
+      assert.equal(suggested.assessment.evidence.repair_catalog_version, '2026-10-06-draft2');
+      assert.equal(suggested.assessment.confirmation.repairs.length, rows.length);
+      await repairGeometry(); await screenshot(`photo-${kind}-${width}.png`);
+      await click('button', 'Change repair budget');
+      assert.equal(await evaluate(`${input('quick-repairs')}.value`), String(total));
+      assert.deepEqual(await repairRows(), rows, 'Changing the budget must not hide any repair evidence');
+      await fill(input('quick-repairs'), String(total + 10));
+      await calculate('skip');
+      await click('button', 'Save new version'); await savedConfirmation();
+      const custom = (await api('/api/items')).items[0];
+      assert.equal(custom.inputs.repairs, total + 10);
+      assert.deepEqual(custom.assessment.confirmation.repairs, [{job_id:'custom', materials_cost:total + 10}]);
+      assert.deepEqual(custom.assessment.evidence, suggested.assessment.evidence);
+      assert.deepEqual(await api(`/api/items/${suggested.id}`), suggested, 'The earlier saved version must not change');
+      await repairGeometry();
+    }
+
+    await mode('overlap'); await open(); await upload(); await fill(input('quick-asking'), '20');
+    const before = await calls(); await runAI();
+    const rows = await repairRows();
+    assert.deepEqual(rows.map(r=>r.cost), ['$0.00', '$50.00', '$30.00']);
+    assert.ok(rows[0].label.includes('Included in Prep and paint a small dresser'));
+    assert.equal(rows[0].reason, 'Visible work: clean');
+    assert.equal(await evaluate(`${input('quick-repairs')}.value`), '', 'Mixed dresser/top work must start empty, never $80');
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Change repair budget')`), false);
+    assert.ok(await evaluate(`document.querySelector('.quick-repairs').textContent.includes('enter one total repair budget')`));
+    await evaluate(`document.querySelector('[data-quick-calculate]').click()`);
+    await until(`${input('quick-repairs')}.getAttribute('aria-invalid') === 'true'`);
+    assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false);
+    await repairGeometry(); await screenshot(`photo-overlap-empty-${width}.png`);
+    await fill(input('quick-repairs'), '0'); await calculate('within_budget');
+    await fill(input('quick-repairs'), '72'); await calculate('skip');
+    await click('button', 'Save item'); await savedConfirmation();
+    const mixed = (await api('/api/items')).items[0];
+    assert.equal(mixed.inputs.repairs, 72);
+    assert.deepEqual(mixed.assessment.confirmation.repairs, [{job_id:'custom', materials_cost:72}]);
+    assert.equal(mixed.assessment.evidence.inputs.repairs, null);
+    await open(`?find=${mixed.id}`); await until(`Boolean(document.querySelector('[data-quick-status]'))`);
+    assert.equal(await evaluate(`${input('quick-repairs')}.value`), '72');
+    assert.deepEqual(await repairRows(), rows);
+    await fill(input('item-notes'), 'Keep the painted body and stained top budget.');
+    await click('button', 'Save new version'); await savedConfirmation();
+    const child = (await api('/api/items')).items[0];
+    assert.equal(child.parent_item_id, mixed.id); assert.equal(child.root_item_id, mixed.root_item_id);
+    assert.deepEqual(child.analysis_result, mixed.analysis_result);
+    assert.deepEqual(child.assessment, mixed.assessment);
+    assert.deepEqual(await api(`/api/items/${mixed.id}`), mixed);
+    assert.equal(await calls(), before + 1, 'Calculations, reopen and saves must not make another provider call');
+    await repairGeometry(); await screenshot(`photo-overlap-reopened-${width}.png`);
+  }
+  checks.push('At 390/1440 all four paint-only included-work pairs stay visible at $0 with original reasons; seat/top combinations still sum');
+  checks.push('Long catalog scopes wrap clear of prices; the supplies sentence and all repair evidence stay visible while editing budgets');
+  checks.push('Dresser/top overlap opens empty with no $80 prefill; blank blocks calculation, explicit zero works, and entered $72 saves as one custom total');
+  checks.push('Mixed-finish save/reopen and notes-only versions preserve evidence, confirmed total and server results without another provider call or changing old records');
+
+  await mode('legacy'); await open(); await upload(); await fill(input('quick-asking'), '20'); await runAI();
+  await calculate('skip'); await click('button', 'Save item'); await savedConfirmation();
+  const legacy = (await api('/api/items')).items[0];
+  assert.equal(legacy.inputs.repairs, 65);
+  assert.equal(legacy.assessment.evidence.repair_catalog_version, '2026-10-06-draft1');
+  await mode('normal'); const beforeLegacy = await calls();
+  for (const width of [390, 1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride', {width, height:1000, deviceScaleFactor:1, mobile:width === 390});
+    await open(`?find=${legacy.id}`); await until(`Boolean(document.querySelector('[data-quick-status]'))`);
+    assert.equal(await evaluate(`${input('quick-repairs')}.value`), '65');
+    const rows = await repairRows();
+    assert.deepEqual(rows.map(r=>r.cost), ['$5.00', '$35.00', '$25.00']);
+    assert.deepEqual(rows.map(r=>r.label), legacy.assessment.evidence.repair_suggestions.map(r=>r.label));
+    assert.equal(await evaluate(`document.querySelectorAll('.quick-repairs .quick-notice').length`), 0);
+    await fill(input('item-notes'), `Draft1 notes-only version at ${width}.`);
+    await click('button', 'Save new version'); await savedConfirmation();
+    const child = (await api('/api/items')).items[0];
+    assert.deepEqual(child.assessment, legacy.assessment);
+    assert.deepEqual(child.analysis_result, legacy.analysis_result);
+    assert.deepEqual(await api(`/api/items/${legacy.id}`), legacy);
+    await repairGeometry(); await screenshot(`photo-draft1-reopened-${width}.png`);
+  }
+  assert.equal(await calls(), beforeLegacy);
+  checks.push('Draft1 snapshots reopen at 390/1440 with original $65 budget, labels, prices and evidence; notes-only saving does not apply draft2 rules');
 
   await open(`?find=${savedFind.id}&fixtureSignedOut=1`);
   await until(`document.body.textContent.includes('Sign in to reopen item')`);

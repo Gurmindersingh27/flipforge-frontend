@@ -251,9 +251,12 @@ function QuickEditor({ findId }: { findId: string | null }) {
             {ownResale && <p className="quick-small">Labeled as your estimate. You can change it later.</p>}
             {field("purchase_price", "What are they asking, including fees or tax?")}
             <div className="quick-repairs"><h3>The work to do</h3>
-              {evidence && !repairEdit ? <>
+              {evidence && <>
                 {evidence.repair_suggestions.length ? <ul>{evidence.repair_suggestions.map(repair => <li key={repair.job_id}><div><strong>{repair.label}</strong><p>{repair.reason}</p></div><span>{formatItemMoney(repair.materials_cost)}</span></li>)}</ul> : <p>No repair jobs suggested. Check for wobble, cracks and hidden damage before confirming no work.</p>}
                 <p className="quick-small">Suggested materials only, not a contractor quote.</p>
+                <p className="quick-small">Assumes supplies you already own; if buying new, replace the allowance with what you'll spend, including tax.</p>
+              </>}
+              {evidence && !repairEdit ? <>
                 <button type="button" className="quick-text-button" onClick={() => { setRepairEdit(true); edit(old => ({ ...old, values: { ...old.values, repairs: suggestedRepairTotal(evidence) } })); }}>Change repair budget</button>
               </> : <>{evidence?.repair_unknowns.map(note => <p className="quick-notice" key={note}>{note}</p>)}{field("repairs", "What will repairs cost?")}<p className="quick-small">Include materials and hired help. Enter 0 only if no work is needed.</p></>}
             </div>
