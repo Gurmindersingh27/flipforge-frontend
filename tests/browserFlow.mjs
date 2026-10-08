@@ -1470,7 +1470,7 @@ try {
   checks.push('267 representative/generated restore-and-rebuild requests match the complete real backend analysis, including assumptions and sources');
   const { identifier: savedItemsFixture } = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
     const nativeFetch=window.fetch.bind(window), nativeTimeout=window.setTimeout.bind(window);
-    window.setTimeout=(fn,ms,...args)=>nativeTimeout(fn,ms===120000?160:ms===8000?40:ms,...args);
+    window.setTimeout=(fn,ms,...args)=>nativeTimeout(fn,ms===120000?(window.savedItemMode==='hold-list'?10000:160):ms===8000?40:ms,...args);
     window.savedItemRequests=[];window.savedItemMode='pass';
     window.fetch=async(input,init={})=>{
       const url=new URL(typeof input==='string'?input:input.url,location.href);
