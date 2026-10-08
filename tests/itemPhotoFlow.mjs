@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 const fallbackLabels = [
   'Legacy plain title', 'Title (nested (scope))', 'Title (scope) trailing',
-  'Title(scope)', 'Title - Included in  (scope)', 'Title - Included in Host',
+  'Title(scope)', 'Title - Included in  (scope)', 'Title (scope)\n',
   'Title - Included in Host - Included in Other (scope)', 'Title ()',
   ' Title (scope)', 'Title ( scope)',
 ];

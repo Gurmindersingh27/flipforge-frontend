@@ -20,7 +20,7 @@ function RepairLabel({ label }: { label: string }) {
   const included = match?.[2];
   const host = included?.slice(" - Included in ".length);
   const scope = match?.[3];
-  const recognized = title && title.trim() === title && !title.includes(" - Included in") &&
+  const recognized = match?.[0] === label && title && title.trim() === title && !title.includes(" - Included in") &&
     (!host || (host.trim() === host && !host.includes(" - Included in"))) &&
     scope && scope.slice(2, -1).trim() === scope.slice(2, -1);
   return <div className="quick-repair-label">{recognized ? <><strong>{title}</strong>{included && <span className="quick-repair-included">{included}</span>}<span className="quick-repair-scope">{scope}</span></> : <strong>{label}</strong>}</div>;
