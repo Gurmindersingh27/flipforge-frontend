@@ -71,9 +71,13 @@ body:has(.items-quick) { background: #faf6ee; color-scheme: light; }
 .quick-repairs { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 24px; }
 .quick-repairs h3 { font-size: 16px; font-weight: 700; }
 .quick-repairs ul { list-style: none; padding: 0; margin: 18px 0 0; }
-.quick-repairs li { display: flex; gap: 18px; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-.quick-repairs li > span { white-space: nowrap; font-weight: 600; }
-.quick-repairs li p { font-size: 12px; color: var(--muted); }
+.quick-repairs li { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.quick-repair-copy { min-width: 0; overflow-wrap: anywhere; }
+.quick-repair-price { white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+.quick-repair-scope, .quick-repair-included { display: block; margin-top: 6px; font-size: 12px; line-height: 1.6; }
+.quick-repair-scope { color: var(--muted); }
+.quick-repair-included { color: var(--green); font-weight: 600; }
+.quick-repairs .quick-repair-reason { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 .quick-details { margin: 24px 0; border-block: 1px solid var(--line); padding: 14px 0; }
 .quick-details summary, .quick-sources summary { min-height: 44px; display: list-item; align-content: center; color: var(--green); font-size: 14px; font-weight: 600; }
 .quick-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
