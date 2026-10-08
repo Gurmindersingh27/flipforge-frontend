@@ -5,6 +5,7 @@ import { getItems } from "../lib/api";
 import { formatItemMoney, ITEM_STATUS_TEXT } from "../lib/itemAnalysis";
 import { safeItemLink } from "../lib/savedItems";
 import type { SavedItem } from "../lib/types";
+import "./MyFlipsPage.css";
 
 function SavedList() {
   const { getToken } = useAuth();
@@ -44,37 +45,38 @@ function SavedList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return <>
-    {!loading && !error && items.length === 0 && <p>No saved items yet. <Link to="/items" className="text-amber-200 underline">Log your first find.</Link></p>}
-    <div className="grid min-w-0 gap-4 md:grid-cols-2">
+    {!loading && !error && items.length === 0 && <div className="flips-message"><h2>No saved items yet.</h2><p>Keep your finds here so you can come back to the numbers.</p><Link to="/items" className="flips-primary">Log your first find.</Link></div>}
+    <div className="flips-grid">
       {items.map(item => {
         const link = safeItemLink(item.listing_url);
-        return <article key={item.id} data-saved-item={item.id} className="ff-panel min-w-0 space-y-3 rounded-2xl p-5">
-          <h2 className="break-words text-lg font-semibold">{item.inputs.item_name?.trim() || `Untitled item #${item.id}`}</h2>
-          <p className="text-sm text-white/65">Version #{item.id} · {new Date(item.created_at).toLocaleString("en-US")}</p>
-          {item.parent_item_id !== null && <p className="text-sm text-white/75">New version of #{item.parent_item_id}</p>}
-          <p>{ITEM_STATUS_TEXT[item.analysis_result.status].title}</p>
-          {item.analysis_result.low && <p className="text-sm">Most you should pay, including any fees or tax <strong className="mt-1 block font-jetbrains text-xl text-amber-200">{formatItemMoney(item.analysis_result.low.max_offer, true)}</strong><span className="text-white/65">At your low resale estimate.</span></p>}
-          {item.analysis_result.low && item.analysis_result.low.max_offer < 0 && <p className="text-sm text-white/70">Even a free item misses your target under the low resale estimate.</p>}
-          {item.notes && <details><summary className="cursor-pointer py-2 text-sm">Notes</summary><p className="whitespace-pre-wrap break-words text-sm">{item.notes}</p></details>}
-          <div className="flex flex-wrap gap-4">
-            <Link to={`/items?${item.assessment ? "find" : "saved"}=${item.id}`} className="min-h-11 py-2 text-amber-200 underline" aria-label={`Reopen saved item ${item.id}`}>Reopen</Link>
-            {link && <a href={link} target="_blank" rel="noopener noreferrer" className="min-h-11 py-2 text-white/80 underline">Listing</a>}
+        return <article key={item.id} data-saved-item={item.id} className="flips-card">
+          <h2>{item.inputs.item_name?.trim() || `Untitled item #${item.id}`}</h2>
+          <p className="flips-meta">Version #{item.id} · <time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString("en-US")}</time></p>
+          {item.parent_item_id !== null && <p className="flips-parent">New version of #{item.parent_item_id}</p>}
+          <p className="flips-status" data-status={item.analysis_result.status}>{ITEM_STATUS_TEXT[item.analysis_result.status].title}</p>
+          {item.analysis_result.low && <p className="flips-offer">Most you should pay, including any fees or tax <strong>{formatItemMoney(item.analysis_result.low.max_offer, true)}</strong><span>At your low resale estimate.</span></p>}
+          {item.analysis_result.low && item.analysis_result.low.max_offer < 0 && <p className="flips-caution">Even a free item misses your target under the low resale estimate.</p>}
+          {item.notes && <details className="flips-notes"><summary>Notes</summary><p>{item.notes}</p></details>}
+          <div className="flips-actions">
+            <Link to={`/items?${item.assessment ? "find" : "saved"}=${item.id}`} className="flips-primary" aria-label={`Reopen saved item ${item.id}`}>Reopen</Link>
+            {link && <a href={link} target="_blank" rel="noopener noreferrer" className="flips-link">Listing</a>}
           </div>
         </article>;
       })}
     </div>
-    {loading && <p role="status">Loading saved items. The service may take a moment to start.</p>}
-    {error && <div role="alert"><p>{error}</p><button type="button" onClick={() => load(retryOffset)} className="min-h-11 py-2 text-amber-200 underline">Try loading again</button></div>}
-    {!error && next !== null && <button type="button" disabled={loading} onClick={() => load(next)} className="min-h-11 rounded-lg border border-white/30 px-4 py-2 disabled:opacity-60">Load more</button>}
+    {loading && <p className="flips-message" role="status">Loading saved items. The service may take a moment to start.</p>}
+    {error && <div className="flips-message flips-error" role="alert"><p>{error}</p><button type="button" onClick={() => load(retryOffset)} className="flips-link">Try loading again</button></div>}
+    {!error && next !== null && <button type="button" disabled={loading} onClick={() => load(next)} className="flips-more">Load more</button>}
   </>;
 }
 export default function MyFlipsPage() {
   const { isLoaded, isSignedIn, userId } = useAuth();
-  return <main className="mx-auto min-h-screen max-w-5xl space-y-6 py-6 text-slate-100">
-    <nav className="flex flex-wrap gap-5" aria-label="My Flips navigation"><Link to="/items" className="min-h-11 py-2 text-amber-200 underline">New item</Link><Link to="/" className="min-h-11 py-2 text-white/80 underline">Back to Houses</Link></nav>
-    <h1 className="font-serif-display text-3xl">My Flips</h1>
-    <p className="text-sm text-white/75">Your saved item versions, newest first. Saved items can’t be deleted yet.</p>
-    {!isLoaded ? <p role="status">Loading sign-in…</p> : isSignedIn ? <SavedList key={userId} />
-      : <SignInButton mode="modal"><button className="min-h-11 rounded-lg border border-white/30 px-4 py-2">Sign in to view My Flips</button></SignInButton>}
-  </main>;
+  return <div className="my-flips">
+    <nav className="flips-nav" aria-label="My Flips navigation"><Link to="/items" className="flips-brand">Flip<span>Forge</span><small>FIND THE POTENTIAL.</small></Link><div><Link to="/items" className="flips-link">New item</Link><Link to="/" className="flips-link">Back to Houses</Link></div></nav>
+    <main className="flips-main">
+      <header className="flips-intro"><p className="flips-eyebrow">PICK UP WHERE YOU LEFT OFF</p><h1>My Flips</h1><p>Your saved item versions, newest first. Saved items can’t be deleted yet.</p></header>
+      {!isLoaded ? <p className="flips-message" role="status">Loading sign-in…</p> : isSignedIn ? <SavedList key={userId} />
+        : <div className="flips-message"><h2>Your finds, in one place.</h2><p>Sign in to return to your saved estimates and notes.</p><SignInButton mode="modal"><button className="flips-primary">Sign in to view My Flips</button></SignInButton></div>}
+    </main>
+  </div>;
 }

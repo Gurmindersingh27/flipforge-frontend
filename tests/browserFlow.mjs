@@ -7,6 +7,7 @@ import { resolve, join } from "node:path";
 import assert from "node:assert/strict";
 import { SAMPLE_SCENARIOS } from "../src/lib/sampleDeal.ts";
 import { restoreItemForm, buildSavedItemInputs } from "../src/lib/savedItems.ts";
+import { formatItemMoney, ITEM_STATUS_TEXT } from "../src/lib/itemAnalysis.ts";
 import { roundTripCases } from "./savedItems.test.ts";
 import { photoBackendFixture, runPhotoItemChecks } from "./itemPhotoFlow.mjs";
 
@@ -1480,6 +1481,7 @@ try {
       if(mode==='body')return new Response(new ReadableStream({start(controller){init.signal.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')));}}),{status:200});
       if(['403','404','422','500'].includes(mode))return Response.json({detail:mode==='422'?[{loc:['body','notes'],msg:'Invalid notes fixture'}]:'Rejected fixture'},{status:Number(mode)});
       if(mode==='slow')await new Promise(resolve=>nativeTimeout(resolve,70));
+      if(mode==='hold-list' && url.pathname==='/api/items')await new Promise(resolve=>window.releaseSavedItemList=resolve);
       const response=await nativeFetch(input,init);
       if(mode==='lost' && init.method==='POST'){window.lastCommittedItem=await response.json();throw new TypeError('Confirmation lost');}
       if(mode==='delayed-read' && request.method==='GET' && request.auth==='Bearer browser-fixture')await new Promise(resolve=>nativeTimeout(resolve,600));
@@ -1669,8 +1671,108 @@ try {
   }
   assert.deepEqual(await api('/api/deals'),originalHouses);
   checks.push('Saved list read deadlines and auth errors recover only on user retry; existing house records remain unchanged');
+
+  // Styling coverage uses real isolated saves. The existing auth/paging checks
+  // above stay intact; a held GET makes the loading state deterministic.
+  const visualInputs = Object.fromEntries(Object.entries(dresser).map(([key,value])=>[key,Number(value)]));
+  const visualParent = await itemApi('/api/items/save',{inputs:{...visualInputs,item_name:'Walnut dresser'}},'browser-fixture',201);
+  const visualCases = [];
+  for (const [name,changes] of [['Needs details',{repairs:null}],['Offer without asking price',{purchase_price:null}],['Within target',{hours:0,target_profit:30}],['Above target',{purchase_price:500}]]) {
+    visualCases.push(await itemApi('/api/items/save',{inputs:{...visualInputs,...changes,item_name:name}},'browser-fixture',201));
+  }
+  const longTitle = 'Solid wood dresser with a very long description ' + 'X'.repeat(150);
+  const multilineNotes = 'Check the drawer runners.\nKeep the original hardware.\n' + 'Finish condition needs a closer look. '.repeat(10);
+  const visualChild = await itemApi('/api/items/save',{inputs:{...visualInputs,item_name:longTitle},parent_item_id:visualParent.id,notes:multilineNotes,listing_url:'https://example.com/dresser'},'browser-fixture',201);
+  visualCases.push(visualChild);
+  assert.equal(new Set(visualCases.map(item=>item.analysis_result.status)).size,5);
+  const houseAppearance = () => measure(`(()=>{const b=getComputedStyle(document.body),r=getComputedStyle(document.getElementById('root'));return {background:b.backgroundColor,image:b.backgroundImage,color:b.color,padding:r.padding,maxWidth:r.maxWidth};})()`);
+  async function flipsGeometry() {
+    assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'), 'My Flips must fit the viewport');
+    assert.equal(await evaluate('getComputedStyle(document.body).backgroundColor'),'rgb(250, 246, 238)');
+    assert.ok(await measure(`Array.from(document.querySelectorAll('.my-flips a,.my-flips button,.my-flips summary')).filter(e=>e.getBoundingClientRect().height).every(e=>e.getBoundingClientRect().height>=44)`),'Visible actions must retain 44px targets');
+    assert.ok(await measure(`Array.from(document.querySelectorAll('[data-saved-item]')).every(e=>e.scrollWidth<=e.clientWidth)`),'No card may need sideways scrolling');
+    assert.ok(await evaluate(`document.body.textContent.includes('Saved items can’t be deleted yet.')`));
+  }
+  for (const width of [390,1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    await cdp('Page.navigate',{url:'http://127.0.0.1:5173/'});
+    await until(`Boolean(document.querySelector('a[href="/items"]'))`);
+    const darkHouse = await houseAppearance();
+    assert.notEqual(darkHouse.background,'rgb(250, 246, 238)');
+    await signedItems(); await evaluate(`window.savedItemMode='hold-list'`); await click('a','My Flips');
+    await until(`typeof window.releaseSavedItemList==='function' && document.body.textContent.includes('Loading saved items.')`);
+    await flipsGeometry(); await screenshot(`my-flips-loading-${width}.png`);
+    await evaluate(`window.savedItemMode='pass';window.releaseSavedItemList()`);
+    await until(`document.querySelectorAll('[data-saved-item]').length===20`);
+    for (const item of visualCases) {
+      const selector = `[data-saved-item="${item.id}"]`;
+      assert.equal(await evaluate(`document.querySelector('${selector} .flips-status').textContent`),ITEM_STATUS_TEXT[item.analysis_result.status].title);
+      assert.ok(await evaluate(`document.querySelector('${selector} .flips-meta').textContent.includes('Version #${item.id}')`));
+      assert.equal(await evaluate(`document.querySelector('${selector} time').textContent`),await evaluate(`new Date(${JSON.stringify(item.created_at)}).toLocaleString('en-US')`));
+      assert.equal(await evaluate(`document.querySelector('${selector} [aria-label="Reopen saved item ${item.id}"]').getAttribute('href')`),`/items?saved=${item.id}`);
+      if(item.analysis_result.low) assert.equal(await evaluate(`document.querySelector('${selector} .flips-offer strong').textContent`),formatItemMoney(item.analysis_result.low.max_offer,true));
+    }
+    const childSelector = `[data-saved-item="${visualChild.id}"]`;
+    assert.equal(await evaluate(`document.querySelector('${childSelector} h2').textContent`),longTitle);
+    assert.equal(await evaluate(`document.querySelector('${childSelector} .flips-parent').textContent`),`New version of #${visualParent.id}`);
+    assert.equal(await evaluate(`document.querySelector('${childSelector} .flips-offer strong').textContent`),'-$50');
+    assert.ok(await evaluate(`document.querySelector('${childSelector} .flips-caution').textContent.includes('Even a free item misses')`));
+    assert.equal(await evaluate(`document.querySelector('${childSelector} a[target="_blank"]').rel`),'noopener noreferrer');
+    await evaluate(`document.querySelector('${childSelector} summary').click()`);
+    assert.equal(await evaluate(`document.querySelector('${childSelector} details p').textContent`),multilineNotes);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('${childSelector} details p')).whiteSpace`),'pre-wrap');
+    await evaluate(`document.querySelector('${childSelector} .flips-primary').focus()`);
+    assert.equal(await evaluate(`getComputedStyle(document.activeElement).outlineStyle`),'solid');
+    await flipsGeometry(); await screenshot(`my-flips-cards-${width}.png`);
+
+    const firstIds = await evaluate(`Array.from(document.querySelectorAll('[data-saved-item]')).map(e=>Number(e.dataset.savedItem))`);
+    const readCount = await evaluate('window.savedItemRequests.length');
+    await evaluate(`window.savedItemMode='hold-list';const b=${byText('button','Load more')};b.click();b.click()`);
+    await until(`window.savedItemRequests.length===${readCount+1} && ${byText('button','Load more')}.disabled`);
+    await evaluate(`window.savedItemMode='pass';window.releaseSavedItemList()`);
+    await until(`document.querySelectorAll('[data-saved-item]').length>20`);
+    const nextIds = await evaluate(`Array.from(document.querySelectorAll('[data-saved-item]')).map(e=>Number(e.dataset.savedItem))`);
+    assert.deepEqual(nextIds.slice(0,20),firstIds); assert.equal(new Set(nextIds).size,nextIds.length);
+    assert.deepEqual(nextIds,[...nextIds].sort((a,b)=>b-a));
+    await flipsGeometry();
+    assert.ok(await evaluate(`window.savedItemRequests.every(r=>r.method==='GET')`),'Viewing and paging must not save');
+    await click('a','Back to Houses'); await until(`!document.querySelector('.my-flips') && Boolean(document.querySelector('a[href="/items"]'))`);
+    assert.deepEqual(await houseAppearance(),darkHouse,'Cream background and root sizing must not spill into Houses');
+    await screenshot(`my-flips-back-to-houses-${width}.png`);
+
+    await signedItems(); await evaluate(`window.savedItemMode='403'`); await click('a','My Flips');
+    await until(hasAlert('session')); await flipsGeometry(); await screenshot(`my-flips-error-${width}.png`);
+    assert.equal(await evaluate('window.savedItemRequests.length'),1);
+    await evaluate(`window.savedItemMode='pass'`); await click('button','Try loading again');
+    await until(`document.querySelectorAll('[data-saved-item]').length===20`);
+    assert.equal(await evaluate('window.savedItemRequests.length'),2);
+    await evaluate(`window.switchFixtureUser('empty-visual-user')`);
+    await until(`document.body.textContent.includes('No saved items yet.')`);
+    assert.equal(await evaluate(`document.querySelectorAll('[data-saved-item]').length`),0);
+    await flipsGeometry(); await screenshot(`my-flips-empty-${width}.png`);
+    await cdp('Page.navigate',{url:'http://127.0.0.1:5173/my-flips?fixtureSignedOut=1&fixtureAuthLoading=1'});
+    await until(`document.body.textContent.includes('Loading sign-in…')`);
+    await flipsGeometry(); assert.equal(await evaluate('window.savedItemRequests.length'),0);
+    await evaluate(`window.switchFixtureUser(null)`); await until(`Boolean(${byText('button','Sign in to view My Flips')})`);
+    await flipsGeometry(); await screenshot(`my-flips-signed-out-${width}.png`);
+    assert.equal(await evaluate('window.savedItemRequests.length'),0);
+  }
+  for(const item of [...visualCases,visualParent]) assert.deepEqual(await itemApi(`/api/items/${item.id}`),item);
+  assert.deepEqual(await api('/api/deals'),originalHouses);
+  checks.push('My Flips at 390/1440 preserves all five server status labels, negative offers, local timestamps, version lineage, long titles and multiline notes without overflow');
+  checks.push('My Flips loading, empty, error/retry, Load more, auth-loading and signed-out states fit both widths; paging locks duplicates and viewing makes no writes');
+  checks.push('My Flips cream theme and root sizing disappear on Back to Houses; house styles and all saved fixtures remain unchanged');
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:savedItemsFixture});
   await runPhotoItemChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
+  const photoFind = (await itemApi('/api/items')).items.find(item=>item.assessment);
+  assert.ok(photoFind);
+  await cdp('Page.navigate',{url:'http://127.0.0.1:5173/my-flips'});
+  await until(`Boolean(document.querySelector('[aria-label="Reopen saved item ${photoFind.id}"]'))`);
+  assert.equal(await evaluate(`document.querySelector('[aria-label="Reopen saved item ${photoFind.id}"]').getAttribute('href')`),`/items?find=${photoFind.id}`);
+  await evaluate(`document.querySelector('[aria-label="Reopen saved item ${photoFind.id}"]').click()`);
+  await until(`Boolean(document.querySelector('.items-quick')) && Boolean(document.getElementById('item-notes'))`);
+  assert.deepEqual(await itemApi(`/api/items/${photoFind.id}`),photoFind);
+  checks.push('Restyled My Flips retains the exact accessible Reopen link and opens photo finds in the photo screen without changing their snapshot');
   assert.deepEqual(errors, []);
   checks.push("No browser runtime exceptions");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));
