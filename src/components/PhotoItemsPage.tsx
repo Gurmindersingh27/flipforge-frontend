@@ -12,6 +12,20 @@ import ItemsPage from "./ItemsPage";
 import ItemSavePanel from "./ItemSavePanel";
 import "./PhotoItemsPage.css";
 
+function RepairLabel({ label }: { label: string }) {
+  // Display only: keep punctuation/spacing so the spans reproduce the stored
+  // label exactly. Unknown formats (including draft1) stay as one title.
+  const match = /^([^()\r\n]+?)( - Included in [^()\r\n]+)?( \([^()\r\n]+\))$/.exec(label);
+  const title = match?.[1];
+  const included = match?.[2];
+  const host = included?.slice(" - Included in ".length);
+  const scope = match?.[3];
+  const recognized = match?.[0] === label && title && title.trim() === title && !title.includes(" - Included in") &&
+    (!host || (host.trim() === host && !host.includes(" - Included in"))) &&
+    scope && scope.slice(2, -1).trim() === scope.slice(2, -1);
+  return <div className="quick-repair-label">{recognized ? <><strong>{title}</strong>{included && <span className="quick-repair-included">{included}</span>}<span className="quick-repair-scope">{scope}</span></> : <strong>{label}</strong>}</div>;
+}
+
 function Camera() {
   return <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M8 5l1-2h6l1 2h4a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z" /><circle cx="12" cy="12" r="4" /></svg>;
 }
@@ -252,7 +266,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
             {field("purchase_price", "What are they asking, including fees or tax?")}
             <div className="quick-repairs"><h3>The work to do</h3>
               {evidence && <>
-                {evidence.repair_suggestions.length ? <ul>{evidence.repair_suggestions.map(repair => <li key={repair.job_id}><div><strong>{repair.label}</strong><p>{repair.reason}</p></div><span>{formatItemMoney(repair.materials_cost)}</span></li>)}</ul> : <p>No repair jobs suggested. Check for wobble, cracks and hidden damage before confirming no work.</p>}
+                {evidence.repair_suggestions.length ? <ul>{evidence.repair_suggestions.map(repair => <li key={repair.job_id}><div className="quick-repair-copy"><RepairLabel label={repair.label} /><p className="quick-repair-reason">{repair.reason}</p></div><span className="quick-repair-price">{formatItemMoney(repair.materials_cost)}</span></li>)}</ul> : <p>No repair jobs suggested. Check for wobble, cracks and hidden damage before confirming no work.</p>}
                 <p className="quick-small">Suggested materials only, not a contractor quote.</p>
                 <p className="quick-small">Assumes supplies you already own; if buying new, replace the allowance with what you'll spend, including tax.</p>
               </>}

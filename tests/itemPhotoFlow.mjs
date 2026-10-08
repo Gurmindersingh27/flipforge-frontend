@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
 
+const fallbackLabels = [
+  'Legacy plain title', 'Title (nested (scope))', 'Title (scope) trailing',
+  'Title(scope)', 'Title - Included in  (scope)', 'Title (scope)\n',
+  'Title - Included in Host - Included in Other (scope)', 'Title ()',
+  ' Title (scope)', 'Title ( scope)',
+];
+
 // Appended ONLY to the temporary browser fixture, never imported by the app.
 // The real API, budget ledger, analysis engine and persistence run locally.
 // Only the paid provider and sign-in are substituted. No real credentials.
@@ -9,12 +16,18 @@ from app.services import item_assessment_service as ai
 from app.services import item_ai_budget_service as budget
 from app.db.session import SessionLocal
 from app.db.models.item_ai_budget import ItemAIMonth
+from app.services.item_repair_catalog import CATALOG
 os.environ.update(ITEMS_AI_ALLOWED_USER_IDS='browser-fixture,other-user', ITEMS_ANTHROPIC_API_KEY='browser-test-only', ITEMS_ANTHROPIC_WORKSPACE_ID='browser-test', ITEMS_AI_WORKSPACE_LIMIT_CONFIRMED='20', ITEMS_REPAIR_CATALOG_APPROVED='2026-10-06-draft2')
 fixture_ai = {'mode': 'normal', 'calls': 0}
 # Only the legacy fixture substitutes the old catalog to create a real draft1
 # assessment/save before switching back to the current server catalog.
 current_suggestions = ai.suggestions
 def fixture_suggestions(report):
+    if fixture_ai['mode'] == 'label_fallback':
+        rows, unknowns = current_suggestions(report)
+        for row, label in zip(rows, json.loads(${JSON.stringify(JSON.stringify(fallbackLabels))})):
+            row['label'] = label
+        return rows, unknowns
     if fixture_ai['mode'] != 'legacy':
         return current_suggestions(report)
     old = {'clean': ('Clean and degrease', 5), 'paint_dresser': ('Prep and paint a small dresser', 35), 'refinish_top': ('Sand and refinish a small top', 25)}
@@ -41,6 +54,8 @@ def photo_provider(payload):
         'surfaces': ['clean', 'scratch_touchup', 'sand_seat', 'refinish_top'],
         'overlap': ['clean', 'paint_dresser', 'refinish_top'],
         'legacy': ['clean', 'paint_dresser', 'refinish_top'],
+        'catalog': list(CATALOG),
+        'label_fallback': list(CATALOG),
     }.get(mode)
     if jobs:
         report['repairs'] = [dict(job_id=job, reason='Visible work: ' + job) for job in jobs]
@@ -170,16 +185,32 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   checks.push('Photo reopen ownership is enforced; switching accounts clears private inputs, results and notes');
   checks.push('Zero-hour results show one keep amount; entered hours restore distinct cash/profit, compact assumptions reflect edits, and Change focuses the costs');
 
-  const repairRows = () => evaluate(`Array.from(document.querySelectorAll('.quick-repairs li')).map(e=>({label:e.querySelector('strong').textContent,reason:e.querySelector('p').textContent,cost:e.querySelector('span').textContent}))`);
+  const repairRows = () => evaluate(`Array.from(document.querySelectorAll('.quick-repairs li')).map(e=>({label:e.querySelector('.quick-repair-label').textContent,reason:e.querySelector('.quick-repair-reason').textContent,cost:e.querySelector('.quick-repair-price').textContent}))`);
+  const normalJobs = new Set(), includedPairs = new Set();
+  async function repairEvidence(saved, rows) {
+    const original = saved.assessment.evidence.repair_suggestions;
+    assert.deepEqual(rows.map(r=>r.label), original.map(r=>r.label), 'Display must preserve every character of every server label');
+    assert.deepEqual(rows.map(r=>r.reason), original.map(r=>r.reason), 'AI reasons must remain unchanged');
+    for (const row of original) {
+      if (row.label.includes(' - Included in ')) includedPairs.add(row.job_id + ':' + row.label.split(' - Included in ')[1].split(' (')[0]);
+      else normalJobs.add(row.job_id);
+    }
+    assert.ok(await evaluate(`Array.from(document.querySelectorAll('.quick-repair-label')).every(e=>e.querySelector('.quick-repair-scope') && !e.querySelector('strong').textContent.includes('('))`));
+  }
   const supplyNote = "Assumes supplies you already own; if buying new, replace the allowance with what you'll spend, including tax.";
   async function repairGeometry() {
     await geometry();
     assert.ok(await measure(`Array.from(document.querySelectorAll('.quick-repairs li')).every(e=>{
-      const row=e.getBoundingClientRect(),text=e.querySelector('div').getBoundingClientRect(),price=e.querySelector('span').getBoundingClientRect();
-      const range=document.createRange();range.selectNodeContents(e.querySelector('strong'));
+      const row=e.getBoundingClientRect(),text=e.querySelector('.quick-repair-copy').getBoundingClientRect(),price=e.querySelector('.quick-repair-price').getBoundingClientRect();
+      const range=document.createRange();range.selectNodeContents(e.querySelector('.quick-repair-copy'));
       return row.left>=0 && row.right<=innerWidth && text.right<=price.left && price.right<=row.right &&
         e.scrollWidth<=e.clientWidth && [...range.getClientRects()].every(r=>r.left>=text.left-1 && r.right<=price.left);
-    })`), 'Long scope labels must wrap without covering or clipping the price');
+    })`), 'Titles, scopes, inclusion text and reasons must wrap without covering or clipping the price');
+    assert.ok(await measure(`Array.from(document.querySelectorAll('.quick-repair-scope')).every(e=>{
+      const s=getComputedStyle(e),title=getComputedStyle(e.parentElement.querySelector('strong'));
+      return s.display==='block' && Number(s.fontWeight)<Number(title.fontWeight) && parseFloat(s.fontSize)<parseFloat(title.fontSize);
+    })`), 'Scopes must be separate, smaller and lighter than job titles');
+    assert.ok(await measure(`Array.from(document.querySelectorAll('.quick-repair-included')).every(e=>e.textContent.includes('Included in ') && getComputedStyle(e).display==='block' && e.getBoundingClientRect().height>0)`));
     assert.ok(await evaluate(`document.querySelector('.quick-repairs').textContent.includes(${JSON.stringify(supplyNote)})`));
   }
   for (const width of [390, 1440]) {
@@ -196,6 +227,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
       await calculate(kind === 'paint_chair' ? 'stretch' : 'skip');
       await click('button', 'Save item'); await savedConfirmation();
       const suggested = (await api('/api/items')).items[0];
+      await repairEvidence(suggested, rows);
       assert.equal(suggested.inputs.repairs, total);
       assert.equal(suggested.assessment.evidence.repair_catalog_version, '2026-10-06-draft2');
       assert.equal(suggested.assessment.confirmation.repairs.length, rows.length);
@@ -231,6 +263,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await fill(input('quick-repairs'), '72'); await calculate('skip');
     await click('button', 'Save item'); await savedConfirmation();
     const mixed = (await api('/api/items')).items[0];
+    await repairEvidence(mixed, rows);
     assert.equal(mixed.inputs.repairs, 72);
     assert.deepEqual(mixed.assessment.confirmation.repairs, [{job_id:'custom', materials_cost:72}]);
     assert.equal(mixed.assessment.evidence.inputs.repairs, null);
@@ -252,6 +285,28 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   checks.push('Dresser/top overlap opens empty with no $80 prefill; blank blocks calculation, explicit zero works, and entered $72 saves as one custom total');
   checks.push('Mixed-finish save/reopen and notes-only versions preserve evidence, confirmed total and server results without another provider call or changing old records');
 
+  for (const width of [390, 1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride', {width, height:1000, deviceScaleFactor:1, mobile:width === 390});
+    await mode('catalog'); await open(); await upload(); await runAI();
+    await fill(input('quick-repairs'), '100'); await calculate('offer_only');
+    const rows = await repairRows();
+    assert.equal(rows.length, 10);
+    await click('button', 'Save item'); await savedConfirmation();
+    await repairEvidence((await api('/api/items')).items[0], rows);
+    await repairGeometry(); await screenshot(`photo-catalog-${width}.png`);
+    if (width === 390) assert.ok(await measure(`Array.from(document.querySelectorAll('.quick-repair-scope')).some(e=>e.getBoundingClientRect().height>parseFloat(getComputedStyle(e).lineHeight)*2)`), 'Phone scope text must visibly wrap');
+
+    await mode('label_fallback'); await open(); await upload(); await runAI();
+    assert.deepEqual((await repairRows()).map(r=>r.label), fallbackLabels);
+    assert.equal(await evaluate(`document.querySelectorAll('.quick-repair-scope,.quick-repair-included').length`), 0, 'Unknown label formats must remain intact');
+    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.quick-repair-label strong')).map(e=>e.textContent)`), fallbackLabels);
+    await repairGeometry();
+  }
+  assert.equal(normalJobs.size, 10, 'Every catalog job must be checked without absorption');
+  assert.equal(includedPairs.size, 4, 'All four absorbed pairs must preserve their full labels');
+  checks.push('All 10 catalog jobs and four absorbed pairs preserve exact label text, visible AI reasons and saved evidence; scopes have a lighter hierarchy at 390/1440');
+  checks.push('Ten unrecognized label formats remain intact without split styling at 390/1440');
+
   await mode('legacy'); await open(); await upload(); await fill(input('quick-asking'), '20'); await runAI();
   await calculate('skip'); await click('button', 'Save item'); await savedConfirmation();
   const legacy = (await api('/api/items')).items[0];
@@ -265,6 +320,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     const rows = await repairRows();
     assert.deepEqual(rows.map(r=>r.cost), ['$5.00', '$35.00', '$25.00']);
     assert.deepEqual(rows.map(r=>r.label), legacy.assessment.evidence.repair_suggestions.map(r=>r.label));
+    assert.equal(await evaluate(`document.querySelectorAll('.quick-repair-scope,.quick-repair-included').length`), 0);
     assert.equal(await evaluate(`document.querySelectorAll('.quick-repairs .quick-notice').length`), 0);
     await fill(input('item-notes'), `Draft1 notes-only version at ${width}.`);
     await click('button', 'Save new version'); await savedConfirmation();
