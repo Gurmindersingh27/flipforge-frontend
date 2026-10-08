@@ -25,18 +25,18 @@ export default function WorkflowRail({ className = "" }: { className?: string })
       <div className="mb-3 ff-kicker text-xs font-semibold uppercase tracking-widest">
         Underwriting Flow
       </div>
-      <ol className="flex items-stretch gap-2 overflow-x-auto">
+      <ol className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         {STEPS.map((step, i) => (
           <li
             key={step.label}
-            className="flex min-w-40 flex-1 items-center gap-3"
+            className="flex min-w-0 items-center gap-2"
           >
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-6 w-6 items-center justify-center ff-step rounded-full text-xs font-bold">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <div className="flex items-start gap-2">
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center ff-step rounded-full text-xs font-bold">
                   {i + 1}
                 </span>
-                <span className="text-sm font-semibold text-white">
+                <span className="min-w-0 break-words text-sm font-semibold text-white">
                   {step.label}
                 </span>
               </div>
@@ -47,7 +47,7 @@ export default function WorkflowRail({ className = "" }: { className?: string })
             {i < STEPS.length - 1 && (
               <span
                 aria-hidden="true"
-                className="mx-1 hidden h-px flex-1 bg-white/10 md:block"
+                className="hidden h-px w-3 shrink-0 bg-white/10 lg:block"
               />
             )}
           </li>
