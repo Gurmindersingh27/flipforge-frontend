@@ -28,7 +28,7 @@ body:has(.my-flips) { background: #faf6ee; color-scheme: light; }
 .flips-status[data-status=stretch] { background: #f7edd8; color: #72521e; }
 .flips-status[data-status=skip] { background: #f6e8df; color: #94391f; }
 .flips-offer { border-top: 1px solid var(--flips-line); padding-top: 16px; color: var(--flips-muted); font-size: 13px; }
-.flips-offer strong { display: block; color: var(--flips-ink); font-size: 36px; font-weight: 700; letter-spacing: -1px; line-height: 1.2; margin: 8px 0; font-variant-numeric: tabular-nums; }
+.flips-offer strong { display: block; color: var(--flips-ink); font-size: 36px; font-weight: 700; letter-spacing: -1px; line-height: 1.2; margin: 8px 0; }
 .flips-offer span { display: block; font-size: 12px; }
 .flips-notes { border-top: 1px solid var(--flips-line); }
 .flips-notes summary { min-height: 44px; align-content: center; color: var(--flips-green); font-size: 14px; font-weight: 600; }

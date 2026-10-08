@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { SignInButton, useAuth, UserButton } from "@clerk/clerk-react";
 import { analyzeItem, assessItem, getItem, getItemAIBudget, getItemAssessment, ItemAssessmentError } from "../lib/api";
 import { formatItemMoney, ITEM_LABELS, parseItemNumber } from "../lib/itemAnalysis";
-import { buildAssessmentRequest, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../lib/itemAssessment";
+import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../lib/itemAssessment";
 import { buildSavedItemInputs, restoreItemForm, safeItemLink } from "../lib/savedItems";
 import type { SavedItemForm } from "../lib/savedItems";
 import type { ItemAIBudget, ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResponse, ItemAssessmentResult, ItemFinancialInput, SavedItem } from "../lib/types";
@@ -23,7 +23,7 @@ function RepairLabel({ label }: { label: string }) {
   const recognized = match?.[0] === label && title && title.trim() === title && !title.includes(" - Included in") &&
     (!host || (host.trim() === host && !host.includes(" - Included in"))) &&
     scope && scope.slice(2, -1).trim() === scope.slice(2, -1);
-  return <div className="quick-repair-label">{recognized ? <><strong>{title}</strong>{included && <span className="quick-repair-included">{included}</span>}<span className="quick-repair-scope">{scope}</span></> : <strong>{label}</strong>}</div>;
+  return <div className="quick-repair-label">{recognized ? <><strong>{title}</strong>{included && <span className="quick-repair-included"><span className="quick-repair-punctuation">{included.slice(0, 3)}</span>{included.slice(3)}</span>}<span className="quick-repair-scope">{scope}</span></> : <strong>{label}</strong>}</div>;
 }
 
 function Camera() {
@@ -289,12 +289,12 @@ function QuickEditor({ findId }: { findId: string | null }) {
       <aside className="quick-answer-column">
         {result ? <section ref={resultRef} tabIndex={-1} className={`quick-answer tone-${result.status}`} aria-label="Your offer" data-quick-status={result.status}>
           <p className="quick-eyebrow">YOUR STARTING POINT</p><h2>{itemDecision(result)}</h2>
-          <button className="quick-text-button" type="button" onClick={openCosts}>Profit goal: {formatItemMoney(result.assumptions.target_profit.value)} · Change</button>
+          <button className="quick-text-button" type="button" onClick={openCosts}>Profit goal: {formatItemHeadlineMoney(result.assumptions.target_profit.value)} · Change</button>
           {result.status === "needs_info" ? <><p>Fill in these missing details before we can give you an offer.</p><ul>{result.missing_inputs.map(key => <li key={key}>{ITEM_LABELS[key]}</li>)}</ul></> : result.low && result.high && <>
-            <p>{result.status === "skip" ? "It misses your profit goal even if it sells well. That doesn't necessarily mean a cash loss." : result.status === "stretch" ? "At their price, you'd need a stronger sale to meet your goal." : "Based on these costs and the low end of the sale estimate. Check the item before buying."}</p>
+            <p>{result.status === "skip" ? `It misses your profit goal even if it sells well. ${result.low.cash_left !== null && result.low.cash_left < 0 ? "At their price, you'd likely lose money." : "That doesn't necessarily mean a cash loss."}` : result.status === "stretch" ? "At their price, you'd need a stronger sale to meet your goal." : "Based on these costs and the low end of the sale estimate. Check the item before buying."}</p>
             <div className="quick-offer"><span>Most you should pay, including any fees or tax</span><strong data-quick-offer>{formatItemMoney(result.low.max_offer, true)}</strong></div>
             {result.low.max_offer < 0 && <p>Even free misses your profit goal at the low sale estimate. This isn't a negative price to offer the seller.</p>}
-            {result.status !== "offer_only" && <>{noTime ? <p className="quick-keep">You'd keep <strong data-quick-keep>{formatItemMoney(result.low.cash_left)}</strong><small>If it sells for {formatItemMoney(result.low.resale)}, after costs & repair buffer.</small></p> : <div className="quick-profits"><div><span>Cash left</span><strong data-quick-cash>{formatItemMoney(result.low.cash_left)}</strong><small>After costs & repair buffer</small></div><div><span>Profit after your time</span><strong data-quick-profit>{formatItemMoney(result.low.profit_after_time)}</strong><small>If it sells for {formatItemMoney(result.low.resale)}</small></div></div>}<p className="quick-high">If it sells well at {formatItemMoney(result.high.resale)}, {noTime ? "you'd keep " : "profit after your time would be "}{formatItemMoney(result.high.profit_after_time)}.</p></>}
+            {result.status !== "offer_only" && <>{noTime ? <p className="quick-keep">You'd keep <strong data-quick-keep>{formatItemMoney(result.low.cash_left)}</strong><small>If it sells for {formatItemMoney(result.low.resale)}, after costs & repair buffer.</small></p> : <div className="quick-profits"><div><span>Cash left</span><strong data-quick-cash>{formatItemMoney(result.low.cash_left)}</strong><small>After costs & repair buffer</small></div><div><span>Profit after your time</span><strong data-quick-profit>{formatItemMoney(result.low.profit_after_time)}</strong><small>If it sells for {formatItemMoney(result.low.resale)}</small></div></div>}{result.high.resale !== result.low.resale && <p className="quick-high">If it sells well at {formatItemMoney(result.high.resale)}, {noTime ? "you'd keep " : "profit after your time would be "}{formatItemMoney(result.high.profit_after_time)}.</p>}</>}
             {result.status === "offer_only" && <p>Add an asking price to see how much you'd keep. If it sells well, the offer ceiling is {formatItemMoney(result.high.max_offer, true)}.</p>}
             <p className="quick-small">{ownResale ? "Sale price: your estimate." : "Sale prices: online listings, not confirmed sales."} Before income tax and costs not entered. This is a budget, not an inspection.</p>
           </>}

@@ -1770,6 +1770,7 @@ try {
     assert.equal(await evaluate(`document.querySelector('${childSelector} h2').textContent`),longTitle);
     assert.equal(await evaluate(`document.querySelector('${childSelector} .flips-parent').textContent`),`New version of #${visualParent.id}`);
     assert.equal(await evaluate(`document.querySelector('${childSelector} .flips-offer strong').textContent`),'-$50');
+    assert.equal(await measure(`getComputedStyle(document.querySelector('${childSelector} .flips-offer strong')).fontVariantNumeric`),'normal', 'Negative headline uses natural glyph spacing, not padded tabular figures');
     assert.ok(await evaluate(`document.querySelector('${childSelector} .flips-caution').textContent.includes('Even a free item misses')`));
     assert.equal(await evaluate(`document.querySelector('${childSelector} a[target="_blank"]').rel`),'noopener noreferrer');
     await evaluate(`document.querySelector('${childSelector} summary').click()`);

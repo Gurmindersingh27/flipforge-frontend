@@ -77,6 +77,7 @@ body:has(.items-quick) { background: #faf6ee; color-scheme: light; }
 .quick-repair-scope, .quick-repair-included { display: block; margin-top: 6px; font-size: 12px; line-height: 1.6; }
 .quick-repair-scope { color: var(--muted); }
 .quick-repair-included { color: var(--green); font-weight: 600; }
+.quick-repair-punctuation { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .quick-repairs .quick-repair-reason { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 .quick-details { margin: 24px 0; border-block: 1px solid var(--line); padding: 14px 0; }
 .quick-details summary, .quick-sources summary { min-height: 44px; display: list-item; align-content: center; color: var(--green); font-size: 14px; font-weight: 600; }
