@@ -286,6 +286,60 @@ try {
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/" });
   await until(`Boolean(${byText("button", "Analyze without address lookup ↓")})`);
   console.log("SITE_FONTS", JSON.stringify(await requireFonts()));
+  const railSteps = [
+    ["Property", "Address or listing URL"],
+    ["Photos / Rehab Intelligence", "Estimate visible scope"],
+    ["Deal Assumptions", "Numbers, financing, criteria"],
+    ["Generate Investor Memo", "Run the underwriting"],
+    ["Investor Memo Results", "Verdict, offer, risk"],
+  ];
+  for (const width of [390, 768, 1024, 1440]) {
+    await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: false });
+    const rail = await measure(`(()=>{
+      const panel=(${byText("div", "Underwriting Flow")}).parentElement;
+      const list=panel.querySelector('ol'), rows=[...list.children], box=panel.getBoundingClientRect();
+      const inside=r=>r.left>=box.left && r.right<=box.right;
+      return {
+        panelStyled:panel.classList.contains('ff-panel'),
+        noScroll:panel.scrollWidth<=panel.clientWidth && list.scrollWidth<=list.clientWidth && document.documentElement.scrollWidth<=innerWidth,
+        lastInside:rows.at(-1).getBoundingClientRect().right<=box.right,
+        interactive:panel.querySelectorAll('a,button,input,select,[tabindex]').length,
+        steps:rows.map(row=>{
+          const content=row.firstElementChild, heading=content.firstElementChild;
+          const [number,label]=heading.children, hint=content.lastElementChild;
+          const n=number.getBoundingClientRect(), r=row.getBoundingClientRect();
+          const textFits=e=>{
+            const range=document.createRange();range.selectNodeContents(e);
+            return [...range.getClientRects()].every(t=>inside(t) && t.left>=r.left && t.right<=r.right && t.left>=n.right);
+          };
+          const connector=row.querySelector('[aria-hidden="true"]');
+          return {tag:row.tagName,number:number.textContent,label:label.textContent,hint:hint.textContent,
+            numberStyled:number.classList.contains('ff-step'),fits:inside(r)&&textFits(label)&&textFits(hint),
+            left:r.left,top:r.top,bottom:r.bottom,
+            connectorVisible:Boolean(connector && getComputedStyle(connector).display!=='none')};
+        })
+      };
+    })()`);
+    assert.ok(rail.panelStyled && rail.noScroll && rail.lastInside, `Rail must fit at ${width}: ${JSON.stringify(rail)}`);
+    assert.equal(rail.interactive, 0, "Rail stays presentational, not a stepper");
+    assert.equal(rail.steps.length, 5);
+    rail.steps.forEach((step, i)=>{
+      assert.equal(step.tag, "LI");
+      assert.equal(step.number, String(i+1));
+      assert.deepEqual([step.label,step.hint], railSteps[i], "Every label and hint stays verbatim");
+      assert.ok(step.numberStyled && step.fits, `Step ${i+1} text fits without overlap at ${width}`);
+      assert.equal(step.connectorVisible, width>=1024 && i<4);
+      if(i && width<1024) {
+        assert.equal(step.left, rail.steps[0].left);
+        assert.ok(step.top>=rail.steps[i-1].bottom, "Stacked steps must not overlap");
+      } else if(i) {
+        assert.equal(step.top, rail.steps[0].top);
+        assert.ok(step.left>rail.steps[i-1].left, "Wide rail keeps its left-to-right order");
+      }
+    });
+    await screenshot(`workflow-rail-${width}.png`);
+    checks.push(`Workflow rail preserves all five ordered labels/hints and dark styling without horizontal scroll or text overlap at ${width}px`);
+  }
   for (const width of [390, 1440]) {
     await cdp("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: false });
     await screenshot(`analyzer-hero-${width}.png`);
