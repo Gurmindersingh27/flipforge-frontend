@@ -1,0 +1,54 @@
+body:has(.my-flips) { background: #faf6ee; color-scheme: light; }
+#root:has(.my-flips) { padding: 0; max-width: none; }
+.my-flips { --flips-ink: #1f2a24; --flips-muted: #526057; --flips-green: #1e5a44; --flips-line: #d8dfd5; min-height: 100dvh; background: #faf6ee; color: var(--flips-ink); font-family: Inter, ui-sans-serif, system-ui, sans-serif; line-height: 1.55; }
+.my-flips * { box-sizing: border-box; }
+.my-flips :is(a, button, summary):focus-visible { outline: 3px solid var(--flips-green); outline-offset: 4px; }
+.my-flips :is(button, summary) { cursor: pointer; }
+.my-flips button:disabled { opacity: .55; cursor: wait; }
+.my-flips :is(h1, h2, p, a, button) { overflow-wrap: anywhere; }
+.flips-nav { max-width: 1180px; margin: auto; padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--flips-line); }
+.flips-brand { display: block; min-height: 44px; align-content: center; font-size: 25px; font-weight: 800; letter-spacing: -.9px; line-height: 1.1; }
+.flips-brand span { color: var(--flips-green); }
+.flips-brand small { display: block; margin-top: 8px; font-size: 9px; letter-spacing: 1.9px; font-weight: 600; color: var(--flips-muted); }
+.flips-nav > div { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.flips-main { max-width: 1120px; padding: 48px 32px 64px; margin: auto; }
+.flips-intro { margin-bottom: 32px; }
+.flips-eyebrow { color: var(--flips-green); font-size: 11px; font-weight: 800; letter-spacing: 2px; margin-bottom: 14px; }
+.flips-intro h1 { font-family: 'DM Serif Display', Georgia, serif; font-size: clamp(38px, 4.5vw, 54px); font-weight: 400; letter-spacing: -1px; line-height: 1.1; margin: 0 0 16px; }
+.flips-intro > p:last-child { color: var(--flips-muted); font-size: 14px; max-width: 540px; }
+.flips-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.flips-card, .flips-message { min-width: 0; padding: 26px; border: 1px solid var(--flips-line); border-radius: 18px; background: #fffdf8; box-shadow: 0 3px 0 #e9e9df55; }
+.flips-card { display: flex; flex-direction: column; gap: 12px; }
+.flips-card h2, .flips-message h2 { font-size: 20px; font-weight: 700; line-height: 1.35; letter-spacing: -.3px; margin: 0; }
+.flips-card p { margin: 0; }
+.flips-meta, .flips-parent, .flips-caution { font-size: 12px; color: var(--flips-muted); }
+.flips-parent { color: var(--flips-green); }
+.flips-status { align-self: flex-start; max-width: 100%; padding: 6px 10px; border-radius: 7px; background: #edf1e8; color: var(--flips-muted); font-size: 12px; font-weight: 650; }
+.flips-status[data-status=within_budget] { background: #e7eee2; color: var(--flips-green); }
+.flips-status[data-status=stretch] { background: #f7edd8; color: #72521e; }
+.flips-status[data-status=skip] { background: #f6e8df; color: #94391f; }
+.flips-offer { border-top: 1px solid var(--flips-line); padding-top: 16px; color: var(--flips-muted); font-size: 13px; }
+.flips-offer strong { display: block; color: var(--flips-ink); font-size: 36px; font-weight: 700; letter-spacing: -1px; line-height: 1.2; margin: 8px 0; font-variant-numeric: tabular-nums; }
+.flips-offer span { display: block; font-size: 12px; }
+.flips-notes { border-top: 1px solid var(--flips-line); }
+.flips-notes summary { min-height: 44px; align-content: center; color: var(--flips-green); font-size: 14px; font-weight: 600; }
+.flips-notes p { white-space: pre-wrap; font-size: 14px; padding: 4px 0 12px; }
+.flips-actions { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-top: auto; padding-top: 12px; }
+.flips-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 9px; background: var(--flips-green); color: #fffdf8; padding: 11px 20px; font-size: 14px; font-weight: 650; }
+.flips-primary:hover { background: #164332; }
+.flips-link { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 0; color: var(--flips-green); font-size: 14px; text-decoration: underline; text-underline-offset: 4px; }
+.flips-more { display: block; margin: 28px auto 0; min-height: 48px; border: 1px solid var(--flips-green); border-radius: 9px; padding: 10px 24px; color: var(--flips-green); font-weight: 600; }
+.flips-message { margin-top: 20px; font-size: 14px; }
+.flips-message p { color: var(--flips-muted); margin: 12px 0 20px; }
+.flips-error { border-color: #cba18e; background: #f6e8df; }
+.flips-error p { color: #94391f; }
+@media (max-width: 760px) {
+  .flips-nav { padding: 20px; gap: 16px; flex-wrap: wrap; }
+  .flips-nav > div { gap: 20px; }
+  .flips-brand { font-size: 22px; }
+  .flips-brand small { font-size: 8px; letter-spacing: 1px; }
+  .flips-nav .flips-link { font-size: 13px; }
+  .flips-main { padding: 32px 20px 48px; }
+  .flips-grid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .flips-card, .flips-message { padding: 20px; border-radius: 16px; }
+}
