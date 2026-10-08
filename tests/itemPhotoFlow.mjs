@@ -201,7 +201,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
       assert.equal(suggested.assessment.confirmation.repairs.length, rows.length);
       await repairGeometry(); await screenshot(`photo-${kind}-${width}.png`);
       await click('button', 'Change repair budget');
-      assert.equal(await evaluate(`${input('quick-repairs')}.value`), String(total));
+      assert.equal(await evaluate(`${input('quick-repairs')}.value`), total.toFixed(2));
       assert.deepEqual(await repairRows(), rows, 'Changing the budget must not hide any repair evidence');
       await fill(input('quick-repairs'), String(total + 10));
       await calculate('skip');
