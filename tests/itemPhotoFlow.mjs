@@ -140,6 +140,8 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes('Good buy at $20.')`));
     assert.equal(await evaluate(`document.querySelector('[data-quick-offer]').textContent`), '$22');
     assert.equal(await evaluate(`document.querySelector('[data-quick-keep]').textContent`), '$32.75');
+    assert.ok(await evaluate(`document.querySelector('.quick-high')?.textContent.startsWith('If it sells well at ')`), 'Different resale estimates retain the higher-sale line');
+    assert.ok(await evaluate(`Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Profit goal: $30 · Change')`));
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-cash], [data-quick-profit]'))`), false);
     assert.ok(await evaluate(`document.querySelector('.quick-assumptions').textContent.includes('Assumes local pickup, no fees, $30 profit goal')`));
     if (width === 390) {
@@ -149,6 +151,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
       await calculate('skip');
       assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-keep]'))`), false);
       assert.equal(await evaluate(`document.querySelector('[data-quick-cash]').textContent`), '$32.75');
+      assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes("That doesn't necessarily mean a cash loss.")`), 'Positive server cash retains the existing skip explanation');
       assert.equal(await evaluate(`document.querySelector('[data-quick-profit]').textContent`), '$12.75');
       assert.ok(await evaluate(`document.querySelector('.quick-assumptions').textContent.includes('Uses your entered costs')`));
       await fill(input('quick-hours'), '0'); await calculate('within_budget');
@@ -211,6 +214,11 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
       return s.display==='block' && Number(s.fontWeight)<Number(title.fontWeight) && parseFloat(s.fontSize)<parseFloat(title.fontSize);
     })`), 'Scopes must be separate, smaller and lighter than job titles');
     assert.ok(await measure(`Array.from(document.querySelectorAll('.quick-repair-included')).every(e=>e.textContent.includes('Included in ') && getComputedStyle(e).display==='block' && e.getBoundingClientRect().height>0)`));
+    assert.ok(await measure(`Array.from(document.querySelectorAll('.quick-repair-included')).every(e=>{
+      const punctuation=e.querySelector('.quick-repair-punctuation'),s=getComputedStyle(punctuation);
+      return punctuation.textContent===' - ' && s.clipPath==='inset(50%)' && s.position==='absolute' && s.overflow==='hidden' &&
+        e.lastChild.textContent.startsWith('Included in ');
+    })`), 'Only the leading dash is visually hidden; exact stored label text remains intact');
     assert.ok(await evaluate(`document.querySelector('.quick-repairs').textContent.includes(${JSON.stringify(supplyNote)})`));
   }
   for (const width of [390, 1440]) {
@@ -377,11 +385,28 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-cash]'))`), false);
     await fill(input('quick-purchase_price'), '60'); await calculate('skip');
     assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes("I'd pass at $60. Offer $17 or walk.")`));
-    assert.ok(await evaluate(`document.body.textContent.includes("doesn't necessarily mean a cash loss")`));
+    assert.equal(await evaluate(`document.querySelector('[data-quick-keep]').textContent`), '-$12.25');
+    assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes("At their price, you'd likely lose money.")`));
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes("doesn't necessarily mean a cash loss")`), false);
+    assert.equal(await evaluate(`Boolean(document.querySelector('.quick-high'))`), false, 'Equal resale estimates do not repeat the result');
     assert.equal(await calls(), before);
     await geometry(); await screenshot(`photo-${kind}-fallback.png`);
+    for (const [price,cash] of [['47.75','$0.00'],['40','$7.75']]) {
+      await fill(input('quick-purchase_price'), price); await calculate('skip');
+      assert.equal(await evaluate(`document.querySelector('[data-quick-keep]').textContent`), cash);
+      assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes("That doesn't necessarily mean a cash loss.")`));
+      assert.equal(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes("you'd likely lose money")`), false);
+    }
+    await evaluate(`document.querySelector('.quick-details').open=true`);
+    for (const [goal,headline] of [['40.50','$40.50'],['30','$30']]) {
+      await fill(input('quick-target_profit'), goal); await calculate('skip');
+      assert.ok(await evaluate(`Array.from(document.querySelectorAll('button')).some(e=>e.textContent===${JSON.stringify(`Profit goal: ${headline} · Change`)})`));
+    }
+    assert.equal(await calls(), before, 'Display polish and recalculation make no provider calls');
   }
   checks.push('Disabled AI and paused budget preserve the public short calculator, offer-only results and honest skip wording without any provider call');
+  checks.push('Skip wording follows negative, zero and positive server cash; equal resale estimates hide the repeated line while different estimates show it');
+  checks.push('Result profit goals omit whole-dollar cents but preserve $40.50 without changing server calculations');
 
   await mode('overloaded'); await open(); await upload(); await fill(input('quick-asking'), '20'); await runAI();
   await until(`document.querySelector('[role=alert]')?.textContent.includes("AI couldn't finish")`);
