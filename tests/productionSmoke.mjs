@@ -91,6 +91,10 @@ try {
   const schema = await (await request(`${backend}/openapi.json`)).json();
   assert.ok(schema.paths['/api/items/assess']?.post);
   assert.ok(schema.components.schemas.SaveItemRequest.properties.assessment_id);
+  const saveContract = schema.components.schemas.SaveItemRequest;
+  assert.ok(saveContract.properties.request_id?.anyOf?.some(field => field.type === 'string' && field.format === 'uuid'));
+  assert.ok(!saveContract.required?.includes('request_id'), 'Save request_id must remain optional');
+  check('Optional idempotent Items save contract is live');
   assert.ok(schema.components.schemas.ItemAssessmentResponse);
   check('Photo assessment and saved evidence contracts are live');
   for (const name of ['RehabScope', 'RehabScopeItem']) assert.ok(schema.components.schemas[name], `Missing ${name}`);
