@@ -773,7 +773,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await click('button','Save item'); await until(saveUncertain);
     const oldId=await evaluate('window.photoSaveRequests[0].body.request_id');
     await evaluate(`window.switchFixtureUser(${JSON.stringify(nextUser)})`);
-    await until(`!document.querySelector('[aria-label="Save item"]')`);
+    await until(`!document.querySelector('[data-quick-status]') && !(${input('item-notes')}?.value)`);
     assert.ok(await evaluate(`!document.body.textContent.includes('Retry this save')`));
     if(nextUser===null)await evaluate(`window.switchFixtureUser('browser-fixture')`);
     await enterQuickManual();
@@ -797,7 +797,10 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   await quickSaveDraft(); await evaluate(`window.photoSaveMode='held'`); await click('button','Save item');
   await until(`typeof window.releasePhotoSave==='function'`);
   await evaluate(`window.switchFixtureUser('save-retry-user');window.releasePhotoSave()`); await pause(200);
-  assert.ok(await evaluate(`!document.querySelector('[aria-label="Save item"]') && !document.body.textContent.includes('Saved version #')`));
+  // A non-allowlisted account can receive the empty manual fallback editor.
+  // Neither the old account's draft nor its late save may populate that editor.
+  assert.ok(await evaluate(`!document.querySelector('[data-quick-status]') && !(${input('item-notes')}?.value) && !(${input('quick-item-name')}?.value)`));
+  assert.ok(await evaluate(`!document.body.textContent.includes('Saved version #') && !document.body.textContent.includes('Retry this save')`));
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:saveFixture.identifier});
   checks.push('/items sign-out/account changes discard pending saves, use fresh IDs for the current account, cancel pre-token retries and suppress old-account responses; retry 503 unlocks editing');
 
