@@ -111,6 +111,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.equal(await calls(), before + 1);
     await until(`Boolean(document.querySelector('.quick-resale')) || Boolean(document.querySelector('[role=alert]')) || Boolean(document.querySelector('.quick-sources'))`);
     await until(`!document.querySelector('[aria-label="Confirm estimate"] fieldset')?.disabled`);
+    await until(`!document.body.textContent.includes('Checking AI availability…')`);
   }
   async function calculate(status) {
     await evaluate(`document.querySelector('[data-quick-calculate]').click()`);
@@ -129,6 +130,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await cdp('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
     await open('?fixtureSignedOut=1');
     await until(`Boolean(${input('quick-description')})`);
+    assert.equal(await evaluate(`document.querySelector('.quick-intro > p:last-child').textContent`), 'Snap a photo. Tell us what you know.Get a starting offer and a plan for the work.', 'Signed-out photo entry keeps its photo-first intro');
     const count = await calls();
     await fill(input('quick-description'), 'Wood chair, scratched seat, they want twenty.');
     const askingInput = width === 390 ? '20' : '';
@@ -388,6 +390,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await mode(kind); const before = await calls(); await open();
     await until(`Boolean(document.getElementById('quick-resale_low'))`);
     assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Photo estimate"], [data-quick-assess]'))`), false, 'Known unavailable AI must not show a dead photo box');
+    assert.equal(await evaluate(`document.querySelector('.quick-intro > p:last-child').textContent`), "Enter what you know.We'll help you work out an offer.", 'Unavailable AI uses the manual intro with the photo form hidden');
     if (kind === 'cap') assert.ok(await evaluate(`document.body.textContent.includes('AI estimates are paused until the 1st')`));
     await fill(input('quick-resale_low'), '65'); await fill(input('quick-repairs'), '15');
     await calculate('offer_only');
@@ -421,6 +424,113 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   const storedId = () => evaluate(`sessionStorage.getItem(${JSON.stringify(recoveryKey)})`);
   const requests = async () => (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
   const restoreMarker = async id => evaluate(`sessionStorage.setItem(${JSON.stringify(recoveryKey)}, ${JSON.stringify(id)})`);
+  // Control only the free readiness response. Assessments still use the real
+  // local API and simulated provider, with backend POST/provider counters.
+  await mode('normal');
+  const readinessScript = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+    window.budgetTest={mode:'hold',gets:0,releases:[]};
+    const original=window.fetch;
+    window.fetch=async(input,init)=>{
+      if(new URL(typeof input==='string'?input:input.url).pathname!=='/api/items/ai-budget')return original(input,init);
+      const test=window.budgetTest;test.gets++;const mode=test.mode;
+      const response=await original(input,init);
+      if(mode==='hold')await new Promise(resolve=>test.releases.push(resolve));
+      if(mode==='failed')throw new TypeError('Fixture network failure');
+      if(mode==='denied')return new Response(JSON.stringify({detail:"AI isn't available"}),{status:403});
+      if(['assessment_busy','budget_paused','not_configured'].includes(mode)){
+        const body=await response.json();return new Response(JSON.stringify({...body,available:false,reason:mode,message:null}),{status:200});
+      }
+      return response;
+    };` });
+  const budgetRetry = `Array.from(document.querySelectorAll('button')).find(e=>e.textContent==='Check AI availability')`;
+  const paidDisabled = `!document.querySelector('[data-quick-assess]') || document.querySelector('[data-quick-assess]').disabled`;
+  const beforeReadiness = await requests();
+  await open();
+  await until(`window.budgetTest.releases.length>0`);
+  assert.ok(await evaluate(paidDisabled));
+  await upload(); await fill(input('quick-description'), 'Keep my chair description'); await fill(input('quick-asking'), '22');
+  await evaluate(`document.querySelector('[data-quick-assess]').click();${budgetRetry}.click();${budgetRetry}.click()`);
+  const initialGets = await evaluate('window.budgetTest.gets');
+  await evaluate(`window.budgetTest.releases.splice(0).forEach(fn=>fn())`);
+  await until(`!document.querySelector('[data-quick-assess]').disabled`);
+  assert.equal(await evaluate('window.budgetTest.gets'), initialGets);
+  assert.equal((await requests()).posts, beforeReadiness.posts);
+  checks.push('Loading readiness disables paid submission and retry; neither button sends an assessment POST while checking');
+
+  // Re-enter with a failed initial check, then test every unavailable reason.
+  await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: readinessScript.identifier });
+  const failedScript = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `window.failBudgetOnce=true;const original=window.fetch;window.fetch=(input,init)=>{if(window.failBudgetOnce&&new URL(typeof input==='string'?input:input.url).pathname==='/api/items/ai-budget')return Promise.reject(new TypeError('Fixture network failure'));return original(input,init);};` });
+  await open(); await until(`Boolean(${budgetRetry}) && !${budgetRetry}.disabled`);
+  assert.ok(await evaluate(paidDisabled));
+  await upload(); await fill(input('quick-description'), 'Keep my chair description'); await fill(input('quick-asking'), '22');
+  await fill(input('quick-resale_low'), '95'); await fill(input('quick-repairs'), '12');
+  await evaluate(`window.failBudgetOnce=false;window.budgetTest={mode:'hold',afterHold:'assessment_busy',gets:0,releases:[]};const previous=window.fetch;window.fetch=async(input,init)=>{
+    if(new URL(typeof input==='string'?input:input.url).pathname!=='/api/items/ai-budget')return previous(input,init);
+    const test=window.budgetTest;test.gets++;let mode=test.mode;const response=await previous(input,init);
+    if(mode==='hold'){await new Promise(resolve=>test.releases.push(resolve));mode=test.afterHold||'normal';}
+    if(mode==='failed')throw new TypeError('Fixture network failure');
+    if(mode==='denied')return new Response(JSON.stringify({detail:"AI isn't available"}),{status:403});
+    if(['assessment_busy','budget_paused','not_configured'].includes(mode)){const body=await response.json();return new Response(JSON.stringify({...body,available:false,reason:mode,message:null}),{status:200});}
+    return response;
+  };`);
+  await evaluate(`${budgetRetry}.click();${budgetRetry}.click();${budgetRetry}.click()`);
+  await until(`window.budgetTest.releases.length===1`);
+  assert.equal(await evaluate('window.budgetTest.gets'), 1);
+  assert.ok(await evaluate(paidDisabled));
+  await evaluate(`window.budgetTest.releases.splice(0).forEach(fn=>fn())`);
+  await until(`Boolean(${budgetRetry}) && !${budgetRetry}.disabled`);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Photo estimate"]'))`), false);
+  await evaluate(`window.budgetTest.afterHold=null;${budgetRetry}.click()`);
+  await until(`window.budgetTest.releases.length===1`);
+  assert.equal(await evaluate('window.budgetTest.gets'), 2);
+  await evaluate(`window.budgetTest.releases.splice(0).forEach(fn=>fn())`);
+  await until(`!document.querySelector('[data-quick-assess]').disabled`);
+  assert.equal(await evaluate(`${input('quick-description')}.value`), 'Keep my chair description');
+  assert.equal(await evaluate(`${input('quick-asking')}.value`), '22');
+  assert.equal(await evaluate(`${input('quick-resale_low')}.value`), '95');
+  assert.equal(await evaluate(`${input('quick-repairs')}.value`), '12');
+  assert.equal(await evaluate(`document.querySelectorAll('.quick-photo').length`), 1);
+  checks.push('Failed readiness blocks POST; repeated retry clicks send one free GET and restore availability without resetting photos or numbers');
+
+  // Account remounts trigger a fresh check. Force unavailability for that check,
+  // then exercise retries from each reason, including allowlist denial.
+  for(const reason of ['assessment_busy','budget_paused','not_configured','denied','failed']) {
+    await evaluate(`window.budgetTest.mode=${JSON.stringify(reason)};window.switchFixtureUser('other-user')`);
+    await until(`Boolean(${budgetRetry}) && !${budgetRetry}.disabled`);
+    assert.ok(await evaluate(paidDisabled));
+    const beforeGets = await evaluate('window.budgetTest.gets');
+    await evaluate(`window.budgetTest.mode='hold';${budgetRetry}.click();${budgetRetry}.click()`);
+    await until(`window.budgetTest.releases.length===1`);
+    assert.equal(await evaluate('window.budgetTest.gets'), beforeGets+1);
+    assert.ok(await evaluate(paidDisabled));
+    await evaluate(`window.budgetTest.releases.splice(0).forEach(fn=>fn())`);
+    await until(`!document.querySelector('[data-quick-assess]').disabled`);
+    await evaluate(`window.switchFixtureUser('browser-fixture')`);
+    await until(`window.budgetTest.releases.length===1`);
+    await evaluate(`window.budgetTest.mode='normal';window.budgetTest.releases.splice(0).forEach(fn=>fn())`);
+    await until(`!document.querySelector('[data-quick-assess]').disabled`);
+  }
+  assert.equal((await requests()).posts, beforeReadiness.posts);
+  assert.equal(await calls(), beforeReadiness.calls);
+  checks.push('Busy, paused, unconfigured, not-allowlisted and failed checks each expose a free single-GET retry; availability returns with zero assessment POSTs');
+
+  await evaluate(`window.budgetTest.mode='hold';window.switchFixtureUser('other-user')`);
+  await until(`window.budgetTest.releases.length===1`);
+  await evaluate(`window.budgetTest.mode='denied';window.switchFixtureUser('browser-fixture')`);
+  await until(`Boolean(${budgetRetry}) && !${budgetRetry}.disabled`);
+  await evaluate(`window.budgetTest.releases.splice(0).forEach(fn=>fn())`); await pause(100);
+  assert.ok(await evaluate(paidDisabled), 'Old account availability must not override the new account denial');
+  await evaluate(`window.budgetTest.mode='hold';${budgetRetry}.click()`);
+  await until(`window.budgetTest.releases.length===1`);
+  const beforeSignoutGets = await evaluate('window.budgetTest.gets');
+  await evaluate(`window.switchFixtureUser(null);window.budgetTest.releases.splice(0).forEach(fn=>fn())`);
+  await until(`document.body.textContent.includes('Sign in for a photo estimate')`);
+  assert.equal(await evaluate('window.budgetTest.gets'), beforeSignoutGets);
+  assert.equal(await evaluate(`Boolean(${budgetRetry})`), false);
+  assert.equal((await requests()).posts, beforeReadiness.posts);
+  await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: failedScript.identifier });
+  checks.push('Late readiness responses cannot enable AI for another account or after sign-out; signed-out users get the sign-in prompt without a budget request');
+
   await mode('normal'); await open(); await upload(); await fill(input('quick-asking'), '20');
   // Inspect storage at the actual fetch boundary, then hold the response while
   // navigating away. The provider and database are still the real fixture path.
@@ -466,6 +576,26 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   const recoveredSave = (await api('/api/items')).items[0];
   assert.equal(recoveredSave.assessment.assessment_id, recoveryId);
   checks.push('Completed unsaved estimates survive refresh without a POST; edits are not restored and a confirmed find save clears recovery');
+
+  const recoveryBudgetScript = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+    window.recoveryBudgetBlocked=true;const original=window.fetch;
+    window.fetch=async(input,init)=>{const response=await original(input,init);
+      if(window.recoveryBudgetBlocked&&new URL(typeof input==='string'?input:input.url).pathname==='/api/items/ai-budget'){
+        const body=await response.json();return new Response(JSON.stringify({...body,available:false,reason:'assessment_busy',message:null}));
+      }return response;};` });
+  await restoreMarker(recoveryId); await open('', true);
+  await until(`document.body.textContent.includes('Recovered your photo estimate.') && Boolean(${budgetRetry}) && !${budgetRetry}.disabled`);
+  await fill(input('item-notes'), 'Keep recovered note');
+  await calculate('within_budget');
+  const beforeRecoveredRetry = await requests();
+  await evaluate(`window.recoveryBudgetBlocked=false;${budgetRetry}.click()`);
+  await until(`!${budgetRetry}`);
+  assert.equal(await evaluate(`${input('item-notes')}.value`), 'Keep recovered note');
+  assert.ok(await evaluate(`Boolean(document.querySelector('.quick-sources')) && Boolean(document.querySelector('[data-quick-status]'))`));
+  assert.equal(await storedId(), recoveryId);
+  assert.equal((await requests()).posts, beforeRecoveredRetry.posts);
+  await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: recoveryBudgetScript.identifier });
+  checks.push('A free availability retry preserves recovered evidence, confirmed calculation, unsaved notes and the recovery ID');
 
   await restoreMarker(recoveryId);
   const beforeSavedReopen = await requests();
