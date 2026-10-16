@@ -1533,7 +1533,7 @@ try {
       const mode=window.savedItemMode;
       if(mode==='headers')return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError'))));
       if(mode==='body')return new Response(new ReadableStream({start(controller){init.signal.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')));}}),{status:200});
-      if(['401','403','404','409','422','500','503'].includes(mode))return Response.json({detail:mode==='422'?[{loc:['body','notes'],msg:'Invalid notes fixture'}]:'Rejected fixture'},{status:Number(mode)});
+      if(['401','403','404','409','422','429','500','503'].includes(mode))return Response.json({detail:mode==='422'?[{loc:['body','notes'],msg:'Invalid notes fixture'}]:'Rejected fixture'},{status:Number(mode)});
       if(mode==='slow')await new Promise(resolve=>nativeTimeout(resolve,70));
       if(mode==='hold-list' && url.pathname==='/api/items')await new Promise(resolve=>window.releaseSavedItemList=resolve);
       const response=await nativeFetch(input,init);
@@ -1653,7 +1653,7 @@ try {
     await evaluate(`window.savedItemMode=${JSON.stringify(mode)}`);
     const before=(await api('/api/items')).items.map(i=>i.id);
     await click('button','Save item');
-    const definite=['401','403','409','422','503'].includes(mode);
+    const definite=['401','403','409','422'].includes(mode);
     await until(hasAlert(['401','403'].includes(mode)?'session':mode==='422'?'Invalid notes':definite?'Items request failed':'may already be saved'));
     assert.equal(await evaluate('window.savedItemRequests.length'),1);
     const captured=await evaluate('window.savedItemRequests[0].body');
@@ -1691,8 +1691,24 @@ try {
       assert.notEqual(await evaluate('window.savedItemRequests.at(-1).body.request_id'),captured.request_id);
     }
   }
-  checks.push('Manual save header/body timeouts, 500 and lost responses retain one captured request; explicit double-clicked retries produce one immutable record and preserve notes/link');
-  checks.push('Definite 401/403/409/422/503 save rejections unlock editing and discard request IDs; success followed by editing uses a fresh ID and linked version');
+  checks.push('Manual save header/body timeouts, 500/503 and lost responses retain one captured request; explicit double-clicked retries produce one immutable record and preserve notes/link');
+  checks.push('First-attempt 401/403/409/422 save rejections unlock editing and discard request IDs; success followed by editing uses a fresh ID and linked version');
+
+  await signedItems(dresser); await fill(`document.getElementById('item-notes')`,'Committed before rejected retries');
+  await evaluate(`window.savedItemMode='lost'`); await click('button','Save item'); await until(hasAlert('may already be saved'));
+  const committedBeforeRejections=await evaluate('window.lastCommittedItem');
+  const unresolvedPayload=await evaluate('window.savedItemRequests[0].body');
+  for(const status of ['503','401','403','429']) {
+    await evaluate(`window.savedItemMode=${JSON.stringify(status)}`); await click('button','Retry this save');
+    await until(`${hasAlert('may already be saved')} && !(${byText('button','Retry this save')}).disabled`);
+    assert.ok(await evaluate(`(${itemInput('purchase_price')}).matches(':disabled') && document.getElementById('item-notes').matches(':disabled') && document.getElementById('item-listing-url').matches(':disabled')`));
+    assert.ok(await evaluate(`!(${byText('button','Discard and edit')}).disabled`));
+    assert.deepEqual(await evaluate('window.savedItemRequests.at(-1).body'),unresolvedPayload);
+  }
+  await evaluate(`window.savedItemMode='pass'`); await click('button','Retry this save'); await until(hasStatus('Saved version #'));
+  assert.deepEqual(await evaluate('window.savedItemRequests.at(-1).body'),unresolvedPayload);
+  assert.deepEqual((await api('/api/items')).items[0],committedBeforeRejections);
+  checks.push('Manual committed save survives retry 503/401/403/429 with locked fields, warning and discard available; eventual replay returns the original record under the same ID');
 
   for(const width of [390,1440]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});

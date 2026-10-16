@@ -702,7 +702,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
       if(new URL(typeof input==='string'?input:input.url,location.href).pathname!=='/api/items/save')return original(input,init);
       window.photoSaveRequests.push({body:JSON.parse(init.body),auth:new Headers(init.headers).get('Authorization')});
       const mode=window.photoSaveMode;
-      if(mode==='500'||mode==='503')return Response.json({detail:'Rejected fixture'},{status:Number(mode)});
+      if(['401','403','404','409','422','429','500','503'].includes(mode))return Response.json({detail:'Rejected fixture'},{status:Number(mode)});
       const response=await original(input,init);
       if(mode==='lost'){window.committedPhotoSave=await response.json();throw new TypeError('Confirmation lost');}
       if(mode==='held'){const saved=await response.json();await new Promise(resolve=>window.releasePhotoSave=resolve);return Response.json(saved,{status:201});}
@@ -786,14 +786,25 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   }
   await quickSaveDraft(); await evaluate(`window.photoSaveMode='500'`);
   await click('button','Save item'); await until(saveUncertain);
-  // A definite rejection of a retry also releases its old identity.
-  await evaluate(`window.photoSaveMode='503'`); await click('button','Retry this save');
-  await until(`!${retryButton} && !${input('item-notes')}.matches(':disabled')`);
-  await evaluate(`window.photoSaveMode='500'`); await click('button','Save item'); await until(saveUncertain);
-  assert.notEqual(await evaluate('window.photoSaveRequests[2].body.request_id'),await evaluate('window.photoSaveRequests[0].body.request_id'));
+  const uncertainPayload=await evaluate('window.photoSaveRequests[0].body');
+  for(const status of ['503','401','403','429']) {
+    await evaluate(`window.photoSaveMode=${JSON.stringify(status)}`); await click('button','Retry this save'); await until(saveUncertain);
+    assert.ok(await evaluate(`document.querySelector('[aria-label="Confirm estimate"] fieldset').disabled && ${input('item-notes')}.matches(':disabled') && ${input('item-listing-url')}.matches(':disabled')`));
+    assert.ok(await evaluate(`document.body.textContent.includes('may already be saved') && Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Discard and edit' && !e.disabled)`));
+    assert.deepEqual(await evaluate('window.photoSaveRequests.at(-1).body'),uncertainPayload);
+  }
+  for(const status of ['422','404','409']) {
+    const rejectedId=await evaluate('window.photoSaveRequests.at(-1).body.request_id');
+    await evaluate(`window.photoSaveMode=${JSON.stringify(status)}`); await click('button','Retry this save');
+    await until(`!${retryButton} && !${input('item-notes')}.matches(':disabled')`);
+    assert.ok(await evaluate(`!document.querySelector('[aria-label="Confirm estimate"] fieldset').disabled && !${input('item-listing-url')}.matches(':disabled')`));
+    await evaluate(`window.photoSaveMode='500'`); await click('button','Save item'); await until(saveUncertain);
+    assert.notEqual(await evaluate('window.photoSaveRequests.at(-1).body.request_id'),rejectedId);
+  }
+  const beforeTokenSwitch=await evaluate('window.photoSaveRequests.length');
   await evaluate(`window.photoSaveMode='pass';window.authFixture={calls:0,delayMs:350}`);
   await click('button','Retry this save'); await evaluate(`window.switchFixtureUser('save-retry-user')`); await pause(450);
-  assert.equal(await evaluate('window.photoSaveRequests.length'),3);
+  assert.equal(await evaluate('window.photoSaveRequests.length'),beforeTokenSwitch);
   await quickSaveDraft(); await evaluate(`window.photoSaveMode='held'`); await click('button','Save item');
   await until(`typeof window.releasePhotoSave==='function'`);
   await evaluate(`window.switchFixtureUser('save-retry-user');window.releasePhotoSave()`); await pause(200);
@@ -802,7 +813,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   assert.ok(await evaluate(`!document.querySelector('[data-quick-status]') && !(${input('item-notes')}?.value) && !(${input('quick-item-name')}?.value)`));
   assert.ok(await evaluate(`!document.body.textContent.includes('Saved version #') && !document.body.textContent.includes('Retry this save')`));
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:saveFixture.identifier});
-  checks.push('/items sign-out/account changes discard pending saves, use fresh IDs for the current account, cancel pre-token retries and suppress old-account responses; retry 503 unlocks editing');
+  checks.push('/items retry 503/401/403/429 preserves the pending payload, locks and warning; retry 422/404/409 releases it; account changes cancel pre-token retries and suppress old-account responses');
 
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();

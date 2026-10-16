@@ -46,7 +46,7 @@ export async function saveItem(payload: SaveItemRequest, token: string): Promise
       });
       if (!res.ok) {
         // Remember a definite rejection even if reading its body times out.
-        if ((res.status >= 400 && res.status < 500) || res.status === 503) rejection = new ItemApiError(res.status, `Save rejected (HTTP ${res.status}). Check your inputs or sign in again.`);
+        if (res.status >= 400 && res.status < 500) rejection = new ItemApiError(res.status, `Save rejected (HTTP ${res.status}). Check your inputs or sign in again.`);
         const error = await itemRejection(res);
         if (rejection) rejection = error;
         throw error;

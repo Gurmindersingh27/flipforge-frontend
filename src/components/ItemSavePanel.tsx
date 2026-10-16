@@ -70,12 +70,15 @@ export default function ItemSavePanel({ form, initial, parentId, editVersion, on
       setSavedVersion(attempt.editVersion); setMessage(`Saved version #${saved.id}.`); onSaved(saved);
     } catch (error) {
       if (current !== sequence.current) return;
-      // A token failure on a retry does not resolve the earlier uncertain POST.
-      // Only a confirmed success or definite API rejection drops that identity.
-      keepPending = error instanceof UnconfirmedItemSaveError || (uncertain && !(error instanceof ItemApiError));
+      // Only app rejections after the backend replay lookup resolve an earlier
+      // uncertain POST. Auth, rate limits, outages and token failures do not.
+      const resolvesPending = error instanceof ItemApiError && [404, 409, 422].includes(error.status);
+      keepPending = error instanceof UnconfirmedItemSaveError || (uncertain && !resolvesPending);
       if (!keepPending) pending.current = null;
       setUncertain(keepPending);
-      setMessage(error instanceof Error ? error.message : "Save failed. Your inputs are still here.");
+      const failure = error instanceof Error ? error.message : "Save failed. Your inputs are still here.";
+      setMessage(keepPending && !(error instanceof UnconfirmedItemSaveError)
+        ? `${failure}\nThis item may already be saved. Retry this save or check My Flips before discarding.` : failure);
     } finally {
       // Keep the parent editor locked while unresolved, but permit an explicit
       // retry of the captured payload even though normal saving is disabled.
