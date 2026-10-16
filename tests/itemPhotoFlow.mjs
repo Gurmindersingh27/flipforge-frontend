@@ -18,7 +18,14 @@ from app.db.session import SessionLocal
 from app.db.models.item_ai_budget import ItemAIMonth
 from app.services.item_repair_catalog import CATALOG
 os.environ.update(ITEMS_AI_ALLOWED_USER_IDS='browser-fixture,other-user', ITEMS_ANTHROPIC_API_KEY='browser-test-only', ITEMS_ANTHROPIC_WORKSPACE_ID='browser-test', ITEMS_AI_WORKSPACE_LIMIT_CONFIRMED='20', ITEMS_REPAIR_CATALOG_APPROVED='2026-10-06-draft2')
-fixture_ai = {'mode': 'normal', 'calls': 0}
+fixture_ai = {'mode': 'normal', 'calls': 0, 'reads': 0, 'posts': 0}
+@app.middleware('http')
+async def count_assessment_requests(request, call_next):
+    if request.url.path == '/api/items/assess' and request.method == 'POST':
+        fixture_ai['posts'] += 1
+    if request.url.path.startswith('/api/items/assessments/') and request.method == 'GET':
+        fixture_ai['reads'] += 1
+    return await call_next(request)
 # Only the legacy fixture substitutes the old catalog to create a real draft1
 # assessment/save before switching back to the current server catalog.
 current_suggestions = ai.suggestions
@@ -83,7 +90,9 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   const input = id => `document.getElementById(${JSON.stringify(id)})`;
   const mode = async value => (await fetch(`http://127.0.0.1:8000/browser-fixture/ai/${value}`, { method: 'POST' })).json();
   const calls = async () => (await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json()).calls;
-  async function open(query = '') {
+  async function open(query = '', recover = false) {
+    // Independent existing scenarios start a fresh find; recovery checks opt in.
+    if (!recover) await evaluate(`Object.keys(sessionStorage).filter(k=>k.startsWith('flipforge:item-assessment:')).forEach(k=>sessionStorage.removeItem(k))`);
     await evaluate('window.beforeQuickNavigation = true');
     await cdp('Page.navigate', { url: `http://127.0.0.1:5173/items${query}` });
     await until(`!window.beforeQuickNavigation && Boolean(document.querySelector('.items-quick'))`);
@@ -408,6 +417,128 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   checks.push('Skip wording follows negative, zero and positive server cash; equal resale estimates hide the repeated line while different estimates show it');
   checks.push('Result profit goals omit whole-dollar cents but preserve $40.50 without changing server calculations');
 
+  const recoveryKey = 'flipforge:item-assessment:browser-fixture';
+  const storedId = () => evaluate(`sessionStorage.getItem(${JSON.stringify(recoveryKey)})`);
+  const requests = async () => (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
+  const restoreMarker = async id => evaluate(`sessionStorage.setItem(${JSON.stringify(recoveryKey)}, ${JSON.stringify(id)})`);
+  await mode('normal'); await open(); await upload(); await fill(input('quick-asking'), '20');
+  // Inspect storage at the actual fetch boundary, then hold the response while
+  // navigating away. The provider and database are still the real fixture path.
+  await evaluate(`(()=>{const original=window.fetch;window.fetch=async(input,init)=>{
+    if(new URL(typeof input==='string'?input:input.url).pathname==='/api/items/assess'){
+      window.idBeforePost=sessionStorage.getItem(${JSON.stringify(recoveryKey)});
+      window.sentId=JSON.parse(init.body).request_id;
+      const response=await original(input,init);await new Promise(resolve=>setTimeout(resolve,3000));return response;
+    }return original(input,init);
+  };})()`);
+  const beforeRecovery = await requests();
+  await evaluate(`document.querySelector('[data-quick-assess]').click()`);
+  await until(`Boolean(window.sentId)`);
+  const recoveryId = await storedId();
+  assert.equal(await evaluate('window.idBeforePost'), recoveryId);
+  assert.equal(await evaluate('window.sentId'), recoveryId, 'UUID must be stored before the POST');
+  for(let i=0;i<80 && await calls()===beforeRecovery.calls;i++) await pause(25);
+  await open('', true);
+  await until(`document.body.textContent.includes('Recovered your photo estimate.')`);
+  await until(`!document.querySelector('[data-quick-calculate]').disabled`);
+  let afterRecovery = await requests();
+  assert.equal(afterRecovery.posts, beforeRecovery.posts + 1);
+  assert.equal(afterRecovery.calls, beforeRecovery.calls + 1);
+  assert.equal(afterRecovery.reads, beforeRecovery.reads + 1, 'Exactly one automatic recovery GET');
+  assert.equal(await storedId(), recoveryId, 'Completion must retain the ID until save/dismiss/new find');
+  assert.ok(await evaluate(`Boolean(document.querySelector('.quick-sources'))`));
+  assert.equal(await evaluate(`document.querySelectorAll('.quick-photo').length`), 0, 'Photos are not stored');
+  checks.push('ID is stored before POST; refresh while awaiting the response restores the same result through exactly one GET and no extra paid request');
+
+  await fill(input('item-notes'), 'Unsaved note should not survive refresh');
+  await calculate('within_budget');
+  await open('', true);
+  await until(`document.body.textContent.includes('Recovered your photo estimate.')`);
+  await until(`!document.querySelector('[data-quick-calculate]').disabled`);
+  assert.equal(await storedId(), recoveryId);
+  assert.equal(await evaluate(`${input('item-notes')}.value`), '');
+  assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false, 'Repairs require fresh confirmation');
+  afterRecovery = await requests();
+  assert.equal(afterRecovery.posts, beforeRecovery.posts + 1);
+  assert.equal(afterRecovery.reads, beforeRecovery.reads + 2);
+  await calculate('within_budget'); await click('button', 'Save item'); await savedConfirmation();
+  assert.equal(await storedId(), null, 'Confirmed save clears recovery');
+  const recoveredSave = (await api('/api/items')).items[0];
+  assert.equal(recoveredSave.assessment.assessment_id, recoveryId);
+  checks.push('Completed unsaved estimates survive refresh without a POST; edits are not restored and a confirmed find save clears recovery');
+
+  await restoreMarker(recoveryId);
+  const beforeSavedReopen = await requests();
+  await open(`?find=${savedFind.id}`, true);
+  await until(`Boolean(document.querySelector('[data-quick-status]'))`);
+  assert.equal((await requests()).reads, beforeSavedReopen.reads, 'Saved find does not GET recovery');
+  assert.equal(await storedId(), recoveryId);
+  assert.equal(await evaluate(`${input('item-notes')}.value`), savedFind.notes);
+  await fill(input('item-notes'), 'An unrelated saved find revision');
+  await click('button', 'Save new version'); await savedConfirmation();
+  assert.equal(await storedId(), recoveryId, 'Saving a different snapshot cannot discard recovery');
+  await click('a', 'Start another find');
+  await until(`Boolean(document.querySelector('[data-quick-assess]')) && !document.querySelector('.quick-sources')`);
+  assert.equal(await storedId(), null, 'Explicit fresh start from a saved snapshot also dismisses old recovery');
+  await restoreMarker(recoveryId);
+  checks.push('Saved-find reopen wins over recovery, and saving an unrelated revision leaves the recoverable estimate intact');
+
+  await open('', true); await until(`document.body.textContent.includes('Recovered your photo estimate.')`);
+  await until(`!document.querySelector('[data-quick-calculate]').disabled`);
+  await click('button', 'Dismiss estimate recovery');
+  assert.equal(await storedId(), null);
+  await restoreMarker(recoveryId); await open('', true);
+  await until(`document.body.textContent.includes('Recovered your photo estimate.')`);
+  await until(`!document.querySelector('[data-quick-calculate]').disabled`);
+  await click('a', 'Start another find');
+  await until(`Boolean(document.querySelector('[data-quick-assess]')) && !document.querySelector('.quick-sources')`);
+  assert.equal(await storedId(), null);
+  checks.push('Explicit dismissal and Start another find clear the retained ID without another provider request');
+
+  await restoreMarker('not-a-uuid');
+  const beforeGarbage = await requests(); await open('', true);
+  await until(`sessionStorage.getItem(${JSON.stringify(recoveryKey)}) === null`);
+  assert.equal((await requests()).reads, beforeGarbage.reads);
+  assert.equal((await requests()).posts, beforeGarbage.posts);
+  await restoreMarker('12345678-1234-4234-8234-123456789abc');
+  const beforeMissing = await requests(); await open('', true);
+  await until(`document.body.textContent.includes("Estimate not found. It wasn't submitted again.")`);
+  assert.equal(await storedId(), null);
+  assert.equal((await requests()).reads, beforeMissing.reads + 1);
+  assert.equal((await requests()).posts, beforeMissing.posts);
+  checks.push('Garbage IDs are discarded without GET/POST; a missing assessment clears recovery after one 404 GET and is never resubmitted');
+
+  await restoreMarker(recoveryId); await open('', true);
+  await until(`document.body.textContent.includes('Recovered your photo estimate.')`);
+  await evaluate(`window.switchFixtureUser('other-user')`);
+  await until(`sessionStorage.getItem(${JSON.stringify(recoveryKey)}) === null && !document.querySelector('.quick-sources')`);
+  await evaluate(`window.switchFixtureUser('browser-fixture')`);
+  await until(`Boolean(document.querySelector('[data-quick-assess]'))`);
+  await restoreMarker(recoveryId); await open('', true);
+  await until(`document.body.textContent.includes('Recovered your photo estimate.')`);
+  await evaluate(`window.switchFixtureUser(null)`);
+  await until(`sessionStorage.getItem(${JSON.stringify(recoveryKey)}) === null && !document.querySelector('.quick-sources')`);
+  checks.push('Account switching and sign-out clear the previous account marker and recovered evidence');
+
+  await open(); await restoreMarker(recoveryId);
+  const delayedRecovery = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `const original=window.fetch;window.fetch=async(input,init)=>{const response=await original(input,init);if(new URL(typeof input==='string'?input:input.url).pathname.startsWith('/api/items/assessments/')){window.recoveryReceived=true;await new Promise(resolve=>setTimeout(resolve,700));}return response;};` });
+  await open('', true); await until(`window.recoveryReceived === true`);
+  await evaluate(`window.switchFixtureUser('other-user')`); await pause(850);
+  assert.equal(await storedId(), null);
+  assert.equal(await evaluate(`Boolean(document.querySelector('.quick-sources'))`), false);
+  await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: delayedRecovery.identifier });
+  checks.push('A recovery GET completing after an account switch cannot restore the previous account evidence');
+
+  const blockedStorage = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(window,'sessionStorage',{get(){throw new Error('Storage denied')}});` });
+  await open('', true); await upload(); await fill(input('quick-asking'), '20');
+  await runAI(); await calculate('within_budget');
+  assert.ok(await evaluate(`Boolean(document.querySelector('.quick-sources'))`));
+  await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: blockedStorage.identifier });
+  await open('', true);
+  await until(`Boolean(document.querySelector('[data-quick-assess]'))`);
+  assert.equal(await storedId(), null);
+  checks.push('Unavailable sessionStorage preserves the existing in-memory photo assessment and calculation flow');
+
   await mode('overloaded'); await open(); await upload(); await fill(input('quick-asking'), '20'); await runAI();
   await until(`document.querySelector('[role=alert]')?.textContent.includes("AI couldn't finish")`);
   assert.ok(await evaluate(`!document.querySelector('[data-quick-assess]').disabled`));
@@ -436,6 +567,13 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished")`);
+  const uncertainId = await storedId();
+  const beforePendingRefresh = await requests();
+  await open('', true);
+  await until(`document.body.textContent.includes("Your photo estimate hasn't finished") && Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Check estimate status' && !e.disabled)`);
+  assert.equal(await storedId(), uncertainId);
+  assert.equal((await requests()).reads, beforePendingRefresh.reads + 1);
+  assert.equal((await requests()).posts, beforePendingRefresh.posts);
   await click('button', 'Check estimate status');
   await until(`!document.querySelector('[aria-label="Confirm estimate"] fieldset').disabled`);
   assert.equal(await calls(), beforeTimeout + 1);

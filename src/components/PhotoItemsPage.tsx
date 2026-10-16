@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { SignInButton, useAuth, UserButton } from "@clerk/clerk-react";
@@ -8,6 +8,7 @@ import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuick
 import { buildSavedItemInputs, restoreItemForm, safeItemLink } from "../lib/savedItems";
 import type { SavedItemForm } from "../lib/savedItems";
 import type { ItemAIBudget, ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResponse, ItemAssessmentResult, ItemFinancialInput, SavedItem } from "../lib/types";
+import { clearAssessmentRecovery, readAssessmentRecovery, rememberAssessment } from "../lib/itemAssessmentRecovery";
 import ItemsPage from "./ItemsPage";
 import ItemSavePanel from "./ItemSavePanel";
 import "./PhotoItemsPage.css";
@@ -48,6 +49,13 @@ export default function PhotoItemsPage() {
 function QuickAccount({ findId }: { findId: string | null }) {
   const { isLoaded, isSignedIn, userId } = useAuth();
   const [identity, setIdentity] = useState({ user: isLoaded ? userId ?? null : null, generation: 0 });
+  const previousUser = useRef(isLoaded ? userId ?? null : null);
+  useEffect(() => {
+    if (!isLoaded) return;
+    const nextUser = userId ?? null;
+    if (previousUser.current && previousUser.current !== nextUser) clearAssessmentRecovery(previousUser.current);
+    previousUser.current = nextUser;
+  }, [isLoaded, userId]);
   if (isLoaded && identity.user !== (userId ?? null)) {
     setIdentity({ user: userId ?? null, generation: identity.generation + (identity.user === null ? 0 : 1) });
   }
@@ -57,7 +65,7 @@ function QuickAccount({ findId }: { findId: string | null }) {
 }
 
 function QuickEditor({ findId }: { findId: string | null }) {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, userId, getToken } = useAuth();
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<ItemAssessmentPhoto[]>([]);
   const [budget, setBudget] = useState<ItemAIBudget | null>(null);
@@ -66,6 +74,10 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const [assessment, setAssessment] = useState<ItemAssessmentResponse | null>(null);
   const [evidence, setEvidence] = useState<ItemAssessmentResult | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [recoveryId, setRecoveryId] = useState<string | null>(null);
+  const [recovered, setRecovered] = useState(false);
+  const recoveryFinished = useRef(false);
+  const recoveryRequest = useRef<Promise<ItemAssessmentResponse> | null>(null);
   const [form, setForm] = useState(newQuickItemForm);
   const [manual, setManual] = useState(false);
   const [repairEdit, setRepairEdit] = useState(false);
@@ -83,6 +95,19 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const locked = useRef(false);
   const resultRef = useRef<HTMLElement>(null);
   const costsRef = useRef<HTMLDetailsElement>(null);
+  const acceptAssessment = useCallback((response: ItemAssessmentResponse) => {
+    if (response.schema_version !== 1 || !["processing", "uncertain", "failed", "completed"].includes(response.status) || (response.status === "completed" && !response.result)) throw new Error("The estimate wasn't confirmed. Check its status before trying again.");
+    setAssessment(response);
+    if (response.status === "processing" || response.status === "uncertain") {
+      setError(response.message ?? "Your estimate is still running. Check its status in a moment."); setManual(true); return;
+    }
+    setPendingId(null);
+    if (!response.result) { setError(response.message ?? "AI couldn't finish. Enter your own estimate below."); setManual(true); return; }
+    setEvidence(response.result); setForm(restoreItemForm(response.result.inputs)); setResult(null);
+    setConfirmation(null); setOwnResale(response.result.resale === null);
+    setRepairEdit(response.result.repair_unknowns.length > 0); setManual(true); setErrors({}); setError("");
+    setEditVersion(value => value + 1);
+  }, []);
   useEffect(() => () => { sequence.current++; locked.current = false; }, []);
   useEffect(() => { if (result) resultRef.current?.focus(); }, [result]);
 
@@ -106,6 +131,35 @@ function QuickEditor({ findId }: { findId: string | null }) {
     })();
     return () => { active = false; };
   }, [getToken, isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    // Saved snapshots always win. Recovery waits for the current Clerk identity.
+    if (findId !== null || !isLoaded || !isSignedIn || !userId || recoveryFinished.current) return;
+    const id = readAssessmentRecovery(userId);
+    if (!id) { recoveryFinished.current = true; return; }
+    let active = true;
+    setRecoveryId(id); setPendingId(id); locked.current = true; setBusy("recover");
+    // Reuse the promise through StrictMode's effect replay: one GET, no polling.
+    recoveryRequest.current ??= (async () => {
+      const token = await getToken();
+      if (!token) throw new Error("Sign in again to recover this estimate.");
+      return getItemAssessment(id, token);
+    })();
+    void recoveryRequest.current.then(response => {
+      if (!active) return;
+      acceptAssessment(response); setRecovered(response.status === "completed");
+    }).catch(failure => {
+      if (!active) return;
+      if (failure instanceof ItemAssessmentError && failure.status === 404) {
+        clearAssessmentRecovery(userId, id); setRecoveryId(null); setPendingId(null);
+        setError("Estimate not found. It wasn't submitted again.");
+      } else setError(failure instanceof Error ? failure.message : "Could not recover this estimate. Check its status to try again.");
+      setManual(true);
+    }).finally(() => {
+      if (active) { recoveryFinished.current = true; locked.current = false; setBusy(null); }
+    });
+    return () => { active = false; };
+  }, [findId, isLoaded, isSignedIn, userId, getToken, acceptAssessment]);
 
   useEffect(() => {
     if (findId === null) return;
@@ -154,19 +208,6 @@ function QuickEditor({ findId }: { findId: string | null }) {
     } catch (failure) { if (sequence.current === current) setError((failure as Error).message); }
     finally { if (sequence.current === current) { locked.current = false; setBusy(null); } }
   }
-  function acceptAssessment(response: ItemAssessmentResponse) {
-    if (response.schema_version !== 1 || !["processing", "uncertain", "failed", "completed"].includes(response.status) || (response.status === "completed" && !response.result)) throw new Error("The estimate wasn't confirmed. Check its status before trying again.");
-    setAssessment(response);
-    if (response.status === "processing" || response.status === "uncertain") {
-      setError(response.message ?? "Your estimate is still running. Check its status in a moment."); setManual(true); return;
-    }
-    setPendingId(null);
-    if (!response.result) { setError(response.message ?? "AI couldn't finish. Enter your own estimate below."); setManual(true); return; }
-    setEvidence(response.result); setForm(restoreItemForm(response.result.inputs)); setResult(null);
-    setConfirmation(null); setOwnResale(response.result.resale === null);
-    setRepairEdit(response.result.repair_unknowns.length > 0); setManual(true); setErrors({}); setError("");
-    setEditVersion(value => value + 1);
-  }
   async function estimate(checkOnly = false) {
     if (locked.current || !isSignedIn || (!checkOnly && pendingId)) return;
     let payload;
@@ -178,7 +219,11 @@ function QuickEditor({ findId }: { findId: string | null }) {
       const token = await getToken();
       if (current !== sequence.current) return;
       if (!token) throw new Error("Sign in again to estimate this find.");
-      if (payload) { setPendingId(payload.request_id); sent = true; }
+      if (payload) {
+        setPendingId(payload.request_id);
+        setRecoveryId(userId && rememberAssessment(userId, payload.request_id) ? payload.request_id : null);
+        setRecovered(false); sent = true;
+      }
       const response = payload ? await assessItem(payload, token) : await getItemAssessment(pendingId!, token);
       if (current !== sequence.current) return;
       acceptAssessment(response);
@@ -188,10 +233,19 @@ function QuickEditor({ findId }: { findId: string | null }) {
     } catch (failure) {
       if (current !== sequence.current) return;
       const rejected = failure instanceof ItemAssessmentError && (failure.status < 500 || failure.status === 503);
-      if (!checkOnly && rejected) setPendingId(null);
+      if ((!checkOnly && rejected) || (checkOnly && failure instanceof ItemAssessmentError && failure.status === 404)) {
+        const id = payload?.request_id ?? pendingId;
+        if (userId && id) clearAssessmentRecovery(userId, id);
+        setRecoveryId(null); setPendingId(null);
+      }
       setError(failure instanceof Error ? failure.message : "AI couldn't finish. Enter your own estimate below.");
       if (sent || checkOnly || rejected) setManual(true);
     } finally { if (current === sequence.current) { locked.current = false; setBusy(null); } }
+  }
+  function dismissRecovery() {
+    if (locked.current) return;
+    if (userId && recoveryId) clearAssessmentRecovery(userId, recoveryId);
+    setRecoveryId(null); setPendingId(null); setRecovered(false);
   }
   async function calculate() {
     if (locked.current) return;
@@ -247,6 +301,11 @@ function QuickEditor({ findId }: { findId: string | null }) {
           <p className="quick-small">Photos go to Anthropic for this estimate. FlipForge doesn't save them.</p>
         </section>}
         {pendingId && <div className="quick-notice" role="status"><strong>Your photo estimate hasn't finished.</strong><p>Check the same estimate without paying for another. You can enter your own numbers below while you wait.</p><button className="quick-secondary" disabled={blocked} onClick={() => void estimate(true)}>Check estimate status</button></div>}
+        {busy === "recover" && <p role="status">Recovering your previous estimate…</p>}
+        {recoveryId && !snapshot && <div className="quick-notice">
+          {recovered && <p>Recovered your photo estimate. Review repairs again; unsaved edits and notes aren't restored.</p>}
+          <button type="button" className="quick-text-button" disabled={blocked} onClick={dismissRecovery}>Dismiss estimate recovery</button>
+        </div>}
         {budgetNote && !evidence && <div className="quick-notice" role="status">{budgetNote}</div>}
         {budget?.warning && <p className="quick-notice" role="status">The pilot is near its $20 monthly AI budget. Manual estimates keep working.</p>}
         {error && <p className="quick-error quick-notice" role="alert">{error}</p>}
@@ -306,8 +365,16 @@ function QuickEditor({ findId }: { findId: string | null }) {
         {(manual || evidence) && <ItemSavePanel key={initial?.id ?? "new"} light disabled={!result || blocked} form={form} initial={initial} parentId={snapshot?.id ?? null} editVersion={editVersion}
           assessment={assessment?.status === "completed" && confirmation ? { assessment_id: assessment.id, assessment_confirmation: confirmation } : undefined}
           onErrors={setErrors} onBusy={saving => { locked.current = saving; setBusy(saving ? "save" : null); }}
-          onSaved={saved => { setSnapshot(saved); setResult(saved.analysis_result); }} />}
-        {(evidence || snapshot) && <a className="quick-text-button" href="/items">Start another find</a>}
+          onSaved={saved => {
+            if (userId && saved.assessment?.assessment_id === recoveryId) {
+              clearAssessmentRecovery(userId, recoveryId); setRecoveryId(null);
+            }
+            setSnapshot(saved); setResult(saved.analysis_result);
+          }} />}
+        {(evidence || snapshot) && <a className="quick-text-button" href="/items" onClick={event => {
+          if (locked.current) { event.preventDefault(); return; }
+          if (userId) clearAssessmentRecovery(userId);
+        }}>Start another find</a>}
       </aside>
     </div>
   </main>;
