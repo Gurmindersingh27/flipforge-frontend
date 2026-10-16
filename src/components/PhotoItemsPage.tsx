@@ -70,7 +70,9 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const [photos, setPhotos] = useState<ItemAssessmentPhoto[]>([]);
   const [budget, setBudget] = useState<ItemAIBudget | null>(null);
   const [budgetNote, setBudgetNote] = useState("");
-  const [pilotDenied, setPilotDenied] = useState(false);
+  const [readiness, setReadiness] = useState<"checking" | "available" | "unavailable" | "failed">("checking");
+  const budgetSequence = useRef(0);
+  const budgetInFlight = useRef(false);
   const [assessment, setAssessment] = useState<ItemAssessmentResponse | null>(null);
   const [evidence, setEvidence] = useState<ItemAssessmentResult | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -111,26 +113,39 @@ function QuickEditor({ findId }: { findId: string | null }) {
   useEffect(() => () => { sequence.current++; locked.current = false; }, []);
   useEffect(() => { if (result) resultRef.current?.focus(); }, [result]);
 
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
-    let active = true;
-    void (async () => {
-      try {
-        const token = await getToken();
-        if (!active || !token) return;
-        const status = await getItemAIBudget(token);
-        if (!active) return;
-        setBudget(status);
-        if (!status.available) {
-          setBudgetNote(status.message ?? (status.reason === "assessment_busy" ? "Another estimate is still running. Enter your own numbers while you wait." : "AI estimates aren't available yet. You can still work out an offer below."));
-          setManual(true);
-        }
-      } catch (failure) {
-        if (active) { setPilotDenied(failure instanceof ItemAssessmentError && failure.status === 403); setBudgetNote(failure instanceof Error ? failure.message : "AI isn't available. The manual estimate still works."); setManual(true); }
+  const checkAvailability = useCallback(async () => {
+    if (!isLoaded || !isSignedIn || budgetInFlight.current) return;
+    const current = ++budgetSequence.current;
+    budgetInFlight.current = true; setReadiness("checking"); setBudgetNote("");
+    try {
+      const token = await getToken();
+      if (current !== budgetSequence.current) return;
+      if (!token) throw new Error("Sign in again to check AI availability.");
+      const status = await getItemAIBudget(token);
+      if (current !== budgetSequence.current) return;
+      setBudget(status);
+      setReadiness(status.available === true ? "available" : "unavailable");
+      if (status.available !== true) {
+        setBudgetNote(status.message ?? (status.reason === "assessment_busy" ? "Another estimate is still running. Enter your own numbers while you wait." : "AI estimates aren't available yet. You can still work out an offer below."));
+        setManual(true);
       }
-    })();
-    return () => { active = false; };
+    } catch (failure) {
+      if (current !== budgetSequence.current) return;
+      setBudget(null);
+      setReadiness(failure instanceof ItemAssessmentError && failure.status === 403 ? "unavailable" : "failed");
+      setBudgetNote(failure instanceof Error ? failure.message : "Couldn't check AI availability. You can still enter your own estimate.");
+      setManual(true);
+    } finally {
+      if (current === budgetSequence.current) budgetInFlight.current = false;
+    }
   }, [getToken, isLoaded, isSignedIn]);
+  const cancelAvailability = useCallback(() => {
+    budgetSequence.current++; budgetInFlight.current = false;
+  }, []);
+  useEffect(() => {
+    void checkAvailability();
+    return cancelAvailability;
+  }, [checkAvailability, cancelAvailability]);
 
   useEffect(() => {
     // Saved snapshots always win. Recovery waits for the current Clerk identity.
@@ -209,7 +224,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     finally { if (sequence.current === current) { locked.current = false; setBusy(null); } }
   }
   async function estimate(checkOnly = false) {
-    if (locked.current || !isSignedIn || (!checkOnly && pendingId)) return;
+    if (locked.current || !isSignedIn || (!checkOnly && (pendingId || readiness !== "available" || budgetInFlight.current))) return;
     let payload;
     try { if (!checkOnly) payload = buildAssessmentRequest(crypto.randomUUID(), description, form.values.purchase_price, photos); }
     catch (failure) { setError((failure as Error).message); return; }
@@ -227,9 +242,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
       const response = payload ? await assessItem(payload, token) : await getItemAssessment(pendingId!, token);
       if (current !== sequence.current) return;
       acceptAssessment(response);
-      void getItemAIBudget(token).then(status => {
-        if (current === sequence.current) { setBudget(status); setBudgetNote(status.message ?? ""); }
-      }).catch(() => {});
+      void checkAvailability();
     } catch (failure) {
       if (current !== sequence.current) return;
       const rejected = failure instanceof ItemAssessmentError && (failure.status < 500 || failure.status === 503);
@@ -275,7 +288,8 @@ function QuickEditor({ findId }: { findId: string | null }) {
 
   if (findId && !initial) return <main className="quick-main"><h1>Your saved find</h1>{busy ? <p role="status">Reopening your item…</p> : <div role="alert"><p>{error}</p><button className="quick-secondary" onClick={() => { setBusy("reopen"); setError(""); setLoadAttempt(n => n + 1); }}>Try reopening again</button></div>}<Link to="/my-flips">Back to My Flips</Link></main>;
   const blocked = Boolean(busy);
-  const aiAvailable = !pilotDenied && (!budget || budget.available);
+  const aiAvailable = readiness === "available";
+  const showPhotoForm = !isSignedIn || readiness !== "unavailable";
   const noTime = result?.assumptions.hours.value === 0;
   function openCosts() {
     if (costsRef.current) costsRef.current.open = true;
@@ -285,7 +299,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     <header className="quick-intro"><p className="quick-eyebrow">A GOOD FIND STARTS HERE</p><h1>{snapshot ? "Back to your find." : <>See potential?<br /><em>Let's work it out.</em></>}</h1><p>{aiAvailable ? <>Snap a photo. Tell us what you know.<br />Get a starting offer and a plan for the work.</> : <>Enter what you know.<br />We'll help you work out an offer.</>}</p></header>
     <div className="quick-layout">
       <div className="quick-flow">
-        {!snapshot && !evidence && aiAvailable && <section className="quick-card" aria-label="Photo estimate">
+        {!snapshot && !evidence && showPhotoForm && <section className="quick-card" aria-label="Photo estimate">
           <fieldset disabled={blocked || pendingId !== null}>
             <div className="quick-section-title"><span className="quick-step">01</span><h2>What did you find?</h2><span className="quick-muted">Up to 3 photos</span></div>
             <div className="quick-photos">
@@ -306,7 +320,11 @@ function QuickEditor({ findId }: { findId: string | null }) {
           {recovered && <p>Recovered your photo estimate. Review repairs again; unsaved edits and notes aren't restored.</p>}
           <button type="button" className="quick-text-button" disabled={blocked} onClick={dismissRecovery}>Dismiss estimate recovery</button>
         </div>}
-        {budgetNote && !evidence && <div className="quick-notice" role="status">{budgetNote}</div>}
+        {isLoaded && isSignedIn && readiness !== "available" && <div className="quick-notice" role="status">
+          <p>{readiness === "checking" ? "Checking AI availability…" : budgetNote}</p>
+          <button type="button" className="quick-secondary" disabled={blocked || readiness === "checking"} onClick={() => { if (!locked.current) void checkAvailability(); }}>Check AI availability</button>
+          <p className="quick-small">This check is free. It doesn't request an estimate.</p>
+        </div>}
         {budget?.warning && <p className="quick-notice" role="status">The pilot is near its $20 monthly AI budget. Manual estimates keep working.</p>}
         {error && <p className="quick-error quick-notice" role="alert">{error}</p>}
         {busy === "photo" && <p role="status">Preparing your photos…</p>}
