@@ -1533,11 +1533,12 @@ try {
       const mode=window.savedItemMode;
       if(mode==='headers')return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError'))));
       if(mode==='body')return new Response(new ReadableStream({start(controller){init.signal.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')));}}),{status:200});
-      if(['403','404','422','500'].includes(mode))return Response.json({detail:mode==='422'?[{loc:['body','notes'],msg:'Invalid notes fixture'}]:'Rejected fixture'},{status:Number(mode)});
+      if(['401','403','404','409','422','500','503'].includes(mode))return Response.json({detail:mode==='422'?[{loc:['body','notes'],msg:'Invalid notes fixture'}]:'Rejected fixture'},{status:Number(mode)});
       if(mode==='slow')await new Promise(resolve=>nativeTimeout(resolve,70));
       if(mode==='hold-list' && url.pathname==='/api/items')await new Promise(resolve=>window.releaseSavedItemList=resolve);
       const response=await nativeFetch(input,init);
       if(mode==='lost' && init.method==='POST'){window.lastCommittedItem=await response.json();throw new TypeError('Confirmation lost');}
+      if(mode==='held-save' && init.method==='POST'){const saved=await response.json();await new Promise(resolve=>window.releaseItemSave=resolve);return Response.json(saved,{status:201});}
       if(mode==='delayed-read' && request.method==='GET' && request.auth==='Bearer browser-fixture')await new Promise(resolve=>nativeTimeout(resolve,600));
       if(mode==='hostile-link' && url.pathname==='/api/items'){const data=await response.json();data.items=data.items.map(item=>({...item,listing_url:'javascript:alert(1)',notes:'<img src=x onerror=alert(1)>'}));return Response.json(data);}
       return response;
@@ -1645,22 +1646,98 @@ try {
   assert.equal(await evaluate('window.savedItemRequests.filter(r=>r.method==="POST").length'),1);
   checks.push('Save blocks invalid screen values and NUL before requests, locks before token retrieval, and sends one write on duplicate clicks');
 
-  for (const mode of ['headers','body','403','422','500','lost']) {
-    await signedItems(dresser); await evaluate(`window.savedItemMode=${JSON.stringify(mode)}`);
+  for (const mode of ['headers','body','401','403','409','422','503','500','lost']) {
+    await signedItems(dresser);
+    await fill(`document.getElementById('item-notes')`,'Captured notes');
+    await fill(`document.getElementById('item-listing-url')`,'https://example.com/captured');
+    await evaluate(`window.savedItemMode=${JSON.stringify(mode)}`);
     const before=(await api('/api/items')).items.map(i=>i.id);
     await click('button','Save item');
-    await until(hasAlert(mode==='403'?'session':mode==='422'?'Invalid notes':'may already be saved'));
+    const definite=['401','403','409','422','503'].includes(mode);
+    await until(hasAlert(['401','403'].includes(mode)?'session':mode==='422'?'Invalid notes':definite?'Items request failed':'may already be saved'));
     assert.equal(await evaluate('window.savedItemRequests.length'),1);
+    const captured=await evaluate('window.savedItemRequests[0].body');
+    assert.match(captured.request_id,/^[0-9a-f-]{36}$/);
     assert.equal(await evaluate(`(${itemInput('purchase_price')}).value`),'0');
-    if (!['403','422'].includes(mode)) assert.ok(await evaluate(`(${byText('button','Save item')}).disabled`));
-    else { await evaluate('window.savedItemMode="pass"'); await saveCurrent(); }
-    if(mode==='lost') {
-      const committed=await evaluate('window.lastCommittedItem'); assert.ok(!before.includes(committed.id));
-      await evaluate('window.savedItemMode="pass"'); await click('a','My Flips');
-      await until(`Boolean(document.querySelector('[data-saved-item="${committed.id}"]'))`);
+    if (definite) {
+      assert.ok(await evaluate(`!(${itemInput('purchase_price')}).matches(':disabled') && !document.getElementById('item-notes').matches(':disabled')`));
+      await evaluate('window.savedItemMode="pass"'); await saveCurrent();
+      assert.notEqual(await evaluate('window.savedItemRequests[1].body.request_id'),captured.request_id);
+    } else {
+      for(const input of [itemInput('purchase_price'),`document.getElementById('item-notes')`,`document.getElementById('item-listing-url')`]) assert.ok(await evaluate(`(${input}).matches(':disabled')`));
+      assert.ok(await evaluate(`!(${byText('button','Retry this save')}).disabled`));
+      await pause(60); assert.equal(await evaluate('window.savedItemRequests.length'),1,'No automatic retry');
+      const committed=mode==='lost'?await evaluate('window.lastCommittedItem'):null;
+      if(committed) {
+        assert.ok(!before.includes(committed.id));
+        await click('button','Retry this save'); await until(hasAlert('may already be saved'));
+        assert.deepEqual(await evaluate('window.lastCommittedItem'),committed,'Repeated lost replay keeps original record');
+      }
+      await evaluate(`window.savedItemMode='pass';window.authFixture={calls:0,delayMs:70}`);
+      await evaluate(`(()=>{const b=${byText('button','Retry this save')};b.click();b.click();})()`);
+      await until(hasStatus('Saved version #'));
+      assert.equal(await evaluate('window.authFixture.calls'),1);
+      const requests=await evaluate('window.savedItemRequests');
+      assert.equal(requests.length,committed?3:2);
+      assert.ok(requests.every(request=>JSON.stringify(request.body)===JSON.stringify(captured)),'Retries preserve the entire payload and request ID');
+      const saved=(await api('/api/items')).items[0];
+      assert.equal(saved.notes,'Captured notes'); assert.equal(saved.listing_url,'https://example.com/captured');
+      if(committed) assert.deepEqual(saved,committed);
+      assert.equal((await api('/api/items')).items.filter(item=>!before.includes(item.id)).length,1);
+      assert.ok(await evaluate(`!(${itemInput('purchase_price')}).matches(':disabled') && !document.getElementById('item-notes').matches(':disabled')`));
+      await fill(`document.getElementById('item-notes')`,'Next edit');
+      const child=await saveCurrent('Save new version');
+      assert.equal(child.parent_item_id,saved.id);
+      assert.notEqual(await evaluate('window.savedItemRequests.at(-1).body.request_id'),captured.request_id);
     }
   }
-  checks.push('Save header/body timeouts, server errors and lost confirmations never retry; definite 403/422 rejections allow correction, and committed lost saves are discoverable in My Flips');
+  checks.push('Manual save header/body timeouts, 500 and lost responses retain one captured request; explicit double-clicked retries produce one immutable record and preserve notes/link');
+  checks.push('Definite 401/403/409/422/503 save rejections unlock editing and discard request IDs; success followed by editing uses a fresh ID and linked version');
+
+  for(const width of [390,1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    await signedItems(dresser); await fill(`document.getElementById('item-notes')`,'Retain after discard');
+    await evaluate(`window.savedItemMode='lost'`); await click('button','Save item'); await until(hasAlert('may already be saved'));
+    const original=await evaluate('window.lastCommittedItem'), oldId=await evaluate('window.savedItemRequests[0].body.request_id');
+    await screenshot(`items-save-retry-${width}.png`);
+    await click('button','Discard and edit');
+    assert.ok(await evaluate(`!(${itemInput('purchase_price')}).matches(':disabled') && !document.getElementById('item-notes').matches(':disabled')`));
+    assert.equal(await evaluate(`document.getElementById('item-notes').value`),'Retain after discard');
+    await fill(`document.getElementById('item-notes')`,'Edited after discard');
+    assert.ok(await evaluate(`document.body.textContent.includes('discarded attempt may already be saved')`));
+    assert.equal(await evaluate('window.savedItemRequests.length'),1);
+    await evaluate(`window.savedItemMode='pass'`); await saveCurrent();
+    assert.notEqual(await evaluate('window.savedItemRequests[1].body.request_id'),oldId);
+    assert.deepEqual(await api(`/api/items/${original.id}`),original,'Discard never deletes the committed save');
+    assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'));
+  }
+  checks.push('Manual save retry/discard controls fit 390/1440; discard unlocks without losing inputs, retains the warning through edits, and never deletes an existing save');
+
+  for(const nextUser of [null,'save-retry-user']) {
+    await signedItems(dresser); await fill(`document.getElementById('item-notes')`,'Private pending save');
+    await evaluate(`window.savedItemMode='500'`); await click('button','Save item'); await until(hasAlert('may already be saved'));
+    const oldId=await evaluate('window.savedItemRequests[0].body.request_id');
+    await evaluate(`window.switchFixtureUser(${JSON.stringify(nextUser)})`);
+    await until(`document.getElementById('item-notes')?.value === ''`);
+    assert.ok(await evaluate(`!document.body.textContent.includes('Retry this save')`));
+    if(nextUser===null) await evaluate(`window.switchFixtureUser('browser-fixture')`);
+    await evaluate(`window.savedItemMode='pass'`); await click('button','Save item'); await until(hasStatus('Saved version #'));
+    const requests=await evaluate('window.savedItemRequests.filter(r=>r.method==="POST")');
+    assert.equal(requests.length,2); assert.notEqual(requests[1].body.request_id,oldId);
+    assert.equal(requests[1].auth,`Bearer ${nextUser??'browser-fixture'}`);
+    assert.ok(!JSON.stringify(requests[1].body).includes('Private pending save'));
+  }
+  await signedItems(dresser); await evaluate(`window.savedItemMode='500'`);
+  await click('button','Save item'); await until(hasAlert('may already be saved'));
+  await evaluate(`window.savedItemMode='pass';window.authFixture={calls:0,delayMs:350}`);
+  await click('button','Retry this save'); await evaluate(`window.switchFixtureUser('other-user')`); await pause(450);
+  assert.equal(await evaluate('window.savedItemRequests.length'),1,'Account switch cancels retry before token resolves');
+  await signedItems(dresser); await evaluate(`window.savedItemMode='held-save'`);
+  await click('button','Save item'); await until(`typeof window.releaseItemSave==='function'`);
+  await evaluate(`window.switchFixtureUser('other-user');window.releaseItemSave()`); await pause(200);
+  assert.equal(await evaluate(`document.getElementById('item-notes').value`),'');
+  assert.ok(await evaluate(`!document.body.textContent.includes('Saved version #') && !document.body.textContent.includes('Retry this save')`));
+  checks.push('Manual sign-out/account changes discard pending save identities, cancel pre-token retries and suppress committed old-account responses');
 
   // Signed-out direct reopen and list make no authenticated read.
   for(const path of [`/items?saved=${sourceItem.id}&fixtureSignedOut=1`,'/my-flips?fixtureSignedOut=1']) {
