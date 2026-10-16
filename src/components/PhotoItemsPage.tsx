@@ -296,7 +296,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     document.getElementById("quick-target_profit")?.focus();
   }
   return <main className="quick-main">
-    <header className="quick-intro"><p className="quick-eyebrow">A GOOD FIND STARTS HERE</p><h1>{snapshot ? "Back to your find." : <>See potential?<br /><em>Let's work it out.</em></>}</h1><p>{aiAvailable ? <>Snap a photo. Tell us what you know.<br />Get a starting offer and a plan for the work.</> : <>Enter what you know.<br />We'll help you work out an offer.</>}</p></header>
+    <header className="quick-intro"><p className="quick-eyebrow">A GOOD FIND STARTS HERE</p><h1>{snapshot ? "Back to your find." : <>See potential?<br /><em>Let's work it out.</em></>}</h1><p>{showPhotoForm ? <>Snap a photo. Tell us what you know.<br />Get a starting offer and a plan for the work.</> : <>Enter what you know.<br />We'll help you work out an offer.</>}</p></header>
     <div className="quick-layout">
       <div className="quick-flow">
         {!snapshot && !evidence && showPhotoForm && <section className="quick-card" aria-label="Photo estimate">

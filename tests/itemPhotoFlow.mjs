@@ -130,6 +130,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await cdp('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
     await open('?fixtureSignedOut=1');
     await until(`Boolean(${input('quick-description')})`);
+    assert.equal(await evaluate(`document.querySelector('.quick-intro > p:last-child').textContent`), 'Snap a photo. Tell us what you know.Get a starting offer and a plan for the work.', 'Signed-out photo entry keeps its photo-first intro');
     const count = await calls();
     await fill(input('quick-description'), 'Wood chair, scratched seat, they want twenty.');
     const askingInput = width === 390 ? '20' : '';
@@ -389,6 +390,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await mode(kind); const before = await calls(); await open();
     await until(`Boolean(document.getElementById('quick-resale_low'))`);
     assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Photo estimate"], [data-quick-assess]'))`), false, 'Known unavailable AI must not show a dead photo box');
+    assert.equal(await evaluate(`document.querySelector('.quick-intro > p:last-child').textContent`), "Enter what you know.We'll help you work out an offer.", 'Unavailable AI uses the manual intro with the photo form hidden');
     if (kind === 'cap') assert.ok(await evaluate(`document.body.textContent.includes('AI estimates are paused until the 1st')`));
     await fill(input('quick-resale_low'), '65'); await fill(input('quick-repairs'), '15');
     await calculate('offer_only');
