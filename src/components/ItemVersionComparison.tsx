@@ -17,6 +17,7 @@ function Row({ row, link = false }: { row: ComparisonRow; link?: boolean }) {
 }
 export default function ItemVersionComparison({ previous, current }: { previous: SavedItem; current: SavedItem }) {
   const comparison = compareItemVersions(previous, current);
+  const hiddenAssumptions = comparison.assumptions.slice(1);
   return <section className="flips-comparison" aria-label={`Compare estimates ${previous.id} and ${current.id}`}>
     <h3>Compare estimates</h3>
     <p className="flips-meta">Previous #{previous.id} → Current #{current.id}. Saved figures; neither version is recalculated or changed.</p>
@@ -27,7 +28,7 @@ export default function ItemVersionComparison({ previous, current }: { previous:
       <h4>{scenario.label}</h4><dl>{scenario.rows.map(row => <Row key={row.key} row={row} />)}</dl>
       {(scenario.previousNegative || scenario.currentNegative) && <p className="flips-caution">Even a free item misses your target under this resale estimate ({scenario.previousNegative && "previous"}{scenario.previousNegative && scenario.currentNegative && " and "}{scenario.currentNegative && "current"}).</p>}
     </div>)}
-    <details className="flips-notes"><summary>Compare saved assumptions</summary><dl>{comparison.assumptions.slice(1).map(row => <Row key={row.key} row={row} />)}</dl></details>
+    <details className="flips-notes"><summary>Compare saved assumptions ({hiddenAssumptions.filter(row => row.changed).length} changed)</summary><dl>{hiddenAssumptions.map(row => <Row key={row.key} row={row} />)}</dl></details>
     <dl>{comparison.metadata.map(row => <Row key={row.key} row={row} link={row.key === "listing_url"} />)}</dl>
     <p className="flips-meta">These are estimates, not actual profits. Differences reflect all saved changes together, not the effect of one change.</p>
   </section>;

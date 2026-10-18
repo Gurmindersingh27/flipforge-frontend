@@ -1916,6 +1916,8 @@ try {
 
   // Compare real saved fixture snapshots; the direct parent is outside page one.
   for(let i=0;i<20;i++) await itemApi('/api/items/save',{inputs:{item_name:`Comparison paging ${i}`}},'browser-fixture',201);
+  const changedAssumptionsChild = await itemApi('/api/items/save',{inputs:{...visualParent.inputs,
+    purchase_price:visualParent.inputs.purchase_price+10,repairs:visualParent.inputs.repairs+20},parent_item_id:visualParent.id},'browser-fixture',201);
   const comparisonChild = await itemApi('/api/items/save',{inputs:visualParent.inputs,parent_item_id:visualParent.id,
     notes:'Only these notes changed.\nKeep the original finish.',listing_url:'https://example.com/updated-chair'},'browser-fixture',201);
   const comparisonCard = `[data-saved-item="${comparisonChild.id}"]`;
@@ -1934,6 +1936,8 @@ try {
     await evaluate(`window.savedItemMode='pass';window.releaseComparison()`);
     await until(`Boolean(document.querySelector('${comparisonPanel}'))`);
     assert.ok(await evaluate(`document.querySelector('${comparisonPanel}').textContent.includes('Only notes or the link changed.')`));
+    assert.equal(await evaluate(`document.querySelector('${comparisonPanel} summary').textContent`),'Compare saved assumptions (0 changed)');
+    assert.equal(await evaluate(`document.querySelector('${comparisonPanel} [data-comparison-row="notes"] dd p').textContent`),'None');
     assert.equal(await evaluate(`document.querySelector('${comparisonPanel} [data-comparison-row="low.max_offer"] dd p').textContent`),formatItemMoney(visualParent.analysis_result.low.max_offer,true));
     assert.ok(await evaluate(`document.querySelector('${comparisonPanel}').textContent.includes('Even a free item misses')`));
     assert.equal(await evaluate(`document.querySelector('${comparisonPanel} [data-comparison-row="notes"]').dataset.changed`),'true');
@@ -1949,8 +1953,21 @@ try {
     assert.deepEqual(await evaluate('window.savedItemRequests.map(r=>[r.method,r.path])'),[['GET',`/api/items/${visualParent.id}`]]);
     assert.equal(browserApiWrites.length,writesBefore,'Comparisons must not POST');
     assert.ok(browserApiRequests.slice(requestsBefore).every(url=>new URL(url).pathname===`/api/items/${visualParent.id}`),'No analyze or provider request');
+    await evaluate(`${comparisonButton}.click()`);
+    const changedPanel = `[data-saved-item="${changedAssumptionsChild.id}"] .flips-comparison`;
+    await evaluate(`document.querySelector('[data-saved-item="${changedAssumptionsChild.id}"] button[aria-controls]').click()`);
+    await until(`Boolean(document.querySelector('${changedPanel}'))`);
+    assert.equal(await evaluate(`document.querySelector('${changedPanel} summary').textContent`),'Compare saved assumptions (2 changed)');
+    assert.equal(await evaluate(`document.querySelector('${changedPanel} details').open`),false);
+    assert.ok(await measure(`(()=>{const s=document.querySelector('${changedPanel} summary');return s.getBoundingClientRect().height>0;})()`),'Changed count must be visible without expanding assumptions');
+    assert.equal(await evaluate('window.savedItemRequests.length'),2,'One parent GET for each comparison pair');
+    assert.equal(browserApiWrites.length,writesBefore,'Changed-assumption comparison must remain read-only');
+    assert.ok(browserApiRequests.slice(requestsBefore).every(url=>new URL(url).pathname===`/api/items/${visualParent.id}`));
+    await flipsGeometry();
+    await evaluate(`document.querySelector('${changedPanel}').scrollIntoView()`);
+    await screenshot(`my-flips-comparison-changed-${width}.png`);
   }
-  checks.push('Compare estimates at 390/1440 fetches an off-page direct parent once, caches the pair, shows saved negative figures and notes/link changes, and performs no writes or analysis');
+  checks.push('Compare estimates at 390/1440 fetches an off-page direct parent once per pair, caches reopening, shows 0/2 changed-assumption counts without expanding, labels blank text None, and performs no writes or analysis');
   for(const mode of ['404','headers']) {
     await signedItems(); await click('a','My Flips'); await until(`Boolean(${comparisonButton})`);
     await evaluate(`window.savedItemRequests=[];window.savedItemMode=${JSON.stringify(mode)};${comparisonButton}.click()`);

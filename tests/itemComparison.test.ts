@@ -24,6 +24,27 @@ test('saved assumptions distinguish unknown and zero, ignoring raw inputs withou
   assert.equal(row.difference, null); assert.equal(row.changed, true);
   assert.deepEqual([previous, current], before);
 });
+test('blank text is None without unknown provenance, while missing financial values stay Unknown', () => {
+  for (const value of [null, '', '  \n']) {
+    const previous = fixture(), current = fixture();
+    for (const item of [previous, current]) {
+      item.notes = item.listing_url = value;
+      for (const field of ['item_name', 'category'] as const) {
+        item.analysis_result.assumptions[field] = { value, source: value === null ? null : 'user_entered', default_origin: null };
+      }
+    }
+    const comparison = compareItemVersions(previous, current);
+    for (const row of [...comparison.assumptions.slice(0, 2), ...comparison.metadata]) {
+      assert.equal(row.previous, 'None'); assert.equal(row.current, 'None');
+      assert.equal(row.previousSource, undefined); assert.equal(row.currentSource, undefined);
+      assert.equal(row.changed, false);
+    }
+    for (const field of ['purchase_price', 'fee_pct', 'hours']) {
+      const row = comparison.assumptions.find(r => r.key === field)!;
+      assert.equal(row.previous, 'Unknown'); assert.equal(row.current, 'Unknown');
+    }
+  }
+});
 test('source-only changes distinguish entered, personal default and app default', () => {
   const previous = fixture(), current = fixture();
   previous.analysis_result.assumptions.hourly_value = { value: 20, source: 'user_entered', default_origin: null };

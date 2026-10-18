@@ -13,8 +13,9 @@ export interface ComparisonRow {
   difference: string | null;
 }
 function display(value: number | string | null, unit: Unit): string {
+  if (unit === "text" && (value === null || (typeof value === "string" && value.trim() === ""))) return "None";
   if (value === null) return "Unknown";
-  if (typeof value === "string") return value === "" ? "Empty" : value;
+  if (typeof value === "string") return value;
   if (unit === "percent") return formatItemPercent(value);
   if (unit === "hours") return `${Number(value.toFixed(2))} hours`;
   return formatItemMoney(value, unit === "offer");
@@ -40,8 +41,11 @@ export function compareItemVersions(previous: SavedItem, current: SavedItem) {
   const a = previous.analysis_result, b = current.analysis_result;
   const assumptions = (["item_name", "category", ...ITEM_FIELDS] as const).map(field => {
     const old = a.assumptions[field], next = b.assumptions[field];
+    const textField = field === "item_name" || field === "category";
+    const provenance = (value: ItemAssumption<number | string>) => textField &&
+      (value.value === null || (typeof value.value === "string" && value.value.trim() === "")) ? undefined : source(value);
     return row(field, field === "item_name" ? "Item name" : field === "category" ? "Category" : ITEM_LABELS[field],
-      old.value, next.value, field.endsWith("_pct") ? "percent" : field === "hours" ? "hours" : "money", source(old), source(next));
+      old.value, next.value, textField ? "text" : field.endsWith("_pct") ? "percent" : field === "hours" ? "hours" : "money", provenance(old), provenance(next));
   });
   const status = row("status", "Saved status", ITEM_STATUS_TEXT[a.status].title, ITEM_STATUS_TEXT[b.status].title, "text");
   const scenarios = (["low", "high"] as const).map(side => ({
