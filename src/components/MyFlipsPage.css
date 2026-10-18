@@ -19,6 +19,7 @@ body:has(.my-flips) { background: #faf6ee; color-scheme: light; }
 .flips-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .flips-card, .flips-message { min-width: 0; padding: 26px; border: 1px solid var(--flips-line); border-radius: 18px; background: #fffdf8; box-shadow: 0 3px 0 #e9e9df55; }
 .flips-card { display: flex; flex-direction: column; gap: 12px; }
+.flips-card:has(.flips-comparison) { grid-column: 1 / -1; }
 .flips-card h2, .flips-message h2 { font-size: 20px; font-weight: 700; line-height: 1.35; letter-spacing: -.3px; margin: 0; }
 .flips-card p { margin: 0; }
 .flips-meta, .flips-parent, .flips-caution { font-size: 12px; color: var(--flips-muted); }
@@ -42,6 +43,20 @@ body:has(.my-flips) { background: #faf6ee; color-scheme: light; }
 .flips-message p { color: var(--flips-muted); margin: 12px 0 20px; }
 .flips-error { border-color: #cba18e; background: #f6e8df; }
 .flips-error p { color: #94391f; }
+.flips-comparison { border-top: 1px solid var(--flips-line); padding-top: 20px; display: grid; gap: 16px; min-width: 0; }
+.flips-comparison :is(h3, h4) { color: var(--flips-green); margin: 0; font-weight: 700; }
+.flips-comparison h3 { font-size: 20px; }
+.flips-comparison h4 { font-size: 15px; }
+.flips-comparison dl { margin: 0; }
+.flips-compare-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; padding: 12px 0; border-bottom: 1px solid var(--flips-line); font-size: 13px; }
+.flips-compare-row dt { grid-column: 1 / -1; font-weight: 650; overflow-wrap: anywhere; }
+.flips-compare-row dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.flips-compare-row p { padding: 0; font-size: 13px; white-space: pre-wrap; }
+.flips-compare-row small, .flips-compare-side { display: block; color: var(--flips-muted); font-size: 11px; }
+.flips-compare-row a { display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; text-decoration: underline; color: var(--flips-green); overflow-wrap: anywhere; }
+.flips-compare-difference { grid-column: 1 / -1; color: var(--flips-green); }
+.flips-change { display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 600; color: #72521e; background: #f7edd8; padding: 2px 6px; border-radius: 4px; }
+.flips-evidence { color: var(--flips-muted); font-size: 12px; }
 @media (max-width: 760px) {
   .flips-nav { padding: 20px; gap: 16px; flex-wrap: wrap; }
   .flips-nav > div { gap: 20px; }

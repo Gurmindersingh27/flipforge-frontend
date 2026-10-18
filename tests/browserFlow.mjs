@@ -1524,7 +1524,7 @@ try {
   checks.push('267 representative/generated restore-and-rebuild requests match the complete real backend analysis, including assumptions and sources');
   const { identifier: savedItemsFixture } = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
     const nativeFetch=window.fetch.bind(window), nativeTimeout=window.setTimeout.bind(window);
-    window.setTimeout=(fn,ms,...args)=>nativeTimeout(fn,ms===120000?(window.savedItemMode==='hold-list'?10000:160):ms===8000?40:ms,...args);
+    window.setTimeout=(fn,ms,...args)=>nativeTimeout(fn,ms===120000?(['hold-list','hold-comparison'].includes(window.savedItemMode)?10000:160):ms===8000?40:ms,...args);
     window.savedItemRequests=[];window.savedItemMode='pass';
     window.fetch=async(input,init={})=>{
       const url=new URL(typeof input==='string'?input:input.url,location.href);
@@ -1537,6 +1537,9 @@ try {
       if(mode==='slow')await new Promise(resolve=>nativeTimeout(resolve,70));
       if(mode==='hold-list' && url.pathname==='/api/items')await new Promise(resolve=>window.releaseSavedItemList=resolve);
       const response=await nativeFetch(input,init);
+      if(mode==='hold-comparison' && url.pathname.startsWith('/api/items/') && request.method==='GET') {
+        const saved=await response.json();await new Promise(resolve=>window.releaseComparison=resolve);return Response.json(saved);
+      }
       if(mode==='lost' && init.method==='POST'){window.lastCommittedItem=await response.json();throw new TypeError('Confirmation lost');}
       if(mode==='held-save' && init.method==='POST'){const saved=await response.json();await new Promise(resolve=>window.releaseItemSave=resolve);return Response.json(saved,{status:201});}
       if(mode==='delayed-read' && request.method==='GET' && request.auth==='Bearer browser-fixture')await new Promise(resolve=>nativeTimeout(resolve,600));
@@ -1910,13 +1913,97 @@ try {
   checks.push('My Flips at 390/1440 preserves all five server status labels, negative offers, local timestamps, version lineage, long titles and multiline notes without overflow');
   checks.push('My Flips loading, empty, error/retry, Load more, auth-loading and signed-out states fit both widths; paging locks duplicates and viewing makes no writes');
   checks.push('My Flips cream theme and root sizing disappear on Back to Houses; house styles and all saved fixtures remain unchanged');
+
+  // Compare real saved fixture snapshots; the direct parent is outside page one.
+  for(let i=0;i<20;i++) await itemApi('/api/items/save',{inputs:{item_name:`Comparison paging ${i}`}},'browser-fixture',201);
+  const changedAssumptionsChild = await itemApi('/api/items/save',{inputs:{...visualParent.inputs,
+    purchase_price:visualParent.inputs.purchase_price+10,repairs:visualParent.inputs.repairs+20},parent_item_id:visualParent.id},'browser-fixture',201);
+  const comparisonChild = await itemApi('/api/items/save',{inputs:visualParent.inputs,parent_item_id:visualParent.id,
+    notes:'Only these notes changed.\nKeep the original finish.',listing_url:'https://example.com/updated-chair'},'browser-fixture',201);
+  const comparisonCard = `[data-saved-item="${comparisonChild.id}"]`;
+  const comparisonButton = `document.querySelector('${comparisonCard} button[aria-controls]')`;
+  const comparisonPanel = `${comparisonCard} .flips-comparison`;
+  for(const width of [390,1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    await signedItems(); await click('a','My Flips');
+    await until(`Boolean(document.querySelector('${comparisonCard}'))`);
+    assert.equal(await evaluate(`Boolean(document.querySelector('[data-saved-item="${visualParent.id}"]'))`),false);
+    assert.equal(await evaluate(`${comparisonButton}.textContent`),`Compare with #${visualParent.id}`);
+    const requestsBefore = browserApiRequests.length, writesBefore = browserApiWrites.length;
+    await evaluate(`window.savedItemRequests=[];window.savedItemMode='hold-comparison';${comparisonButton}.click();${comparisonButton}.click()`);
+    await until(`typeof window.releaseComparison==='function' && ${comparisonButton}.disabled`);
+    assert.equal(await evaluate('window.savedItemRequests.length'),1);
+    await evaluate(`window.savedItemMode='pass';window.releaseComparison()`);
+    await until(`Boolean(document.querySelector('${comparisonPanel}'))`);
+    assert.ok(await evaluate(`document.querySelector('${comparisonPanel}').textContent.includes('Only notes or the link changed.')`));
+    assert.equal(await evaluate(`document.querySelector('${comparisonPanel} summary').textContent`),'Compare saved assumptions (0 changed)');
+    assert.equal(await evaluate(`document.querySelector('${comparisonPanel} [data-comparison-row="notes"] dd p').textContent`),'None');
+    assert.equal(await evaluate(`document.querySelector('${comparisonPanel} [data-comparison-row="low.max_offer"] dd p').textContent`),formatItemMoney(visualParent.analysis_result.low.max_offer,true));
+    assert.ok(await evaluate(`document.querySelector('${comparisonPanel}').textContent.includes('Even a free item misses')`));
+    assert.equal(await evaluate(`document.querySelector('${comparisonPanel} [data-comparison-row="notes"]').dataset.changed`),'true');
+    assert.equal(await evaluate(`document.querySelector('${comparisonPanel} a').rel`),'noopener noreferrer');
+    await evaluate(`document.querySelector('${comparisonPanel} summary').click()`);
+    await flipsGeometry();
+    assert.ok(await measure(`Array.from(document.querySelectorAll('${comparisonPanel} *')).every(e=>e.scrollWidth<=e.clientWidth+1)`),'Comparison text must fit without sideways scrolling');
+    if(width===1440) assert.ok(await measure(`Math.abs(document.querySelector('${comparisonCard}').getBoundingClientRect().width-document.querySelector('.flips-grid').getBoundingClientRect().width)<2`),'Expanded comparison must span the row without stretching a neighboring card');
+    await evaluate(`document.querySelector('${comparisonPanel}').scrollIntoView()`);
+    await screenshot(`my-flips-comparison-${width}.png`);
+    await evaluate(`${comparisonButton}.click()`); await until(`!document.querySelector('${comparisonPanel}')`);
+    await evaluate(`${comparisonButton}.click()`); await until(`Boolean(document.querySelector('${comparisonPanel}'))`);
+    assert.deepEqual(await evaluate('window.savedItemRequests.map(r=>[r.method,r.path])'),[['GET',`/api/items/${visualParent.id}`]]);
+    assert.equal(browserApiWrites.length,writesBefore,'Comparisons must not POST');
+    assert.ok(browserApiRequests.slice(requestsBefore).every(url=>new URL(url).pathname===`/api/items/${visualParent.id}`),'No analyze or provider request');
+    await evaluate(`${comparisonButton}.click()`);
+    const changedPanel = `[data-saved-item="${changedAssumptionsChild.id}"] .flips-comparison`;
+    await evaluate(`document.querySelector('[data-saved-item="${changedAssumptionsChild.id}"] button[aria-controls]').click()`);
+    await until(`Boolean(document.querySelector('${changedPanel}'))`);
+    assert.equal(await evaluate(`document.querySelector('${changedPanel} summary').textContent`),'Compare saved assumptions (2 changed)');
+    assert.equal(await evaluate(`document.querySelector('${changedPanel} details').open`),false);
+    assert.ok(await measure(`(()=>{const s=document.querySelector('${changedPanel} summary');return s.getBoundingClientRect().height>0;})()`),'Changed count must be visible without expanding assumptions');
+    assert.equal(await evaluate('window.savedItemRequests.length'),2,'One parent GET for each comparison pair');
+    assert.equal(browserApiWrites.length,writesBefore,'Changed-assumption comparison must remain read-only');
+    assert.ok(browserApiRequests.slice(requestsBefore).every(url=>new URL(url).pathname===`/api/items/${visualParent.id}`));
+    await flipsGeometry();
+    await evaluate(`document.querySelector('${changedPanel}').scrollIntoView()`);
+    await screenshot(`my-flips-comparison-changed-${width}.png`);
+  }
+  checks.push('Compare estimates at 390/1440 fetches an off-page direct parent once per pair, caches reopening, shows 0/2 changed-assumption counts without expanding, labels blank text None, and performs no writes or analysis');
+  for(const mode of ['404','headers']) {
+    await signedItems(); await click('a','My Flips'); await until(`Boolean(${comparisonButton})`);
+    await evaluate(`window.savedItemRequests=[];window.savedItemMode=${JSON.stringify(mode)};${comparisonButton}.click()`);
+    await until(hasAlert(mode==='404'?'Item not found':'took too long'));
+    assert.equal(await evaluate('window.savedItemRequests.length'),1);
+    assert.equal(await evaluate(`Boolean(document.querySelector('${comparisonPanel}'))`),false);
+    await evaluate(`window.savedItemMode='pass'`); await click('button','Retry comparison');
+    await until(`Boolean(document.querySelector('${comparisonPanel}'))`);
+    assert.equal(await evaluate('window.savedItemRequests.length'),2);
+    assert.ok(await evaluate('window.savedItemRequests.every(r=>r.method==="GET")'));
+  }
+  checks.push('Comparison 404 and timeout keep saved cards intact and retry only on a click');
+  for(const nextUser of ['comparison-empty-user',null]) {
+    await signedItems(); await click('a','My Flips'); await until(`Boolean(${comparisonButton})`);
+    await evaluate(`window.savedItemMode='hold-comparison';${comparisonButton}.click()`);
+    await until(`typeof window.releaseComparison==='function'`);
+    await evaluate(`window.savedItemMode='pass';window.switchFixtureUser(${JSON.stringify(nextUser)})`);
+    await until(nextUser===null?`document.body.textContent.includes('Sign in to view My Flips')`:`document.body.textContent.includes('No saved items yet.')`);
+    await evaluate('window.releaseComparison()'); await pause(200);
+    assert.equal(await evaluate(`document.querySelectorAll('.flips-comparison,[data-saved-item]').length`),0);
+    assert.equal(await evaluate(`document.body.textContent.includes('Only these notes changed.')`),false);
+  }
+  assert.deepEqual(await itemApi(`/api/items/${comparisonChild.id}`),comparisonChild);
+  assert.deepEqual(await itemApi(`/api/items/${visualParent.id}`),visualParent);
+  checks.push('Account switch and sign-out clear comparison state and suppress a held old-account parent response; snapshots remain unchanged');
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:savedItemsFixture});
   await runPhotoItemChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
-  const photoFind = (await itemApi('/api/items')).items.find(item=>item.assessment);
+  const photoFind = (await itemApi('/api/items')).items.find(item=>item.assessment && item.parent_item_id!==null);
   assert.ok(photoFind);
   await cdp('Page.navigate',{url:'http://127.0.0.1:5173/my-flips'});
   await until(`Boolean(document.querySelector('[aria-label="Reopen saved item ${photoFind.id}"]'))`);
   assert.equal(await evaluate(`document.querySelector('[aria-label="Reopen saved item ${photoFind.id}"]').getAttribute('href')`),`/items?find=${photoFind.id}`);
+  await evaluate(`document.querySelector('[data-saved-item="${photoFind.id}"] button[aria-controls]').click()`);
+  await until(`Boolean(document.querySelector('[data-saved-item="${photoFind.id}"] .flips-comparison'))`);
+  assert.ok(await evaluate(`document.querySelector('[data-saved-item="${photoFind.id}"] .flips-comparison').textContent.includes('Includes AI photo evidence')`));
+  checks.push('Photo finds compare saved estimates with an AI-evidence marker without diffing or regenerating assessment evidence');
   await evaluate(`document.querySelector('[aria-label="Reopen saved item ${photoFind.id}"]').click()`);
   await until(`Boolean(document.querySelector('.items-quick')) && Boolean(document.getElementById('item-notes'))`);
   assert.deepEqual(await itemApi(`/api/items/${photoFind.id}`),photoFind);
