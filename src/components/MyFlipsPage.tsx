@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { SignInButton, useAuth } from "@clerk/clerk-react";
 import { Link } from "react-router-dom";
-import { getItems } from "../lib/api";
+import { getItem, getItems } from "../lib/api";
 import { formatItemMoney, ITEM_STATUS_TEXT } from "../lib/itemAnalysis";
 import { safeItemLink } from "../lib/savedItems";
 import type { SavedItem } from "../lib/types";
+import ItemVersionComparison from "./ItemVersionComparison";
 import "./MyFlipsPage.css";
 
 function SavedList() {
@@ -16,6 +17,37 @@ function SavedList() {
   const [retryOffset, setRetryOffset] = useState(0);
   const sequence = useRef(0);
   const locked = useRef(false);
+  const [comparisons, setComparisons] = useState<Record<string, { open: boolean; loading: boolean; error: string; parent?: SavedItem }>>({});
+  const comparisonGeneration = useRef(0);
+  const comparisonPending = useRef(new Set<string>());
+
+  async function compare(item: SavedItem) {
+    if (item.parent_item_id === null) return;
+    const key = `${item.id}:${item.parent_item_id}`;
+    if (comparisonPending.current.has(key)) return;
+    if (comparisons[key]?.parent) {
+      setComparisons(old => ({ ...old, [key]: { ...old[key], open: !old[key].open } }));
+      return;
+    }
+    const generation = comparisonGeneration.current;
+    comparisonPending.current.add(key);
+    setComparisons(old => ({ ...old, [key]: { open: true, loading: true, error: "" } }));
+    try {
+      const token = await getToken();
+      if (generation !== comparisonGeneration.current) return;
+      if (!token) throw new Error("Sign in again to compare your saved estimates.");
+      const parent = await getItem(item.parent_item_id, token);
+      if (generation !== comparisonGeneration.current) return;
+      if (parent.id !== item.parent_item_id || parent.root_item_id !== item.root_item_id) throw new Error("Previous version could not be confirmed.");
+      setComparisons(old => ({ ...old, [key]: { open: true, loading: false, error: "", parent } }));
+    } catch (failure) {
+      if (generation === comparisonGeneration.current) setComparisons(old => ({ ...old, [key]: {
+        open: true, loading: false, error: failure instanceof Error ? failure.message : "Could not load the previous version.",
+      } }));
+    } finally {
+      if (generation === comparisonGeneration.current) comparisonPending.current.delete(key);
+    }
+  }
 
   async function load(offset: number) {
     if (locked.current) return;
@@ -38,7 +70,7 @@ function SavedList() {
   useEffect(() => {
     // Defer the initial load so Strict Mode cleanup invalidates its first pass.
     let active = true;
-    const invalidate = () => { sequence.current++; locked.current = false; };
+    const invalidate = () => { sequence.current++; locked.current = false; comparisonGeneration.current++; comparisonPending.current.clear(); };
     void Promise.resolve().then(() => { if (active) void load(0); });
     return () => { active = false; invalidate(); };
     // The parent remounts this component for every account change.
@@ -49,6 +81,7 @@ function SavedList() {
     <div className="flips-grid">
       {items.map(item => {
         const link = safeItemLink(item.listing_url);
+        const comparison = comparisons[`${item.id}:${item.parent_item_id}`];
         return <article key={item.id} data-saved-item={item.id} className="flips-card">
           <h2>{item.inputs.item_name?.trim() || `Untitled item #${item.id}`}</h2>
           <p className="flips-meta">Version #{item.id} · <time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString("en-US")}</time></p>
@@ -60,7 +93,18 @@ function SavedList() {
           <div className="flips-actions">
             <Link to={`/items?${item.assessment ? "find" : "saved"}=${item.id}`} className="flips-primary" aria-label={`Reopen saved item ${item.id}`}>Reopen</Link>
             {link && <a href={link} target="_blank" rel="noopener noreferrer" className="flips-link">Listing</a>}
+            {item.parent_item_id !== null && <button type="button" className="flips-link" disabled={comparison?.loading}
+              aria-expanded={comparison?.open ?? false} aria-controls={`comparison-${item.id}`} onClick={() => void compare(item)}>
+              {comparison?.parent && comparison.open ? "Hide comparison" : `Compare with #${item.parent_item_id}`}
+            </button>}
           </div>
+          {item.parent_item_id !== null && <div id={`comparison-${item.id}`}>
+            {comparison?.open && <>
+              {comparison.loading && <p role="status">Loading previous estimate…</p>}
+              {comparison.error && <div role="alert"><p>{comparison.error}</p><button type="button" className="flips-link" onClick={() => void compare(item)}>Retry comparison</button></div>}
+              {comparison.parent && <ItemVersionComparison previous={comparison.parent} current={item} />}
+            </>}
+          </div>}
         </article>;
       })}
     </div>
