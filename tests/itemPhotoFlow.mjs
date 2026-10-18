@@ -125,6 +125,32 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.ok(await evaluate(`Array.from(document.querySelectorAll('.items-quick input,.items-quick textarea')).filter(e=>e.getBoundingClientRect().width).every(e=>e.getAttribute('aria-label')||e.labels?.length)`), 'Visible inputs need labels');
   }
   await mode('normal');
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
+  await open(); await upload();
+  await fill(input('quick-description'), 'Keep this chair description'); await fill(input('quick-asking'), '20');
+  const beforeStall = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
+  await evaluate(`(()=>{
+    const NativeImage=window.Image, nativeTimeout=window.setTimeout;
+    window.photoBeforeStall=document.querySelector('.quick-photo img').src;
+    window.Image=class { onload=null; onerror=null; src=''; };
+    window.setTimeout=(fn,ms,...args)=>nativeTimeout(fn,ms===20000?1000:ms,...args);
+    window.restorePhotoLoad=()=>{window.Image=NativeImage;window.setTimeout=nativeTimeout;};
+    const files=new DataTransfer();files.items.add(new File(['stalled fixture'],'stalled.jpg',{type:'image/jpeg'}));
+    const input=document.querySelector('input[type=file]');input.files=files.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+  })()`);
+  try {
+    await until(`document.body.textContent.includes('Preparing your photos…')`);
+    assert.ok(await evaluate(`${input('quick-description')}.matches(':disabled')`));
+    await until(`document.body.textContent.includes('That photo took too long to open. Try another, or enter details below.') && !${input('quick-description')}.matches(':disabled')`);
+    assert.equal(await evaluate(`document.body.textContent.includes('Preparing your photos…')`), false);
+    assert.equal(await evaluate(`${input('quick-description')}.value`), 'Keep this chair description');
+    assert.equal(await evaluate(`${input('quick-asking')}.value`), '20');
+    assert.ok(await evaluate(`document.querySelectorAll('.quick-photo img').length===1 && document.querySelector('.quick-photo img').src===window.photoBeforeStall && !document.querySelector('input[type=file]').matches(':disabled')`));
+    const afterStall = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
+    assert.equal(afterStall.posts, beforeStall.posts); assert.equal(afterStall.calls, beforeStall.calls);
+    await geometry(); await screenshot('photo-load-timeout-390.png');
+  } finally { await evaluate('window.restorePhotoLoad()'); }
+  checks.push('390px stalled photo load times out, unlocks the editor and preserves existing photo/text without an assessment POST');
   let savedFind;
   for (const width of [390, 1440]) {
     await cdp('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });

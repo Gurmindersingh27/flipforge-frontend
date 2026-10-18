@@ -1,10 +1,82 @@
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, quickAssumptionsSummary, suggestedRepairTotal } from "../src/lib/itemAssessment.ts";
+import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../src/lib/itemAssessment.ts";
 import { buildSavedItemInputs } from "../src/lib/savedItems.ts";
 import type { ItemAnalyzeResponse, ItemAssessmentPhoto, ItemAssessmentResult } from "../src/lib/types.ts";
 
 const photos: ItemAssessmentPhoto[] = [{ media_type: "image/jpeg", data: "fixture" }];
+
+function photoEnvironment(t: TestContext) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const pictures: StubImage[] = [], revoked: string[] = [], calls: unknown[][] = [];
+  class StubImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    naturalWidth = 1800;
+    naturalHeight = 1200;
+    src = "";
+    constructor() { pictures.push(this); }
+  }
+  const context = {
+    fillStyle: "",
+    fillRect: (...args: unknown[]) => calls.push(["fillRect", ...args]),
+    drawImage: (...args: unknown[]) => calls.push(["drawImage", ...args]),
+  };
+  const canvas = {
+    width: 0, height: 0,
+    getContext: (kind: string) => { assert.equal(kind, "2d"); return context; },
+    toDataURL: (...args: unknown[]) => { calls.push(["toDataURL", ...args]); return "data:image/jpeg;base64,encoded-fixture"; },
+  };
+  for (const [name, value] of Object.entries({ Image: StubImage, document: {
+    createElement: (tag: string) => { calls.push(["createElement", tag]); assert.equal(tag, "canvas"); return canvas; },
+  } })) {
+    const original = Object.getOwnPropertyDescriptor(globalThis, name);
+    Object.defineProperty(globalThis, name, { configurable: true, value });
+    t.after(() => { if (original) Object.defineProperty(globalThis, name, original); else Reflect.deleteProperty(globalThis, name); });
+  }
+  t.mock.method(URL, "createObjectURL", () => "blob:photo-fixture");
+  t.mock.method(URL, "revokeObjectURL", (url: string) => revoked.push(url));
+  return { pictures, revoked, calls, canvas, context };
+}
+const photoFile = () => new File(["fixture"], "chair.jpg", { type: "image/jpeg" });
+const photoTimeout = "That photo took too long to open. Try another, or enter details below.";
+
+test("stalled photo rejects at 20 seconds, detaches handlers and revokes its blob URL", async t => {
+  const env = photoEnvironment(t);
+  let settled = false;
+  const pending = prepareItemPhoto(photoFile());
+  const rejected = assert.rejects(pending, { message: photoTimeout }).then(() => { settled = true; });
+  t.mock.timers.tick(19_999); await Promise.resolve();
+  assert.equal(settled, false); assert.deepEqual(env.revoked, []);
+  t.mock.timers.tick(1); await rejected;
+  assert.equal(env.pictures[0].src, "");
+  assert.equal(env.pictures[0].onload, null); assert.equal(env.pictures[0].onerror, null);
+  assert.deepEqual(env.revoked, ["blob:photo-fixture"]); assert.deepEqual(env.calls, []);
+});
+test("a queued photo load callback after timeout cannot resume resizing or settle again", async t => {
+  const env = photoEnvironment(t);
+  const pending = prepareItemPhoto(photoFile());
+  const lateLoad = env.pictures[0].onload!;
+  const rejected = assert.rejects(pending, { message: photoTimeout });
+  t.mock.timers.tick(20_000); await rejected;
+  lateLoad(); t.mock.timers.tick(20_000); await Promise.resolve();
+  await assert.rejects(pending, { message: photoTimeout });
+  assert.deepEqual(env.calls, []); assert.deepEqual(env.revoked, ["blob:photo-fixture"]);
+});
+test("normal photo resize retains dimensions, white background and JPEG quality and clears its deadline", async t => {
+  const env = photoEnvironment(t);
+  const pending = prepareItemPhoto(photoFile());
+  const picture = env.pictures[0]; picture.onload!();
+  assert.deepEqual(await pending, { media_type: "image/jpeg", data: "encoded-fixture" });
+  assert.equal(env.canvas.width, 1568); assert.equal(env.canvas.height, 1045);
+  assert.equal(env.context.fillStyle, "#fff");
+  assert.deepEqual(env.calls, [["createElement", "canvas"], ["fillRect", 0, 0, 1568, 1045],
+    ["drawImage", picture, 0, 0, 1568, 1045], ["toDataURL", "image/jpeg", .82]]);
+  t.mock.timers.tick(20_000);
+  assert.equal(picture.src, "blob:photo-fixture", "Successful load must not be aborted later");
+  assert.equal(picture.onload, null); assert.equal(picture.onerror, null);
+  assert.deepEqual(env.revoked, ["blob:photo-fixture"]);
+});
 test("photo request leaves missing asking price omitted for extraction, preserves zero and rejects raw junk", () => {
   for (const blank of ["", "  "]) assert.equal(Object.hasOwn(buildAssessmentRequest("id", "They want $20", blank, photos), "asking_price"), false);
   assert.equal(buildAssessmentRequest("id", "Free chair", "0", photos).asking_price, 0);
