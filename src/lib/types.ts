@@ -40,6 +40,7 @@ export interface ItemAnalyzeResponse {
   high: ItemScenario | null;
 }
 export interface SaveItemRequest {
+  request_id?: string | null;
   inputs: ItemAnalyzeRequest;
   listing_url?: string | null;
   notes?: string | null;

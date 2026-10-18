@@ -694,6 +694,127 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   assert.equal(await evaluate(`document.querySelectorAll('.quick-photo').length`), 0);
   checks.push('An assessment response arriving after an account switch cannot restore the previous account\'s evidence or photos');
 
+  // Save retries use the real isolated database. Only response delivery is lost;
+  // the photo provider remains simulated and is never called by saving/retrying.
+  const saveFixture = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+    const original=window.fetch.bind(window);window.photoSaveMode='pass';window.photoSaveRequests=[];
+    window.fetch=async(input,init={})=>{
+      if(new URL(typeof input==='string'?input:input.url,location.href).pathname!=='/api/items/save')return original(input,init);
+      window.photoSaveRequests.push({body:JSON.parse(init.body),auth:new Headers(init.headers).get('Authorization')});
+      const mode=window.photoSaveMode;
+      if(['401','403','404','409','422','429','500','503'].includes(mode))return Response.json({detail:'Rejected fixture'},{status:Number(mode)});
+      const response=await original(input,init);
+      if(mode==='lost'){window.committedPhotoSave=await response.json();throw new TypeError('Confirmation lost');}
+      if(mode==='held'){const saved=await response.json();await new Promise(resolve=>window.releasePhotoSave=resolve);return Response.json(saved,{status:201});}
+      return response;
+    };` });
+  const retryButton = `Array.from(document.querySelectorAll('button')).find(e=>e.textContent==='Retry this save')`;
+  const saveUncertain = `Boolean(${retryButton}) && !${retryButton}.disabled`;
+  for(const width of [390,1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    await open(`?find=${savedFind.id}`); await until(`Boolean(document.querySelector('[data-quick-status]'))`);
+    await fill(input('item-notes'),'Captured photo note'); await fill(input('item-listing-url'),'https://example.com/photo-save');
+    const beforeCalls=await calls();
+    await evaluate(`window.photoSaveMode='lost'`); await click('button','Save new version'); await until(saveUncertain);
+    const committed=await evaluate('window.committedPhotoSave'), captured=await evaluate('window.photoSaveRequests[0].body');
+    assert.equal(captured.assessment_id,savedFind.assessment.assessment_id);
+    for(const selector of ['#quick-resale_low','#item-notes','#item-listing-url']) {
+      // Assessed resale can be presented as text; every present editor is locked.
+      assert.ok(await evaluate(`!document.querySelector(${JSON.stringify(selector)}) || document.querySelector(${JSON.stringify(selector)}).matches(':disabled')`));
+    }
+    assert.ok(await evaluate(`document.querySelector('[aria-label="Confirm estimate"] fieldset').disabled`));
+    await geometry(); await screenshot(`photo-save-retry-${width}.png`);
+    await click('button','Retry this save'); await until(saveUncertain);
+    assert.deepEqual(await evaluate('window.committedPhotoSave'),committed);
+    await evaluate(`window.photoSaveMode='pass';window.authFixture={calls:0,delayMs:70}`);
+    await evaluate(`(()=>{const b=${retryButton};b.click();b.click()})()`); await savedConfirmation();
+    assert.equal(await evaluate('window.authFixture.calls'),1);
+    const sent=await evaluate('window.photoSaveRequests');
+    assert.equal(sent.length,3); assert.ok(sent.every(r=>JSON.stringify(r.body)===JSON.stringify(captured)));
+    assert.deepEqual((await api('/api/items')).items[0],committed);
+    assert.equal(committed.parent_item_id,savedFind.id); assert.equal(committed.root_item_id,savedFind.root_item_id);
+    assert.deepEqual(committed.assessment,savedFind.assessment);
+    assert.deepEqual(await api(`/api/items/${savedFind.id}`),savedFind);
+    assert.ok(await evaluate(`!${input('item-notes')}.matches(':disabled')`));
+    await fill(input('item-notes'),'New photo version'); await click('button','Save new version'); await savedConfirmation();
+    const child=(await api('/api/items')).items[0];
+    assert.equal(child.parent_item_id,committed.id);
+    assert.notEqual(await evaluate('window.photoSaveRequests.at(-1).body.request_id'),captured.request_id);
+    assert.equal(await calls(),beforeCalls);
+
+    await open(`?find=${savedFind.id}`); await until(`Boolean(document.querySelector('[data-quick-status]'))`);
+    await fill(input('item-notes'),'Photo discard draft');
+    await evaluate(`window.photoSaveMode='lost'`); await click('button','Save new version'); await until(saveUncertain);
+    const discarded=await evaluate('window.committedPhotoSave'), discardedId=await evaluate('window.photoSaveRequests[0].body.request_id');
+    await click('button','Discard and edit');
+    assert.ok(await evaluate(`!document.querySelector('[aria-label="Confirm estimate"] fieldset').disabled && !${input('item-notes')}.matches(':disabled')`));
+    assert.equal(await evaluate(`${input('item-notes')}.value`),'Photo discard draft');
+    await fill(input('item-notes'),'Edited photo discard');
+    assert.ok(await evaluate(`document.body.textContent.includes('discarded attempt may already be saved')`));
+    await evaluate(`window.photoSaveMode='pass'`); await click('button','Save new version'); await savedConfirmation();
+    assert.notEqual(await evaluate('window.photoSaveRequests[1].body.request_id'),discardedId);
+    assert.deepEqual(await api(`/api/items/${discarded.id}`),discarded);
+    assert.equal(await calls(),beforeCalls); await geometry();
+  }
+  checks.push('390/1440 photo saves retry the identical payload and evidence after repeated lost commits, preserve version links, and discard safely without provider calls');
+
+  async function enterQuickManual() {
+    await until(`!document.body.textContent.includes('Checking AI availability…')`);
+    if(!await evaluate(`Boolean(${input('quick-item-name')})`)) await click('button',"I'll enter my own estimate");
+  }
+  async function quickSaveDraft() {
+    await open(); await enterQuickManual();
+    await fill(input('quick-item-name'),'Private pending chair');
+    await fill(input('quick-resale_low'),'80'); await fill(input('quick-repairs'),'10'); await calculate('offer_only');
+    await fill(input('item-notes'),'Private pending photo-page note');
+  }
+  for(const nextUser of [null,'save-retry-user']) {
+    await quickSaveDraft(); await evaluate(`window.photoSaveMode='500'`);
+    await click('button','Save item'); await until(saveUncertain);
+    const oldId=await evaluate('window.photoSaveRequests[0].body.request_id');
+    await evaluate(`window.switchFixtureUser(${JSON.stringify(nextUser)})`);
+    await until(`!document.querySelector('[data-quick-status]') && !(${input('item-notes')}?.value)`);
+    assert.ok(await evaluate(`!document.body.textContent.includes('Retry this save')`));
+    if(nextUser===null)await evaluate(`window.switchFixtureUser('browser-fixture')`);
+    await enterQuickManual();
+    await fill(input('quick-resale_low'),'80'); await fill(input('quick-repairs'),'10'); await calculate('offer_only');
+    await evaluate(`window.photoSaveMode='pass'`); await click('button','Save item'); await savedConfirmation();
+    const sent=await evaluate('window.photoSaveRequests');
+    assert.equal(sent.length,2); assert.notEqual(sent[1].body.request_id,oldId);
+    assert.equal(sent[1].auth,`Bearer ${nextUser??'browser-fixture'}`);
+    assert.ok(!JSON.stringify(sent[1].body).includes('Private pending'));
+  }
+  await quickSaveDraft(); await evaluate(`window.photoSaveMode='500'`);
+  await click('button','Save item'); await until(saveUncertain);
+  const uncertainPayload=await evaluate('window.photoSaveRequests[0].body');
+  for(const status of ['503','401','403','429']) {
+    await evaluate(`window.photoSaveMode=${JSON.stringify(status)}`); await click('button','Retry this save'); await until(saveUncertain);
+    assert.ok(await evaluate(`document.querySelector('[aria-label="Confirm estimate"] fieldset').disabled && ${input('item-notes')}.matches(':disabled') && ${input('item-listing-url')}.matches(':disabled')`));
+    assert.ok(await evaluate(`document.body.textContent.includes('may already be saved') && Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Discard and edit' && !e.disabled)`));
+    assert.deepEqual(await evaluate('window.photoSaveRequests.at(-1).body'),uncertainPayload);
+  }
+  for(const status of ['422','404','409']) {
+    const rejectedId=await evaluate('window.photoSaveRequests.at(-1).body.request_id');
+    await evaluate(`window.photoSaveMode=${JSON.stringify(status)}`); await click('button','Retry this save');
+    await until(`!${retryButton} && !${input('item-notes')}.matches(':disabled')`);
+    assert.ok(await evaluate(`!document.querySelector('[aria-label="Confirm estimate"] fieldset').disabled && !${input('item-listing-url')}.matches(':disabled')`));
+    await evaluate(`window.photoSaveMode='500'`); await click('button','Save item'); await until(saveUncertain);
+    assert.notEqual(await evaluate('window.photoSaveRequests.at(-1).body.request_id'),rejectedId);
+  }
+  const beforeTokenSwitch=await evaluate('window.photoSaveRequests.length');
+  await evaluate(`window.photoSaveMode='pass';window.authFixture={calls:0,delayMs:350}`);
+  await click('button','Retry this save'); await evaluate(`window.switchFixtureUser('save-retry-user')`); await pause(450);
+  assert.equal(await evaluate('window.photoSaveRequests.length'),beforeTokenSwitch);
+  await quickSaveDraft(); await evaluate(`window.photoSaveMode='held'`); await click('button','Save item');
+  await until(`typeof window.releasePhotoSave==='function'`);
+  await evaluate(`window.switchFixtureUser('save-retry-user');window.releasePhotoSave()`); await pause(200);
+  // A non-allowlisted account can receive the empty manual fallback editor.
+  // Neither the old account's draft nor its late save may populate that editor.
+  assert.ok(await evaluate(`!document.querySelector('[data-quick-status]') && !(${input('item-notes')}?.value) && !(${input('quick-item-name')}?.value)`));
+  assert.ok(await evaluate(`!document.body.textContent.includes('Saved version #') && !document.body.textContent.includes('Retry this save')`));
+  await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:saveFixture.identifier});
+  checks.push('/items retry 503/401/403/429 preserves the pending payload, locks and warning; retry 422/404/409 releases it; account changes cancel pre-token retries and suppress old-account responses');
+
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished")`);
