@@ -19,6 +19,7 @@ body:has(.my-flips) { background: #faf6ee; color-scheme: light; }
 .flips-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .flips-card, .flips-message { min-width: 0; padding: 26px; border: 1px solid var(--flips-line); border-radius: 18px; background: #fffdf8; box-shadow: 0 3px 0 #e9e9df55; }
 .flips-card { display: flex; flex-direction: column; gap: 12px; }
+.flips-card:has(.flips-comparison) { grid-column: 1 / -1; }
 .flips-card h2, .flips-message h2 { font-size: 20px; font-weight: 700; line-height: 1.35; letter-spacing: -.3px; margin: 0; }
 .flips-card p { margin: 0; }
 .flips-meta, .flips-parent, .flips-caution { font-size: 12px; color: var(--flips-muted); }

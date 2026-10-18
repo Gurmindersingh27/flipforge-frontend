@@ -1941,6 +1941,7 @@ try {
     await evaluate(`document.querySelector('${comparisonPanel} summary').click()`);
     await flipsGeometry();
     assert.ok(await measure(`Array.from(document.querySelectorAll('${comparisonPanel} *')).every(e=>e.scrollWidth<=e.clientWidth+1)`),'Comparison text must fit without sideways scrolling');
+    if(width===1440) assert.ok(await measure(`Math.abs(document.querySelector('${comparisonCard}').getBoundingClientRect().width-document.querySelector('.flips-grid').getBoundingClientRect().width)<2`),'Expanded comparison must span the row without stretching a neighboring card');
     await evaluate(`document.querySelector('${comparisonPanel}').scrollIntoView()`);
     await screenshot(`my-flips-comparison-${width}.png`);
     await evaluate(`${comparisonButton}.click()`); await until(`!document.querySelector('${comparisonPanel}')`);
