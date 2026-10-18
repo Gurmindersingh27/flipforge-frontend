@@ -53,7 +53,20 @@ export async function prepareItemPhoto(file: File): Promise<ItemAssessmentPhoto>
   const url = URL.createObjectURL(file);
   try {
     const picture = new Image();
-    await new Promise<void>((resolve, reject) => { picture.onload = () => resolve(); picture.onerror = () => reject(new Error("That photo couldn't be opened. Try another.")); picture.src = url; });
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: Error, timedOut = false) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer); picture.onload = null; picture.onerror = null;
+        if (timedOut) picture.src = "";
+        if (error) reject(error); else resolve();
+      };
+      const timer = setTimeout(() => finish(new Error("That photo took too long to open. Try another, or enter details below."), true), 20_000);
+      picture.onload = () => finish();
+      picture.onerror = () => finish(new Error("That photo couldn't be opened. Try another."));
+      picture.src = url;
+    });
     if (!picture.naturalWidth || picture.naturalWidth * picture.naturalHeight > 64_000_000) throw new Error("That photo is too large to process. Choose a smaller version.");
     const scale = Math.min(1, 1568 / Math.max(picture.naturalWidth, picture.naturalHeight));
     const canvas = document.createElement("canvas");
