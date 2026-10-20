@@ -17,8 +17,11 @@ import type {
   ItemAssessmentRequest,
   ItemAssessmentResponse,
   ItemAIBudget,
+  ItemOutcomeResponse,
+  SaveItemOutcomeRequest,
 } from "./types";
 import { ITEM_LABELS } from "./itemAnalysis";
+import { isItemOutcome } from "./itemOutcomes";
 
 export class ItemApiError extends Error {
   status: number;
@@ -69,6 +72,36 @@ export function getItems(token: string, offset = 0): Promise<SavedItemList> {
 }
 export function getItem(id: number, token: string): Promise<SavedItem> {
   return readItem(`/api/items/${id}`, token);
+}
+
+export async function getItemOutcome(rootId: number, token: string): Promise<ItemOutcomeResponse | null> {
+  const value = await readItem<unknown>(`/api/items/${rootId}/outcomes`, token);
+  if (value === null || isItemOutcome(value, rootId)) return value;
+  throw new Error("The saved tracking could not be confirmed. Reload before saving.");
+}
+export class UnconfirmedOutcomeSaveError extends Error {
+  constructor() { super("This outcome may already be saved. Retry this save to confirm it, or discard and reload before editing."); }
+}
+export async function saveItemOutcome(rootId: number, payload: SaveItemOutcomeRequest, token: string): Promise<ItemOutcomeResponse> {
+  let rejection: ItemApiError | null = null;
+  try {
+    return await withStartupDeadline(async signal => {
+      const response = await fetch(`${API_BASE_URL}/api/items/${rootId}/outcomes`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload), signal,
+      });
+      if (!response.ok) {
+        if (response.status >= 400 && response.status < 500) rejection = new ItemApiError(response.status, `Tracking save rejected (HTTP ${response.status}).`);
+        const error = await itemRejection(response);
+        if (rejection) rejection = error;
+        throw error;
+      }
+      const saved: unknown = await response.json();
+      if (!isItemOutcome(saved, rootId) || saved.id !== payload.request_id || saved.based_on_item_id !== payload.based_on_item_id
+        || saved.previous_id !== payload.expected_previous_id) throw new UnconfirmedOutcomeSaveError();
+      return saved;
+    }, "Tracking confirmation took too long.");
+  } catch { throw rejection ?? new UnconfirmedOutcomeSaveError(); }
 }
 
 export class ItemAssessmentError extends Error {

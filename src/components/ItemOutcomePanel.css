@@ -1,0 +1,31 @@
+.flips-card:has(.item-outcome) { grid-column: 1 / -1; }
+.item-outcome { display: grid; gap: 14px; min-width: 0; padding-top: 20px; border-top: 1px solid var(--flips-line); font-size: 14px; }
+.item-outcome :is(h3, h4) { margin: 0; color: var(--flips-green); font-weight: 700; }
+.item-outcome h3 { font-size: 21px; }
+.outcome-shared { font-weight: 600; }
+.outcome-help { color: var(--flips-muted); font-size: 12px; }
+.item-outcome fieldset { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; display: grid; gap: 16px; }
+.outcome-statuses { display: flex; gap: 8px; }
+.outcome-statuses button { min-height: 44px; padding: 10px 16px; border: 1px solid var(--flips-line); border-radius: 8px; }
+.outcome-statuses button[aria-pressed=true] { background: var(--flips-green); color: #fffdf8; border-color: var(--flips-green); }
+.outcome-field { min-width: 0; display: grid; gap: 7px; align-content: start; }
+.outcome-field label { font-size: 13px; font-weight: 600; }
+.outcome-field :is(input, select) { display: block; width: 100%; min-width: 0; max-width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid #86978b; border-radius: 8px; background: #fff; color: var(--flips-ink); font: inherit; font-size: 16px; }
+.outcome-field :is(input, select):focus-visible { outline: 3px solid var(--flips-green); outline-offset: 2px; }
+.outcome-field :is(input, select):disabled { background: #edf1e8; color: #526057; }
+.outcome-field [aria-invalid=true] { border-color: #94391f; }
+.outcome-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 12px 0; }
+.item-outcome details { border-top: 1px solid var(--flips-line); }
+.item-outcome summary { min-height: 44px; align-content: center; color: var(--flips-green); font-weight: 600; }
+.outcome-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.outcome-error { color: #94391f; font-size: 13px; }
+.outcome-saved { border-top: 1px solid var(--flips-line); padding-top: 16px; display: grid; gap: 10px; }
+.outcome-saved dl { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.outcome-saved dd { margin: 0; overflow-wrap: anywhere; }
+.outcome-saved dt { font-size: 12px; color: var(--flips-muted); }
+.outcome-saved dd[data-outcome-figure] { font-size: 22px; font-weight: 700; }
+.outcome-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 600px) {
+  .outcome-fields, .outcome-saved dl { grid-template-columns: minmax(0, 1fr); }
+  .outcome-statuses button { flex: 1; padding-inline: 8px; }
+}
