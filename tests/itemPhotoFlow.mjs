@@ -1154,27 +1154,27 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
   assert.equal(await evaluate('window.outcomePosts.length'), 1);
   checks.push('A confirmed POST followed by a failed refresh offers GET reload, never another POST');
 
-  for (const mode of ['500', '503', 'malformed']) {
-    await open(item); await fill(field('purchase_price'), '64'); await evaluate(`window.outcomeMode=${JSON.stringify(mode)}`);
+  for (const [index, mode] of ['500', '503', 'malformed'].entries()) {
+    await open(item); await fill(field('purchase_price'), String(70 + index)); await evaluate(`window.outcomeMode=${JSON.stringify(mode)}`);
     await click('button', 'Save tracking'); await until(uncertain);
     await evaluate(`window.outcomeMode='pass';window.authFixture={calls:0,delayMs:70}`);
     await evaluate(`(()=>{const b=${button('Retry this save')};b.click();b.click()})()`); await until(saved);
     assert.equal(await evaluate('window.authFixture.calls'), 2, 'One POST token and one refresh token');
     assert.equal(await evaluate('window.outcomePosts.length'), 2);
   }
-  for (const status of ['404', '422']) {
-    await open(item); await fill(field('purchase_price'), '65'); await evaluate(`window.outcomeMode='500'`);
+  for (const [index, status] of ['404', '422'].entries()) {
+    await open(item); await fill(field('purchase_price'), String(80 + index)); await evaluate(`window.outcomeMode='500'`);
     await click('button', 'Save tracking'); await until(uncertain);
     const old = await evaluate('window.outcomePosts[0].body.request_id');
     await evaluate(`window.outcomeMode=${JSON.stringify(status)}`); await click('button', 'Retry this save'); await until(ready);
     assert.equal(await evaluate(`Boolean(${button('Retry this save')})`), false);
-    assert.equal(await evaluate(field('purchase_price') + '.value'), '65');
+    assert.equal(await evaluate(field('purchase_price') + '.value'), String(80 + index));
     await evaluate(`window.outcomeMode='pass'`); await save();
     assert.notEqual(await evaluate('window.outcomePosts.at(-1).body.request_id'), old);
   }
   checks.push('First 500/503 and malformed confirmations stay uncertain; duplicate retry clicks send one POST; definite 404/422 release the attempt without losing entries');
 
-  // Timeout and 404 on initial loading, with no write or inferred default save.
+  // Timeout and outage on initial loading, with no write or inferred default save.
   for (const mode of ['timeout', '503']) {
     await open(item); await click('button', 'Close tracking');
     await evaluate(`window.outcomeReadMode=${JSON.stringify(mode)};document.querySelector('[aria-controls="tracking-${item.id}"]').click()`);
@@ -1198,13 +1198,18 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
     assert.equal(await evaluate('window.outcomePosts.length'), 1);
     assert.equal(await evaluate(`Boolean(document.querySelector('.item-outcome'))`), false);
 
-    await open(item); await fill(field('purchase_price'), '67'); await evaluate(`window.outcomeMode='held'`); await click('button', 'Save tracking');
+    await open(item); await fill(field('purchase_price'), nextUser ? '69' : '67'); await evaluate(`window.outcomeMode='held'`); await click('button', 'Save tracking');
     await until(`typeof window.releaseOutcomePost==='function'`);
     await evaluate(`window.switchFixtureUser(${JSON.stringify(nextUser)});window.releaseOutcomePost()`); await pause(200);
     assert.equal(await evaluate(`Boolean(document.querySelector('.item-outcome'))`), false);
     assert.equal(await evaluate('window.outcomeReads.length'), 1, 'Old POST must not refresh under a different account');
   }
   checks.push('Sign-out/account change clear drafts and pending UUIDs, cancel pre-token retries and drop late GET/POST results without cross-account follow-up requests');
+  const photo = (await api('/api/items')).items.find(row => row.assessment);
+  assert.ok(photo); await open(photo);
+  assert.equal(await evaluate('window.outcomePosts.length'), 0);
+  assert.ok(await evaluate(`document.querySelector('.outcome-shared').textContent.includes('Tracking applies to all versions')`));
+  checks.push('Photo finds use the same tracking panel with no assessment regeneration or automatic outcome save');
   assert.ok(await evaluate(`JSON.parse(sessionStorage.getItem('outcome-test-writes')).every(path=>path.startsWith('/api/items/')&&path.endsWith('/outcomes'))`));
   const aiAfter = await api('/browser-fixture/ai');
   assert.equal(aiAfter.calls, aiBefore.calls); assert.equal(aiAfter.posts, aiBefore.posts);
