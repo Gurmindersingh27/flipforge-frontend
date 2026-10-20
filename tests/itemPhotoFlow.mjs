@@ -97,10 +97,10 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await cdp('Page.navigate', { url: `http://127.0.0.1:5173/items${query}` });
     await until(`!window.beforeQuickNavigation && Boolean(document.querySelector('.items-quick'))`);
   }
-  async function upload() {
+  async function upload({ gallery = false, count = 1, expected = 1 } = {}) {
     await until(`Boolean(document.querySelector('input[type=file]'))`);
-    await evaluate(`(async()=>{const c=document.createElement('canvas');c.width=1800;c.height=1200;const x=c.getContext('2d');x.fillStyle='#ded5c4';x.fillRect(0,0,1800,1200);x.strokeStyle='#765536';x.lineWidth=45;x.strokeRect(620,240,560,390);x.beginPath();x.moveTo(620,630);x.lineTo(560,950);x.moveTo(1180,630);x.lineTo(1240,950);x.moveTo(590,760);x.lineTo(1210,760);x.stroke();const blob=await new Promise(resolve=>c.toBlob(resolve,'image/jpeg'));const d=new DataTransfer();d.items.add(new File([blob],'chair-fixture.jpg',{type:'image/jpeg'}));const e=document.querySelector('input[type=file]');e.files=d.files;e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-    await until(`document.querySelectorAll('.quick-photo img').length === 1 && !document.body.textContent.includes('Preparing your photos')`);
+    await evaluate(`(async()=>{const c=document.createElement('canvas');c.width=1800;c.height=1200;const x=c.getContext('2d');x.fillStyle='#ded5c4';x.fillRect(0,0,1800,1200);x.strokeStyle='#765536';x.lineWidth=45;x.strokeRect(620,240,560,390);x.beginPath();x.moveTo(620,630);x.lineTo(560,950);x.moveTo(1180,630);x.lineTo(1240,950);x.moveTo(590,760);x.lineTo(1210,760);x.stroke();const blob=await new Promise(resolve=>c.toBlob(resolve,'image/jpeg'));const d=new DataTransfer();for(let i=0;i<${count};i++)d.items.add(new File([blob],'chair-fixture-'+i+'.jpg',{type:'image/jpeg'}));const e=document.querySelector(${JSON.stringify(gallery ? '[aria-label="Choose item photos"]' : '[aria-label="Take item photo"]')});e.files=d.files;e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await until(`document.querySelectorAll('.quick-photo img').length === ${expected} && !document.body.textContent.includes('Preparing your photos')`);
     await until(`document.querySelector('.quick-photo img')?.naturalWidth === 1568`);
   }
   async function runAI() {
@@ -124,6 +124,96 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'), 'Photo flow must not overflow');
     assert.ok(await evaluate(`Array.from(document.querySelectorAll('.items-quick input,.items-quick textarea')).filter(e=>e.getBoundingClientRect().width).every(e=>e.getAttribute('aria-label')||e.labels?.length)`), 'Visible inputs need labels');
   }
+  const speedRows = `Object.fromEntries([...document.querySelectorAll('.quick-speed dl > div')].map(e=>[e.querySelector('dt').textContent,e.querySelector('dd').textContent]))`;
+  const speedEntries = `performance.getEntriesByType('measure').filter(e=>e.name.startsWith('flipforge.items.'))`;
+  for (const width of [390, 1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    await open('?fixtureSignedOut=1');
+    await until(`Boolean(document.querySelector('.quick-speed'))`);
+    assert.equal(await evaluate(`document.querySelector('.quick-speed').open`), false);
+    assert.deepEqual(await evaluate(speedRows), {});
+    const before = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
+    assert.ok(await evaluate(`(()=>{const c=document.querySelector('[aria-label="Take item photo"]'),g=document.querySelector('[aria-label="Choose item photos"]');return c.getAttribute('capture')==='environment'&&!c.multiple&&g.multiple&&!g.hasAttribute('capture')})()`));
+    // Simulated picker cancellation, not proof of physical camera behaviour.
+    await evaluate(`document.querySelectorAll('.quick-photo-actions input').forEach(e=>{e.files=new DataTransfer().files;e.dispatchEvent(new Event('change',{bubbles:true}));e.dispatchEvent(new Event('cancel',{bubbles:true}));})`);
+    assert.deepEqual(await evaluate(speedRows), {});
+    await fill(input('quick-description'), 'Keep this description'); await fill(input('quick-asking'), '20');
+    await upload();
+    await until(`Boolean((${speedRows})['Photo preparation'])`);
+    await evaluate(`document.querySelector('.quick-speed').open=true`);
+    await geometry(); await screenshot(`photo-camera-speed-${width}.png`);
+    await upload({ gallery: true, count: 3, expected: 1 });
+    await until(`document.body.textContent.includes('Use up to three photos.')`);
+    await upload({ gallery: true, count: 2, expected: 3 });
+    assert.equal(await evaluate(`document.querySelectorAll('.quick-photo-actions input').length`), 0);
+    assert.equal(await evaluate(`${input('quick-description')}.value`), 'Keep this description');
+    assert.equal(await evaluate(`${input('quick-asking')}.value`), '20');
+    await evaluate(`document.querySelector('[aria-label="Remove photo 3"]').click()`);
+    await until(`document.querySelectorAll('.quick-photo-actions input').length===2`);
+    const after = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
+    assert.equal(after.posts, before.posts); assert.equal(after.calls, before.calls);
+    await geometry();
+  }
+  checks.push('390/1440 camera and gallery inputs preserve text, support cancel/remove and the three-photo limit, show local preparation timing and send zero assessment POSTs');
+
+  await mode('normal');
+  const timingScript = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+    window.speedClock=1000;performance.now=()=>window.speedClock;
+    window.speedReleases=[];window.speedGets=0;
+    const original=window.fetch;
+    window.fetch=async(input,init)=>{
+      if(new URL(typeof input==='string'?input:input.url).pathname!=='/api/items/ai-budget')return original(input,init);
+      const n=++window.speedGets;const response=await original(input,init);
+      await new Promise(resolve=>window.speedReleases.push(resolve));
+      if(n===1)return new Response(JSON.stringify({...await response.json(),available:false,reason:'assessment_busy',message:null}),{status:200});
+      return response;
+    };` });
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
+  await open(); await until(`window.speedReleases.length===1`);
+  assert.deepEqual(await evaluate(speedRows), {});
+  await evaluate(`window.speedClock=42200;window.speedReleases.shift()()`);
+  await until(`(${speedRows})['First availability check']==='41.2s'`);
+  assert.equal(await evaluate(`document.querySelector('.quick-speed').open`), false);
+  await click('button', 'Check AI availability'); await until(`window.speedReleases.length===1`);
+  await evaluate(`window.speedClock=42400;window.speedReleases.shift()()`);
+  await until(`(${speedRows})['Latest availability check']==='0.2s'`);
+  assert.equal(await evaluate(`(${speedRows})['First availability check']`), '41.2s');
+  await evaluate(`document.querySelector('.quick-speed').open=true`);
+  await geometry(); await screenshot('photo-speed-availability-390.png');
+  assert.equal(await evaluate(`${speedEntries}.length`), 2);
+  // An old account's held response cannot repopulate cleared timing values.
+  await evaluate(`window.switchFixtureUser('other-user')`);
+  await until(`window.speedReleases.length===1`);
+  assert.deepEqual(await evaluate(speedRows), {});
+  await evaluate(`window.switchFixtureUser(null)`);
+  await until(`document.body.textContent.includes('Sign in for a photo estimate')`);
+  await evaluate(`window.speedClock=50000;window.speedReleases.shift()()`); await pause(100);
+  assert.deepEqual(await evaluate(speedRows), {});
+  assert.equal(await evaluate(`${speedEntries}.length`), 0);
+  await upload(); await until(`(${speedRows})['Photo preparation']==='0.0s'`);
+  await evaluate(`document.querySelector('.quick-nav a[href="/"]').click()`);
+  await until(`!document.querySelector('.items-quick')`);
+  assert.equal(await evaluate(`${speedEntries}.length`), 0);
+  await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: timingScript.identifier });
+  checks.push('390px Speed panel starts collapsed/empty, shows exact first/latest availability seconds, retains the initial wait and clears on account changes and route exit despite late responses');
+
+  const deadlineScript = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+    window.speedClock=1000;performance.now=()=>window.speedClock;
+    const nativeTimeout=window.setTimeout,original=window.fetch;
+    window.setTimeout=(fn,ms,...args)=>nativeTimeout(ms===120000?()=>{window.speedClock+=120000;fn(...args)}:fn,ms===120000?100:ms,...args);
+    window.fetch=(input,init)=>new URL(typeof input==='string'?input:input.url).pathname==='/api/items/ai-budget'
+      ?new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(new DOMException('Fixture abort','AbortError')),{once:true}))
+      :original(input,init);` });
+  const beforeDeadline = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
+  await open();
+  await until(`(${speedRows})['First availability check']==='120.0s'`);
+  assert.equal(await evaluate(`(${speedRows})['Latest availability check']`), '120.0s');
+  assert.ok(await evaluate(`document.body.textContent.includes("The estimate wasn't confirmed in time.")`));
+  const afterDeadline = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
+  assert.equal(afterDeadline.posts, beforeDeadline.posts); assert.equal(afterDeadline.calls, beforeDeadline.calls);
+  await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: deadlineScript.identifier });
+  checks.push('Browser-side deadline records elapsed time on an aborted availability request without any assessment POST');
+
   await mode('normal');
   await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
   await open(); await upload();
@@ -170,6 +260,8 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.equal(await evaluate(`${input('quick-asking')}.value`), askingInput);
     assert.equal(await evaluate(`document.querySelectorAll('.quick-photo img').length`), 1);
     await runAI();
+    assert.ok(await evaluate(`Boolean((${speedRows})['Estimate request'])`));
+    assert.ok(await evaluate(`${speedEntries}.length<=5`));
     assert.equal(await calls(), count + 1);
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false, 'No offer before repairs are confirmed');
     await fill(input('item-notes'), 'Scratched seat. Check the joints.');
@@ -844,10 +936,13 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished")`);
+  assert.ok(await evaluate(`Boolean((${speedRows})['Estimate request'])`));
   const uncertainId = await storedId();
   const beforePendingRefresh = await requests();
   await open('', true);
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished") && Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Check estimate status' && !e.disabled)`);
+  assert.ok(await evaluate(`Boolean((${speedRows})['Status check'])`));
+  assert.equal(await evaluate(`Boolean((${speedRows})['Estimate request'])`), false);
   assert.equal(await storedId(), uncertainId);
   assert.equal((await requests()).reads, beforePendingRefresh.reads + 1);
   assert.equal((await requests()).posts, beforePendingRefresh.posts);
