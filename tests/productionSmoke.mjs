@@ -95,6 +95,18 @@ try {
   assert.ok(saveContract.properties.request_id?.anyOf?.some(field => field.type === 'string' && field.format === 'uuid'));
   assert.ok(!saveContract.required?.includes('request_id'), 'Save request_id must remain optional');
   check('Optional idempotent Items save contract is live');
+  const outcomePath = '/api/items/{root_item_id}/outcomes';
+  assert.ok(schema.paths[outcomePath]?.get && schema.paths[outcomePath]?.post);
+  const outcomeContract = schema.components.schemas.SaveItemOutcomeRequest;
+  for (const field of ['status', 'request_id', 'expected_previous_id']) assert.ok(outcomeContract.required.includes(field));
+  assert.equal(outcomeContract.properties.request_id.format, 'uuid');
+  assert.ok(outcomeContract.properties.expected_previous_id.anyOf.some(field => field.type === 'null'));
+  assert.ok(outcomeContract.properties.based_on_item_id && !outcomeContract.required.includes('based_on_item_id'));
+  assert.deepEqual(outcomeContract.properties.sale_channel.anyOf.find(field => field.enum)?.enum,
+    ['facebook_marketplace', 'craigslist', 'offerup', 'ebay', 'in_person', 'other']);
+  check('Outcome routes and snapshot concurrency/basis/channel contracts are live');
+  assert.equal((await (await request(`${backend}/api/items/1/outcomes`, {}, 403)).json()).detail, 'Not authenticated');
+  check('Outcome GET requires authentication without accessing or writing records');
   assert.ok(schema.components.schemas.ItemAssessmentResponse);
   check('Photo assessment and saved evidence contracts are live');
   for (const name of ['RehabScope', 'RehabScopeItem']) assert.ok(schema.components.schemas[name], `Missing ${name}`);

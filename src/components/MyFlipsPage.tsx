@@ -6,6 +6,8 @@ import { formatItemMoney, ITEM_STATUS_TEXT } from "../lib/itemAnalysis";
 import { safeItemLink } from "../lib/savedItems";
 import type { SavedItem } from "../lib/types";
 import ItemVersionComparison from "./ItemVersionComparison";
+import ItemOutcomePanel from "./ItemOutcomePanel";
+import type { OutcomeGuard } from "./ItemOutcomePanel";
 import "./MyFlipsPage.css";
 
 function SavedList() {
@@ -20,6 +22,15 @@ function SavedList() {
   const [comparisons, setComparisons] = useState<Record<string, { open: boolean; loading: boolean; error: string; parent?: SavedItem }>>({});
   const comparisonGeneration = useRef(0);
   const comparisonPending = useRef(new Set<string>());
+  const [trackingItem, setTrackingItem] = useState<number | null>(null);
+  const [trackingGuard, setTrackingGuard] = useState<OutcomeGuard>(null);
+
+  function track(itemId: number) {
+    if (trackingGuard === "busy") return;
+    if (trackingGuard === "draft" && !window.confirm("Close tracking and discard your unsaved entries? A save already sent may still have succeeded.")) return;
+    setTrackingGuard(null);
+    setTrackingItem(old => old === itemId ? null : itemId);
+  }
 
   async function compare(item: SavedItem) {
     if (item.parent_item_id === null) return;
@@ -97,6 +108,13 @@ function SavedList() {
               aria-expanded={comparison?.open ?? false} aria-controls={`comparison-${item.id}`} onClick={() => void compare(item)}>
               {comparison?.parent && comparison.open ? "Hide comparison" : `Compare with #${item.parent_item_id}`}
             </button>}
+            <button type="button" className="flips-link" disabled={trackingGuard === "busy"}
+              aria-expanded={trackingItem === item.id} aria-controls={`tracking-${item.id}`} onClick={() => track(item.id)}>
+              {trackingItem === item.id ? "Close tracking" : "Track this find"}
+            </button>
+          </div>
+          <div id={`tracking-${item.id}`}>
+            {trackingItem === item.id && <ItemOutcomePanel key={item.id} rootId={item.root_item_id} itemId={item.id} onGuard={setTrackingGuard} />}
           </div>
           {item.parent_item_id !== null && <div id={`comparison-${item.id}`}>
             {comparison?.open && <>

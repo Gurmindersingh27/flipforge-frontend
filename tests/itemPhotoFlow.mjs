@@ -933,6 +933,8 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:saveFixture.identifier});
   checks.push('/items retry 503/401/403/429 preserves the pending payload, locks and warning; retry 422/404/409 releases it; account changes cancel pre-token retries and suppress old-account responses');
 
+  await runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
+
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished")`);
@@ -952,4 +954,266 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   await fill(input('quick-resale_low'), '80'); await fill(input('quick-repairs'), '10'); await calculate('offer_only');
   assert.equal(await calls(), beforeTimeout + 1);
   checks.push('Uncertain assessments are never retried; status checks use GET and the manual calculator remains usable while the hold is active');
+}
+
+// Outcomes use real local routes and persistence. Only transport failures and
+// sign-in are simulated. No real provider calls or production saves.
+async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api }) {
+  const post = async (path, body, expected = 201) => {
+    const response = await fetch(`http://127.0.0.1:8000${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer browser-fixture' }, body: JSON.stringify(body) });
+    assert.equal(response.status, expected); return response.json();
+  };
+  await evaluate(`sessionStorage.setItem('outcome-test-writes','[]')`);
+  const fixture = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
+    const original=window.fetch.bind(window), timer=window.setTimeout;
+    window.setTimeout=(callback,ms,...args)=>timer(callback,ms===120000&&window.outcomeReadMode==='timeout'?80:ms,...args);
+    window.outcomePosts=[];window.outcomeReads=[];window.outcomeWrites=[];window.outcomeMode='pass';window.outcomeReadMode='pass';
+    window.fetch=async(input,init={})=>{
+      const path=new URL(typeof input==='string'?input:input.url,location.href).pathname;
+      const method=init.method||'GET';
+      if(path.startsWith('/api/')&&method!=='GET'){window.outcomeWrites.push(path);const audit=JSON.parse(sessionStorage.getItem('outcome-test-writes')||'[]');audit.push(path);sessionStorage.setItem('outcome-test-writes',JSON.stringify(audit));}
+      if(!(path.startsWith('/api/items/')&&path.endsWith('/outcomes')))return original(input,init);
+      if(method==='GET'){
+        window.outcomeReads.push(path);const mode=window.outcomeReadMode;
+        if(mode==='503')return Response.json({detail:'Fixture outage'},{status:503});
+        if(mode==='timeout')return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true}));
+        const response=await original(input,init);
+        if(mode==='held'){const data=await response.json();await new Promise(resolve=>window.releaseOutcomeRead=resolve);return Response.json(data);}
+        return response;
+      }
+      window.outcomePosts.push({path,body:JSON.parse(init.body),auth:new Headers(init.headers).get('Authorization')});
+      const mode=window.outcomeMode;
+      if(['401','403','404','409','422','429','500','503'].includes(mode))return Response.json({detail:'Fixture rejection'},{status:Number(mode)});
+      if(mode==='malformed')return Response.json({});
+      const response=await original(input,init);
+      if(mode==='lost'){window.committedOutcome=await response.json();throw new TypeError('Lost after commit');}
+      if(mode==='held'){const data=await response.json();await new Promise(resolve=>window.releaseOutcomePost=resolve);return Response.json(data,{status:response.status});}
+      return response;
+    };` });
+  const field = key => `document.getElementById('outcome-${key}')`;
+  const button = label => `Array.from(document.querySelectorAll('.item-outcome button')).find(e=>e.textContent===${JSON.stringify(label)})`;
+  const ready = `${button('Save tracking')} && !document.querySelector('.item-outcome fieldset').disabled`;
+  const uncertain = `${button('Retry this save')} && !document.querySelector('.item-outcome').getAttribute('aria-busy').includes('true')`;
+  const conflict = `Boolean(${button('Save my version')})`;
+  const saved = `document.querySelector('.item-outcome [role=status]')?.textContent.includes('Tracking saved.') && ${ready}`;
+  const revision = `document.querySelector('[data-outcome-revision]')?.dataset.outcomeRevision`;
+  const figure = key => `document.querySelector('[data-outcome-figure="${key}"]').textContent`;
+  async function open(item) {
+    await evaluate('window.beforeOutcomeNavigation=true');
+    await cdp('Page.navigate', { url: 'http://127.0.0.1:5173/my-flips' });
+    await until(`!window.beforeOutcomeNavigation && Boolean(document.querySelector('[data-saved-item="${item.id}"]'))`);
+    assert.equal(await evaluate('window.outcomeReads.length'), 0, 'No outcomes loaded per card');
+    await evaluate(`document.querySelector('[aria-controls="tracking-${item.id}"]').click()`);
+    await until(ready);
+    assert.equal(await evaluate('window.outcomeReads.length'), 1, 'One GET when opened');
+  }
+  async function save() { await click('button', 'Save tracking'); await until(saved); }
+  async function geometry() {
+    assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'));
+    assert.ok(await evaluate(`Array.from(document.querySelectorAll('.item-outcome input,.item-outcome select')).every(e=>e.labels?.length)`));
+  }
+  const housesBefore = await api('/api/deals');
+  const aiBefore = await api('/browser-fixture/ai');
+  let item;
+  for (const width of [390, 1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    const root = await post('/api/items/save', { inputs: { item_name: `Outcome chair ${width}`, purchase_price: 999, repairs: 333, personal_defaults: { hourly_value: 100 } } });
+    item = await post('/api/items/save', { inputs: { ...root.inputs, purchase_price: 888 }, parent_item_id: root.id });
+    await open(item);
+    assert.ok(await evaluate(`${button('Bought')}.getAttribute('aria-pressed')==='true'`));
+    assert.ok(await evaluate(`Array.from(document.querySelectorAll('.item-outcome input')).every(e=>e.value==='')`));
+    assert.ok(await evaluate(`Array.from(document.querySelectorAll('.item-outcome details')).every(e=>!e.open)`));
+    assert.equal(await evaluate('window.outcomeWrites.length'), 0);
+    await fill(field('purchase_price'), '25'); await geometry(); await screenshot(`photo-outcome-entry-${width}.png`);
+    await save();
+    let outcome = await api(`/api/items/${root.id}/outcomes`);
+    assert.equal(outcome.inputs.purchase_price, 25); assert.equal(outcome.inputs.materials, null);
+    assert.equal(outcome.based_on_item_id, item.id); assert.equal(outcome.calculated.cash_profit, null);
+    assert.equal(await evaluate(figure('cash_profit')), 'Not calculated');
+    assert.equal(await evaluate('window.outcomePosts[0].path'), `/api/items/${root.id}/outcomes`);
+    assert.equal(await evaluate('window.outcomePosts[0].body.expected_previous_id'), null);
+    assert.equal(await evaluate('window.outcomeReads.length'), 2);
+    await click('button', 'Listed');
+    await evaluate(`Array.from(document.querySelectorAll('.item-outcome details')).find(e=>e.querySelector('summary').textContent==='Dates').open=true`);
+    await fill(field('purchased_on'), '2026-10-01'); await fill(field('listed_on'), '2026-10-02'); await save();
+    outcome = await api(`/api/items/${root.id}/outcomes`);
+    assert.equal(outcome.inputs.status, 'listed'); assert.equal(outcome.calculated.cash_profit, null);
+    await click('button', 'Sold');
+    await fill(field('sale_price'), '20'); await fill(field('sale_channel'), 'facebook_marketplace'); await fill(field('sold_on'), '2026-10-04');
+    await evaluate(`document.querySelectorAll('.item-outcome details').forEach(e=>e.open=true)`);
+    for (const key of ['materials', 'hired_labor', 'pickup', 'delivery', 'storage', 'selling_fees', 'other_expenses']) await fill(field(key), key === 'materials' ? '10' : '0');
+    await fill(field('hours'), '2'); await fill(field('hourly_value'), '10'); await save();
+    outcome = await api(`/api/items/${root.id}/outcomes`);
+    assert.equal(outcome.calculated.cash_profit, -15); assert.equal(outcome.calculated.profit_after_time, -35);
+    assert.equal(outcome.calculated.days_held, 3); assert.equal(outcome.calculated.days_to_sell, 2);
+    assert.equal(await evaluate(figure('cash_profit')), '-$15.00');
+    await evaluate(`document.querySelectorAll('.item-outcome details').forEach(e=>e.open=false)`);
+    await fill(field('purchase_price'), '30');
+    assert.equal(await evaluate(figure('cash_profit')), '-$15.00');
+    assert.ok(await evaluate(`document.querySelector('.outcome-saved').textContent.includes('not your unsaved entries')`));
+    await save(); outcome = await api(`/api/items/${root.id}/outcomes`);
+    assert.equal(outcome.inputs.materials, 10); assert.equal(outcome.inputs.hours, 2); assert.equal(outcome.inputs.listed_on, '2026-10-02');
+    assert.equal(outcome.calculated.cash_profit, -20);
+    await geometry(); await screenshot(`photo-outcome-sold-${width}.png`);
+    await evaluate(`document.querySelector('[aria-controls="tracking-${root.id}"]').click()`);
+    await until(ready);
+    assert.equal(await evaluate('document.querySelectorAll(".item-outcome").length'), 1);
+    assert.equal(await evaluate(revision), outcome.id);
+    assert.ok(await evaluate(`document.querySelector('.outcome-shared').textContent==='Tracking applies to all versions of this find · based on estimate #${item.id}'`));
+    assert.equal(await evaluate(field('purchase_price') + '.value'), '30');
+    await fill(field('purchase_price'), '0'); await save(); outcome = await api(`/api/items/${root.id}/outcomes`);
+    assert.equal(outcome.based_on_item_id, root.id); assert.equal(outcome.inputs.purchase_price, 0);
+    await evaluate(`document.querySelector('[aria-controls="tracking-${item.id}"]').click()`); await until(ready);
+    assert.equal(await evaluate(revision), outcome.id); assert.equal(await evaluate(field('purchase_price') + '.value'), '0');
+    assert.ok(await evaluate(`document.querySelector('.outcome-shared').textContent.includes('based on estimate #${root.id}')`));
+    await evaluate(`window.confirm=()=>false`); await click('button', 'Bought');
+    assert.equal(await evaluate(field('sale_price') + '.value'), '20');
+    await evaluate(`window.confirm=()=>true`); await click('button', 'Listed');
+    assert.equal(await evaluate(`Boolean(${field('sale_price')})`), false);
+    assert.equal(await evaluate(field('listed_on') + '.value'), '2026-10-02');
+    await click('button', 'Bought'); await save(); outcome = await api(`/api/items/${root.id}/outcomes`);
+    for (const key of ['listed_on', 'sold_on', 'sale_price', 'sale_channel']) assert.equal(outcome.inputs[key], null);
+    assert.equal(outcome.inputs.materials, 10); assert.equal(outcome.inputs.purchased_on, '2026-10-01');
+    assert.deepEqual(await api(`/api/items/${root.id}`), root); assert.deepEqual(await api(`/api/items/${item.id}`), item);
+    assert.ok(await evaluate(`window.outcomeWrites.every(path=>path==='/api/items/${root.id}/outcomes')`));
+  }
+  checks.push('Outcome entry at 390/1440 loads only on open, logs Bought plus price with all extras collapsed, and never imports estimate defaults');
+  checks.push('Bought/Listed/Sold saves preserve hidden actuals, server losses/unknowns/zeroes and calendar days; unsaved editing leaves Last saved figures unchanged');
+  checks.push('Two versions share the exact outcome, use root paths and explicit viewed-estimate basis, show the shared label and never modify saved estimates');
+  checks.push('Backward status changes ask before clearing only incompatible sale/listing fields; cancelling keeps the entire draft');
+
+  await open(item); await fill(field('purchase_price'), '41');
+  await evaluate(`window.outcomeMode='lost'`); await click('button', 'Save tracking'); await until(uncertain);
+  const committed = await api(`/api/items/${item.root_item_id}/outcomes`), captured = await evaluate('window.outcomePosts[0].body');
+  for (const status of ['503', '401', '403', '429']) {
+    await evaluate(`window.outcomeMode=${JSON.stringify(status)}`); await click('button', 'Retry this save'); await until(uncertain);
+    assert.ok(await evaluate(`document.querySelector('.item-outcome fieldset').disabled`));
+    assert.ok(await evaluate(`document.querySelector('.item-outcome').textContent.includes('may already be saved')`));
+    assert.deepEqual(await evaluate('window.outcomePosts.at(-1).body'), captured);
+  }
+  await evaluate(`window.outcomeMode='pass'`); await click('button', 'Retry this save'); await until(saved);
+  assert.equal(await evaluate(revision), committed.id);
+  assert.ok(await evaluate('window.outcomePosts.every(r=>JSON.stringify(r.body)===JSON.stringify(window.outcomePosts[0].body))'));
+  checks.push('Lost outcome confirmations retry the identical UUID/payload; 503/401/403/429 retain the lock, warning and discard escape');
+
+  // Replay returns the original even when another session has since saved.
+  await fill(field('purchase_price'), '42'); await evaluate(`window.outcomeMode='lost'`); await click('button', 'Save tracking'); await until(uncertain);
+  const original = await api(`/api/items/${item.root_item_id}/outcomes`);
+  const newer = await post(`/api/items/${item.root_item_id}/outcomes`, { ...original.inputs, purchase_price: 99, based_on_item_id: item.id,
+    request_id: crypto.randomUUID(), expected_previous_id: original.id });
+  await evaluate(`window.outcomeMode='pass'`); await click('button', 'Retry this save'); await until(saved);
+  assert.equal(await evaluate(revision), newer.id); assert.equal(await evaluate(field('purchase_price') + '.value'), '99');
+  checks.push('Successful replay refreshes latest before editing, so an old replay cannot hide a newer outcome');
+
+  for (const action of ['Use latest', 'Save my version']) {
+    await open(item); await fill(field('purchase_price'), '51');
+    const latest = await api(`/api/items/${item.root_item_id}/outcomes`);
+    const other = await post(`/api/items/${item.root_item_id}/outcomes`, { ...latest.inputs, purchase_price: 77,
+      request_id: crypto.randomUUID(), expected_previous_id: latest.id, based_on_item_id: item.id });
+    if (action === 'Save my version') await evaluate(`window.outcomeReadMode='503'`);
+    await click('button', 'Save tracking');
+    if (action === 'Save my version') {
+      await until(`Boolean(${button('Reload tracking')})`);
+      assert.equal(await evaluate(field('purchase_price') + '.value'), '51');
+      assert.equal(await evaluate('window.outcomePosts.length'), 1);
+      await evaluate(`window.outcomeReadMode='pass'`); await click('button', 'Reload tracking');
+    }
+    await until(conflict);
+    assert.equal(await evaluate(field('purchase_price') + '.value'), '51');
+    assert.equal(await evaluate(revision), other.id);
+    assert.ok(await evaluate(`document.querySelector('.item-outcome').textContent.includes('This find was updated since you started editing. Your unsaved changes are kept.')`));
+    assert.equal(await evaluate('window.outcomePosts.length'), 1, 'Reload never automatically saves');
+    await geometry(); await screenshot(`photo-outcome-conflict-${action.replaceAll(' ', '-')}.png`);
+    await click('button', action); await until(action === 'Use latest' ? ready : saved);
+    assert.equal(await evaluate(field('purchase_price') + '.value'), action === 'Use latest' ? '77' : '51');
+    const sent = await evaluate('window.outcomePosts');
+    assert.equal(sent.length, action === 'Use latest' ? 1 : 2);
+    if (sent.length === 2) { assert.notEqual(sent[1].body.request_id, sent[0].body.request_id); assert.equal(sent[1].body.expected_previous_id, other.id); }
+  }
+  checks.push('Real stale-write 409 reloads latest while keeping the draft; Use latest discards it, Save my version explicitly submits a new UUID, and failed reload retries GET only');
+
+  await open(item); await fill(field('purchase_price'), '61');
+  await evaluate(`window.outcomeMode='lost'`); await click('button', 'Save tracking'); await until(uncertain);
+  const discardedId = await evaluate('window.outcomePosts[0].body.request_id');
+  await evaluate(`window.outcomeReadMode='503'`); await click('button', 'Discard and edit');
+  await until(`Boolean(${button('Reload tracking')})`);
+  assert.equal(await evaluate(field('purchase_price') + '.value'), '61');
+  assert.equal(await evaluate('window.outcomePosts.length'), 1);
+  await evaluate(`window.outcomeReadMode='pass';window.outcomeMode='pass'`); await click('button', 'Reload tracking'); await until(conflict);
+  await click('button', 'Use latest'); await until(ready);
+  assert.ok(await evaluate(`document.querySelector('.item-outcome').textContent.includes('discarded attempt may already be saved')`));
+  await fill(field('purchase_price'), '62'); await save();
+  assert.notEqual(await evaluate('window.outcomePosts.at(-1).body.request_id'), discardedId);
+  checks.push('Discarding an uncertain outcome retains its warning and entries, requires a reload before editing and uses a new UUID only on a later explicit save');
+
+  await open(item); await fill(field('purchase_price'), '63'); await evaluate(`window.outcomeReadMode='503'`); await click('button', 'Save tracking');
+  await until(`Boolean(${button('Reload tracking')})`);
+  assert.ok(await evaluate(`document.querySelector('.item-outcome').textContent.includes('Your save was confirmed.')`));
+  assert.equal(await evaluate(`Boolean(${button('Retry this save')})`), false);
+  await evaluate(`window.outcomeReadMode='pass'`); await click('button', 'Reload tracking'); await until(saved);
+  assert.equal(await evaluate('window.outcomePosts.length'), 1);
+  checks.push('A confirmed POST followed by a failed refresh offers GET reload, never another POST');
+
+  for (const [index, mode] of ['500', '503', 'malformed'].entries()) {
+    await open(item); await fill(field('purchase_price'), String(70 + index)); await evaluate(`window.outcomeMode=${JSON.stringify(mode)}`);
+    await click('button', 'Save tracking'); await until(uncertain);
+    await evaluate(`window.outcomeMode='pass';window.authFixture={calls:0,delayMs:70}`);
+    await evaluate(`(()=>{const b=${button('Retry this save')};b.click();b.click()})()`); await until(saved);
+    assert.equal(await evaluate('window.authFixture.calls'), 2, 'One POST token and one refresh token');
+    assert.equal(await evaluate('window.outcomePosts.length'), 2);
+  }
+  for (const [index, status] of ['404', '422'].entries()) {
+    await open(item); await fill(field('purchase_price'), String(80 + index)); await evaluate(`window.outcomeMode='500'`);
+    await click('button', 'Save tracking'); await until(uncertain);
+    const old = await evaluate('window.outcomePosts[0].body.request_id');
+    await evaluate(`window.outcomeMode=${JSON.stringify(status)}`); await click('button', 'Retry this save'); await until(ready);
+    assert.equal(await evaluate(`Boolean(${button('Retry this save')})`), false);
+    assert.equal(await evaluate(field('purchase_price') + '.value'), String(80 + index));
+    await evaluate(`window.outcomeMode='pass'`); await save();
+    assert.notEqual(await evaluate('window.outcomePosts.at(-1).body.request_id'), old);
+  }
+  checks.push('First 500/503 and malformed confirmations stay uncertain; duplicate retry clicks send one POST; definite 404/422 release the attempt without losing entries');
+
+  // Timeout and outage on initial loading, with no write or inferred default save.
+  for (const mode of ['timeout', '503']) {
+    await open(item); await click('button', 'Close tracking');
+    await evaluate(`window.outcomeReadMode=${JSON.stringify(mode)};document.querySelector('[aria-controls="tracking-${item.id}"]').click()`);
+    await until(`Boolean(${button('Reload tracking')})`);
+    assert.equal(await evaluate('window.outcomePosts.length'), 0);
+    await evaluate(`window.outcomeReadMode='pass'`); await click('button', 'Reload tracking'); await until(ready);
+  }
+  checks.push('Outcome loading timeout/outage blocks saving and supports an explicit read-only retry');
+
+  for (const nextUser of [null, 'outcome-other-user']) {
+    await open(item); await click('button', 'Close tracking');
+    await evaluate(`window.outcomeReadMode='held';document.querySelector('[aria-controls="tracking-${item.id}"]').click()`);
+    await until(`typeof window.releaseOutcomeRead==='function'`);
+    await evaluate(`window.switchFixtureUser(${JSON.stringify(nextUser)});window.releaseOutcomeRead()`);
+    await until(`!document.querySelector('.item-outcome') && !document.querySelector('[data-saved-item]')`);
+    assert.equal(await evaluate('window.outcomePosts.length'), 0);
+
+    await open(item); await fill(field('purchase_price'), '66'); await evaluate(`window.outcomeMode='500'`); await click('button', 'Save tracking'); await until(uncertain);
+    await evaluate(`window.authFixture={calls:0,delayMs:350};window.outcomeMode='pass'`);
+    await click('button', 'Retry this save'); await evaluate(`window.switchFixtureUser(${JSON.stringify(nextUser)})`); await pause(450);
+    assert.equal(await evaluate('window.outcomePosts.length'), 1);
+    assert.equal(await evaluate(`Boolean(document.querySelector('.item-outcome'))`), false);
+
+    await open(item); await fill(field('purchase_price'), nextUser ? '69' : '67'); await evaluate(`window.outcomeMode='held'`); await click('button', 'Save tracking');
+    await until(`typeof window.releaseOutcomePost==='function'`);
+    await evaluate(`window.switchFixtureUser(${JSON.stringify(nextUser)});window.releaseOutcomePost()`); await pause(200);
+    assert.equal(await evaluate(`Boolean(document.querySelector('.item-outcome'))`), false);
+    assert.equal(await evaluate('window.outcomeReads.length'), 1, 'Old POST must not refresh under a different account');
+  }
+  checks.push('Sign-out/account change clear drafts and pending UUIDs, cancel pre-token retries and drop late GET/POST results without cross-account follow-up requests');
+  const photo = (await api('/api/items')).items.find(row => row.assessment);
+  assert.ok(photo); await open(photo);
+  assert.equal(await evaluate('window.outcomePosts.length'), 0);
+  assert.ok(await evaluate(`document.querySelector('.outcome-shared').textContent.includes('Tracking applies to all versions')`));
+  checks.push('Photo finds use the same tracking panel with no assessment regeneration or automatic outcome save');
+  assert.ok(await evaluate(`JSON.parse(sessionStorage.getItem('outcome-test-writes')).every(path=>path.startsWith('/api/items/')&&path.endsWith('/outcomes'))`));
+  const aiAfter = await api('/browser-fixture/ai');
+  assert.equal(aiAfter.calls, aiBefore.calls); assert.equal(aiAfter.posts, aiBefore.posts);
+  assert.deepEqual(await api('/api/deals'), housesBefore);
+  await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: fixture.identifier });
+  checks.push('Outcome tracking makes zero assessment/analyze/estimate-save calls and leaves Houses unchanged; all evidence uses simulated finds');
 }

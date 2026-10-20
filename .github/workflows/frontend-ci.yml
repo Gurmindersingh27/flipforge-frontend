@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Gurmindersingh27/flipforge-backend
-          ref: 9008c2223e1d953fe09dc599bce4da851049c43c
+          ref: 74de1cb825ab2b08892b9e6e08065c0b854c3721
           path: backend
       - uses: actions/setup-node@v4
         with:

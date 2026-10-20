@@ -67,6 +67,37 @@ export interface SavedItemList {
   next_offset: number | null;
 }
 
+// Actual outcomes, mirroring app/item_outcome_models.py. Estimates stay separate.
+export type ItemOutcomeStatus = "bought" | "listed" | "sold";
+export type ItemSaleChannel = "facebook_marketplace" | "craigslist" | "offerup" | "ebay" | "in_person" | "other";
+export type ItemOutcomeNumber = "purchase_price" | "materials" | "hired_labor" | "pickup" | "delivery"
+  | "storage" | "selling_fees" | "other_expenses" | "hours" | "hourly_value" | "sale_price";
+export type ItemOutcomeDate = "purchased_on" | "listed_on" | "sold_on";
+export type ItemOutcomeField = "status" | ItemOutcomeNumber | ItemOutcomeDate;
+export type ItemOutcomeFacts = Record<ItemOutcomeNumber, number | null> & Record<ItemOutcomeDate, string | null> & {
+  status: ItemOutcomeStatus;
+  sale_channel: ItemSaleChannel | null;
+};
+export type SaveItemOutcomeRequest = ItemOutcomeFacts & {
+  request_id: string;
+  expected_previous_id: string | null;
+  based_on_item_id: number | null;
+};
+export type ItemOutcomeFigure = "cash_invested" | "cash_profit" | "profit_after_time" | "days_to_sell" | "days_held";
+export interface ItemOutcomeResponse {
+  id: string;
+  root_item_id: number;
+  based_on_item_id: number | null;
+  previous_id: string | null;
+  revision_number: number;
+  schema_version: 1;
+  created_at: string;
+  inputs: ItemOutcomeFacts;
+  calculated: Record<ItemOutcomeFigure, number | null> & {
+    missing_fields: Record<ItemOutcomeFigure, ItemOutcomeField[]>;
+  };
+}
+
 // Release A: app/item_assessment_models.py. Photos exist only in request memory.
 export interface ItemAssessmentPhoto {
   media_type: "image/jpeg" | "image/png" | "image/webp";
