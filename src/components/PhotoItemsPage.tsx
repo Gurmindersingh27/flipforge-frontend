@@ -9,6 +9,8 @@ import { buildSavedItemInputs, restoreItemForm, safeItemLink } from "../lib/save
 import type { SavedItemForm } from "../lib/savedItems";
 import type { ItemAIBudget, ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResponse, ItemAssessmentResult, ItemFinancialInput, SavedItem } from "../lib/types";
 import { clearAssessmentRecovery, readAssessmentRecovery, rememberAssessment } from "../lib/itemAssessmentRecovery";
+import { createItemTiming, ITEM_TIMING_LABELS } from "../lib/itemTiming";
+import type { ItemTimings } from "../lib/itemTiming";
 import ItemsPage from "./ItemsPage";
 import ItemSavePanel from "./ItemSavePanel";
 import "./PhotoItemsPage.css";
@@ -97,6 +99,9 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const locked = useRef(false);
   const resultRef = useRef<HTMLElement>(null);
   const costsRef = useRef<HTMLDetailsElement>(null);
+  const [timings, setTimings] = useState<ItemTimings>({});
+  const [timing] = useState(() => createItemTiming(setTimings));
+  useEffect(() => { timing.activate(); return () => timing.dispose(); }, [timing]);
   const acceptAssessment = useCallback((response: ItemAssessmentResponse) => {
     if (response.schema_version !== 1 || !["processing", "uncertain", "failed", "completed"].includes(response.status) || (response.status === "completed" && !response.result)) throw new Error("The estimate wasn't confirmed. Check its status before trying again.");
     setAssessment(response);
@@ -117,10 +122,12 @@ function QuickEditor({ findId }: { findId: string | null }) {
     if (!isLoaded || !isSignedIn || budgetInFlight.current) return;
     const current = ++budgetSequence.current;
     budgetInFlight.current = true; setReadiness("checking"); setBudgetNote("");
+    let finishTiming = () => {};
     try {
       const token = await getToken();
       if (current !== budgetSequence.current) return;
       if (!token) throw new Error("Sign in again to check AI availability.");
+      finishTiming = timing.begin("availability");
       const status = await getItemAIBudget(token);
       if (current !== budgetSequence.current) return;
       setBudget(status);
@@ -136,9 +143,9 @@ function QuickEditor({ findId }: { findId: string | null }) {
       setBudgetNote(failure instanceof Error ? failure.message : "Couldn't check AI availability. You can still enter your own estimate.");
       setManual(true);
     } finally {
-      if (current === budgetSequence.current) budgetInFlight.current = false;
+      if (current === budgetSequence.current) { finishTiming(); budgetInFlight.current = false; }
     }
-  }, [getToken, isLoaded, isSignedIn]);
+  }, [getToken, isLoaded, isSignedIn, timing]);
   const cancelAvailability = useCallback(() => {
     budgetSequence.current++; budgetInFlight.current = false;
   }, []);
@@ -158,7 +165,9 @@ function QuickEditor({ findId }: { findId: string | null }) {
     recoveryRequest.current ??= (async () => {
       const token = await getToken();
       if (!token) throw new Error("Sign in again to recover this estimate.");
-      return getItemAssessment(id, token);
+      const finishTiming = timing.begin("status");
+      try { return await getItemAssessment(id, token); }
+      finally { finishTiming(); }
     })();
     void recoveryRequest.current.then(response => {
       if (!active) return;
@@ -174,7 +183,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
       if (active) { recoveryFinished.current = true; locked.current = false; setBusy(null); }
     });
     return () => { active = false; };
-  }, [findId, isLoaded, isSignedIn, userId, getToken, acceptAssessment]);
+  }, [findId, isLoaded, isSignedIn, userId, getToken, acceptAssessment, timing]);
 
   useEffect(() => {
     if (findId === null) return;
@@ -217,11 +226,12 @@ function QuickEditor({ findId }: { findId: string | null }) {
     if (!files.length || locked.current) return;
     if (photos.length + files.length > 3) { setError("Use up to three photos. Remove one before adding another."); return; }
     const current = ++sequence.current; locked.current = true; setBusy("photo"); setError("");
+    const finishTiming = timing.begin("photo");
     try {
       const prepared = await Promise.all(files.map(prepareItemPhoto));
       if (sequence.current === current) setPhotos(old => [...old, ...prepared]);
     } catch (failure) { if (sequence.current === current) setError((failure as Error).message); }
-    finally { if (sequence.current === current) { locked.current = false; setBusy(null); } }
+    finally { if (sequence.current === current) { finishTiming(); locked.current = false; setBusy(null); } }
   }
   async function estimate(checkOnly = false) {
     if (locked.current || !isSignedIn || (!checkOnly && (pendingId || readiness !== "available" || budgetInFlight.current))) return;
@@ -239,7 +249,10 @@ function QuickEditor({ findId }: { findId: string | null }) {
         setRecoveryId(userId && rememberAssessment(userId, payload.request_id) ? payload.request_id : null);
         setRecovered(false); sent = true;
       }
-      const response = payload ? await assessItem(payload, token) : await getItemAssessment(pendingId!, token);
+      const finishTiming = timing.begin(payload ? "assessment" : "status");
+      let response: ItemAssessmentResponse;
+      try { response = payload ? await assessItem(payload, token) : await getItemAssessment(pendingId!, token); }
+      finally { if (current === sequence.current) finishTiming(); }
       if (current !== sequence.current) return;
       acceptAssessment(response);
       void checkAvailability();
@@ -304,7 +317,10 @@ function QuickEditor({ findId }: { findId: string | null }) {
             <div className="quick-section-title"><span className="quick-step">01</span><h2>What did you find?</h2><span className="quick-muted">Up to 3 photos</span></div>
             <div className="quick-photos">
               {photos.map((photo, index) => <div className="quick-photo" key={index}><img src={`data:${photo.media_type};base64,${photo.data}`} alt={`Your item, photo ${index + 1}`} /><button className="quick-remove" type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => setPhotos(old => old.filter((_, i) => i !== index))}>×</button></div>)}
-              {photos.length < 3 && <label className={`quick-upload ${photos.length ? "has-photos" : ""}`}><Camera /><strong>{photos.length ? "Add another" : "Add a photo"}</strong><span>Take one or choose from your phone</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple aria-label="Add item photos" onChange={addPhotos} /></label>}
+              {photos.length < 3 && <div className="quick-photo-actions">
+                <label className="quick-upload"><Camera /><strong>Take photo</strong><span>One photo at a time</span><input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" aria-label="Take item photo" onChange={addPhotos} /></label>
+                <label className="quick-upload quick-gallery"><strong>Choose photos</strong><span>From your gallery</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple aria-label="Choose item photos" onChange={addPhotos} /></label>
+              </div>}
             </div>
             <label className="quick-field" htmlFor="quick-description">Tell me about it<textarea id="quick-description" rows={3} maxLength={500} value={description} onChange={event => setDescription(event.target.value)} placeholder="Wood chair at a garage sale. Scratched seat. They want $20." /></label>
             <div className="quick-input-note"><span>Tap the mic on your keyboard to talk.</span><span>{description.length}/500</span></div>
@@ -328,6 +344,11 @@ function QuickEditor({ findId }: { findId: string | null }) {
         {budget?.warning && <p className="quick-notice" role="status">The pilot is near its $20 monthly AI budget. Manual estimates keep working.</p>}
         {error && <p className="quick-error quick-notice" role="alert">{error}</p>}
         {busy === "photo" && <p role="status">Preparing your photos…</p>}
+        <details className="quick-speed">
+          <summary>Speed</summary>
+          <dl>{(Object.keys(ITEM_TIMING_LABELS) as (keyof ItemTimings)[]).map(key => timings[key] === undefined ? null :
+            <div key={key}><dt>{ITEM_TIMING_LABELS[key]}</dt><dd>{(timings[key]! / 1000).toFixed(1)}s</dd></div>)}</dl>
+        </details>
         {busy === "ai" && <p role="status">Finding similar listings. This can take a minute while the service starts.</p>}
         {!manual && !evidence && <button type="button" className="quick-text-button" onClick={() => setManual(true)}>I'll enter my own estimate</button>}
 
