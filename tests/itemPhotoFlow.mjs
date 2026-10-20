@@ -133,7 +133,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.equal(await evaluate(`document.querySelector('.quick-speed').open`), false);
     assert.deepEqual(await evaluate(speedRows), {});
     const before = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
-    assert.ok(await evaluate(`(()=>{const c=document.querySelector('[aria-label="Take item photo"]'),g=document.querySelector('[aria-label="Choose item photos"]');return c.capture==='environment'&&!c.multiple&&g.multiple&&!g.hasAttribute('capture')})()`));
+    assert.ok(await evaluate(`(()=>{const c=document.querySelector('[aria-label="Take item photo"]'),g=document.querySelector('[aria-label="Choose item photos"]');return c.getAttribute('capture')==='environment'&&!c.multiple&&g.multiple&&!g.hasAttribute('capture')})()`));
     // Simulated picker cancellation, not proof of physical camera behaviour.
     await evaluate(`document.querySelectorAll('.quick-photo-actions input').forEach(e=>{e.files=new DataTransfer().files;e.dispatchEvent(new Event('change',{bubbles:true}));e.dispatchEvent(new Event('cancel',{bubbles:true}));})`);
     assert.deepEqual(await evaluate(speedRows), {});
