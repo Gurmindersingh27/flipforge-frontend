@@ -78,7 +78,7 @@ function PreferencesEditor({ onResolved, light, disabled }: Props) {
         <div className={light ? 'quick-fields' : 'mt-4 grid min-w-0 gap-4 sm:grid-cols-2'}>
           {PREFERENCE_FIELDS.map(key => <label key={key} className={light ? 'quick-field' : 'block min-w-0 text-sm'} htmlFor={`preference-${key}`}>{ITEM_LABELS[key]}
             <input id={`preference-${key}`} type="text" inputMode="decimal" autoComplete="off" placeholder="Unknown" value={form[key]}
-              onChange={event => setForm(old => ({ ...old, [key]: event.target.value }))}
+              onChange={event => { setForm(old => ({ ...old, [key]: event.target.value })); setMessage(''); setSaveFailed(false); }}
               className={light ? undefined : 'mt-2 min-h-11 w-full min-w-0 rounded-lg border border-white/20 bg-black/20 px-3 py-2'} />
           </label>)}
         </div>
