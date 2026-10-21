@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { SignInButton, useAuth } from "@clerk/clerk-react";
@@ -9,7 +9,9 @@ import {
 } from "../lib/itemAnalysis";
 import { buildSavedItemInputs, newSavedItemForm, restoreItemForm, safeItemLink } from "../lib/savedItems";
 import type { SavedItemForm } from "../lib/savedItems";
-import type { ItemAnalyzeResponse, ItemFinancialInput, ItemPreference, ItemScenario, SavedItem } from "../lib/types";
+import ItemPreferencesPanel from "./ItemPreferencesPanel";
+import { applyItemPreferences } from "../lib/itemPreferences";
+import type { ItemAnalyzeResponse, ItemFinancialInput, ItemPreference, ItemScenario, ItemPreferences, SavedItem } from "../lib/types";
 import ItemSavePanel from "./ItemSavePanel";
 
 const inputClass = "w-full min-w-0 rounded-lg border border-white/20 bg-[#0f1115] px-3 py-2.5 text-base text-white focus-visible:outline-2 focus-visible:outline-amber-300 disabled:opacity-60";
@@ -63,8 +65,20 @@ export default function ItemsPage() {
 }
 
 function ItemsEditor({ savedId }: { savedId: string | null }) {
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const [form, setForm] = useState(newSavedItemForm);
+  const touched = useRef(new Set<ItemFinancialInput>());
+  const preferenceSealed = useRef(false);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [capturedPreferences, setCapturedPreferences] = useState<ItemPreferences | null>(null);
+  const resolvePreferences = useCallback((profile: ItemPreferences | null) => {
+    if (!savedId && !preferenceSealed.current) {
+      setForm(old => applyItemPreferences(old, profile, touched.current));
+      setCapturedPreferences(profile);
+    }
+    setPreferencesReady(true);
+  }, [savedId]);
+  const preferencesBlocked = !savedId && isSignedIn && !preferencesReady;
   const [snapshot, setSnapshot] = useState<SavedItem | null>(null);
   const [initial, setInitial] = useState<SavedItem | null>(null);
   const [reopening, setReopening] = useState(savedId !== null);
@@ -115,13 +129,21 @@ function ItemsEditor({ savedId }: { savedId: string | null }) {
     sequence.current++;
     inFlight.current = false;
     setLoading(false); setSlow(false); setResult(null); setErrors({}); setRequestError("");
-    setForm(update);
+    setForm(previous => {
+      const next = update(previous);
+      for (const key of ITEM_FIELDS) {
+        const pref = key as ItemPreference;
+        if (next.values[key] !== previous.values[key] || next.personalDefaults[pref] !== previous.personalDefaults[pref] || next.useDefault[pref] !== previous.useDefault[pref]) touched.current.add(key);
+      }
+      return next;
+    });
     setEditVersion(value => value + 1); setSavedResult(false);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (inFlight.current || saving) return;
+    if (inFlight.current || saving || preferencesBlocked) return;
+    preferenceSealed.current = true;
     const current = ++sequence.current;
     setResult(null); setRequestError(""); setErrors({}); setSlow(false);
     const built = buildSavedItemInputs(form);
@@ -161,7 +183,7 @@ function ItemsEditor({ savedId }: { savedId: string | null }) {
         {personal ? "Use my personal default" : "Use default"}
       </label>}
       <p id={`${field}-hint`} className="mt-1 text-xs text-white/65">
-        {inherited ? defaultText : "Blank means unknown. Enter 0 only if confirmed."}
+        {(field === "pickup" || field === "fee_fixed") && capturedPreferences && !touched.current.has(field) ? "My default · editable for this find" : inherited ? defaultText : "Blank means unknown. Enter 0 only if confirmed."}
       </p>
       {errors[field] && <p id={`${field}-error`} className="mt-1 text-sm text-red-300">{errors[field]}</p>}
     </div>;
@@ -184,6 +206,7 @@ function ItemsEditor({ savedId }: { savedId: string | null }) {
         {snapshot && <p className="mt-3 text-sm text-amber-200">Version #{snapshot.id}. Saving again creates a new linked version; this saved version stays unchanged.</p>}
         {initial && safeItemLink(initial.listing_url) && <a href={safeItemLink(initial.listing_url)!} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block py-2 text-sm underline">Saved listing</a>}
       </header>
+      {!savedId && <ItemPreferencesPanel onResolved={resolvePreferences} disabled={saving || loading} />}
       <form onSubmit={submit} noValidate className="space-y-5">
         <fieldset disabled={saving} className="min-w-0 space-y-5">
         <section className={panelClass} aria-label="Item details">
@@ -223,14 +246,14 @@ function ItemsEditor({ savedId }: { savedId: string | null }) {
         </details>
         {Object.keys(errors).length > 0 && <div role="alert" className="rounded-xl border border-red-300/30 p-4 text-sm text-red-200">Check the highlighted inputs. Use plain numbers without currency symbols or commas.</div>}
         {requestError && <div role="alert" className="whitespace-pre-line rounded-xl border border-red-300/30 p-4 text-sm text-red-200">{requestError}</div>}
-        <button type="submit" disabled={loading} className="min-h-11 w-full rounded-xl bg-amber-300 px-5 py-3 font-semibold text-[#0f1115] hover:bg-amber-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-200 disabled:opacity-60 sm:w-auto">
+        <button type="submit" disabled={loading || preferencesBlocked} className="min-h-11 w-full rounded-xl bg-amber-300 px-5 py-3 font-semibold text-[#0f1115] hover:bg-amber-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-200 disabled:opacity-60 sm:w-auto">
           {loading ? "Calculating…" : "Calculate my flip"}
         </button>
         {loading && <p role="status" className="text-sm text-white/75">{slow ? "This is taking longer than usual while the service starts. Your inputs are still here." : "Calculating your offers…"}</p>}
         </fieldset>
       </form>
-      <ItemSavePanel form={form} initial={initial} parentId={snapshot?.id ?? null} editVersion={editVersion} onErrors={setErrors}
-        onBusy={busy => { setSaving(busy); if (busy) { sequence.current++; inFlight.current = false; setLoading(false); } }}
+      <ItemSavePanel disabled={preferencesBlocked} form={form} initial={initial} parentId={snapshot?.id ?? null} editVersion={editVersion} onErrors={setErrors}
+        onBusy={busy => { setSaving(busy); if (busy) { preferenceSealed.current = true; sequence.current++; inFlight.current = false; setLoading(false); } }}
         onSaved={saved => { setSnapshot(saved); setResult(saved.analysis_result); setSavedResult(true); }} />
       {result && <section ref={resultsRef} tabIndex={-1} aria-label="Items analysis result" data-item-status={result.status} className="min-w-0 space-y-4 rounded-xl focus-visible:outline-2 focus-visible:outline-amber-300">
         <header className={panelClass}>

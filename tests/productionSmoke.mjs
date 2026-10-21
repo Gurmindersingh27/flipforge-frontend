@@ -89,6 +89,12 @@ try {
   assert.deepEqual(health, { status: 'ok' });
   check('Backend health');
   const schema = await (await request(`${backend}/openapi.json`)).json();
+  const preferencePath = schema.paths['/api/items/preferences'];
+  assert.ok(preferencePath?.get && preferencePath?.put);
+  assert.deepEqual(Object.keys(schema.components.schemas.SaveItemPreferencesRequest.properties).sort(), ['contingency_pct','fee_fixed','fee_pct','hourly_value','pickup','target_profit']);
+  assert.deepEqual(Object.keys(schema.components.schemas.ItemPersonalDefaults.properties).sort(), ['contingency_pct','fee_pct','hourly_value','target_profit']);
+  assert.equal((await (await request(`${backend}/api/items/preferences`, {}, 403)).json()).detail, 'Not authenticated');
+  check('Preferences GET/PUT contract and unchanged four-field calculator defaults; signed-out GET rejected, no PUT sent');
   assert.ok(schema.paths['/api/items/assess']?.post);
   assert.ok(schema.components.schemas.SaveItemRequest.properties.assessment_id);
   const saveContract = schema.components.schemas.SaveItemRequest;

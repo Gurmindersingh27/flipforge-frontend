@@ -3,14 +3,16 @@ import type { ChangeEvent, ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { SignInButton, useAuth, UserButton } from "@clerk/clerk-react";
 import { analyzeItem, assessItem, getItem, getItemAIBudget, getItemAssessment, ItemAssessmentError } from "../lib/api";
-import { formatItemMoney, ITEM_LABELS, parseItemNumber } from "../lib/itemAnalysis";
-import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../lib/itemAssessment";
+import { formatItemMoney, itemFieldText, ITEM_FIELDS, ITEM_LABELS, parseItemNumber } from "../lib/itemAnalysis";
+import { acceptFreshItemInputs, quickAssumptionsDetail, buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../lib/itemAssessment";
 import { buildSavedItemInputs, restoreItemForm, safeItemLink } from "../lib/savedItems";
 import type { SavedItemForm } from "../lib/savedItems";
-import type { ItemAIBudget, ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResponse, ItemAssessmentResult, ItemFinancialInput, SavedItem } from "../lib/types";
+import type { ItemAIBudget, ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResponse, ItemAssessmentResult, ItemFinancialInput, ItemPreference, ItemPreferences, SavedItem } from "../lib/types";
 import { clearAssessmentRecovery, readAssessmentRecovery, rememberAssessment } from "../lib/itemAssessmentRecovery";
 import { createItemTiming, ITEM_TIMING_LABELS } from "../lib/itemTiming";
 import type { ItemTimings } from "../lib/itemTiming";
+import ItemPreferencesPanel from "./ItemPreferencesPanel";
+import { applyItemPreferences } from "../lib/itemPreferences";
 import ItemsPage from "./ItemsPage";
 import ItemSavePanel from "./ItemSavePanel";
 import "./PhotoItemsPage.css";
@@ -83,6 +85,19 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const recoveryFinished = useRef(false);
   const recoveryRequest = useRef<Promise<ItemAssessmentResponse> | null>(null);
   const [form, setForm] = useState(newQuickItemForm);
+  const touched = useRef(new Set<ItemFinancialInput>());
+  const preferenceSealed = useRef(false);
+  const freshAssessment = useRef(false);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [capturedPreferences, setCapturedPreferences] = useState<ItemPreferences | null>(null);
+  const resolvePreferences = useCallback((profile: ItemPreferences | null) => {
+    if (!findId && !preferenceSealed.current && !(userId && readAssessmentRecovery(userId))) {
+      setForm(old => applyItemPreferences(old, profile, touched.current));
+      setCapturedPreferences(profile);
+    }
+    setPreferencesReady(true);
+  }, [findId, userId]);
+  const preferencesBlocked = !findId && isSignedIn && !preferencesReady && !(userId && readAssessmentRecovery(userId));
   const [manual, setManual] = useState(false);
   const [repairEdit, setRepairEdit] = useState(false);
   const [ownResale, setOwnResale] = useState(true);
@@ -110,9 +125,12 @@ function QuickEditor({ findId }: { findId: string | null }) {
     }
     setPendingId(null);
     if (!response.result) { setError(response.message ?? "AI couldn't finish. Enter your own estimate below."); setManual(true); return; }
-    setEvidence(response.result); setForm(restoreItemForm(response.result.inputs)); setResult(null);
-    setConfirmation(null); setOwnResale(response.result.resale === null);
-    setRepairEdit(response.result.repair_unknowns.length > 0); setManual(true); setErrors({}); setError("");
+    setEvidence(response.result);
+    const inputs = response.result.inputs;
+    setForm(old => freshAssessment.current ? acceptFreshItemInputs(inputs, old, touched.current) : restoreItemForm(inputs));
+    setResult(null);
+    setConfirmation(null); setOwnResale(response.result.resale === null || (freshAssessment.current && (touched.current.has("resale_low") || touched.current.has("resale_high"))));
+    setRepairEdit(response.result.repair_unknowns.length > 0 || (freshAssessment.current && touched.current.has("repairs"))); setManual(true); setErrors({}); setError("");
     setEditVersion(value => value + 1);
   }, []);
   useEffect(() => () => { sequence.current++; locked.current = false; }, []);
@@ -160,6 +178,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     const id = readAssessmentRecovery(userId);
     if (!id) { recoveryFinished.current = true; return; }
     let active = true;
+    preferenceSealed.current = true;
     setRecoveryId(id); setPendingId(id); locked.current = true; setBusy("recover");
     // Reuse the promise through StrictMode's effect replay: one GET, no polling.
     recoveryRequest.current ??= (async () => {
@@ -210,14 +229,22 @@ function QuickEditor({ findId }: { findId: string | null }) {
 
   function edit(update: (old: SavedItemForm) => SavedItemForm) {
     sequence.current++; setResult(null); setErrors({}); setError("");
-    setForm(update); setEditVersion(value => value + 1);
+    setForm(previous => {
+      const next = update(previous);
+      for (const key of ITEM_FIELDS) {
+        const pref = key as ItemPreference;
+        if (next.values[key] !== previous.values[key] || next.personalDefaults[pref] !== previous.personalDefaults[pref] || next.useDefault[pref] !== previous.useDefault[pref]) touched.current.add(key);
+      }
+      return next;
+    }); setEditVersion(value => value + 1);
   }
   function field(field: ItemFinancialInput, label: string, bothResale = false) {
     return <label className="quick-field" key={field} htmlFor={`quick-${field}`}>{label}
-      <input id={`quick-${field}`} value={form.values[field]} type="text" inputMode="decimal" autoComplete="off"
+      <input id={`quick-${field}`} value={itemFieldText(form, field)} type="text" inputMode="decimal" autoComplete="off"
         aria-invalid={Boolean(errors[field])} aria-describedby={errors[field] ? `quick-${field}-error` : undefined}
-        onChange={event => edit(old => ({ ...old, values: { ...old.values, [field]: event.target.value, ...(bothResale ? { resale_high: event.target.value } : {}) },
-          useDefault: { ...old.useDefault, ...(field in old.useDefault ? { [field]: false } : {}) } }))} />
+        onChange={event => { touched.current.add(field); edit(old => ({ ...old, values: { ...old.values, [field]: event.target.value, ...(bothResale ? { resale_high: event.target.value } : {}) },
+          useDefault: { ...old.useDefault, ...(field in old.useDefault ? { [field]: false } : {}) } })); }} />
+      {(field === "pickup" || field === "fee_fixed") && capturedPreferences && !touched.current.has(field) && <small>My default · editable for this find</small>}
       {errors[field] && <span id={`quick-${field}-error`} className="quick-error">{errors[field]}</span>}
     </label>;
   }
@@ -234,7 +261,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     finally { if (sequence.current === current) { finishTiming(); locked.current = false; setBusy(null); } }
   }
   async function estimate(checkOnly = false) {
-    if (locked.current || !isSignedIn || (!checkOnly && (pendingId || readiness !== "available" || budgetInFlight.current))) return;
+    if (locked.current || !isSignedIn || (!checkOnly && (preferencesBlocked || pendingId || readiness !== "available" || budgetInFlight.current))) return;
     let payload;
     try { if (!checkOnly) payload = buildAssessmentRequest(crypto.randomUUID(), description, form.values.purchase_price, photos); }
     catch (failure) { setError((failure as Error).message); return; }
@@ -245,6 +272,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
       if (current !== sequence.current) return;
       if (!token) throw new Error("Sign in again to estimate this find.");
       if (payload) {
+        preferenceSealed.current = true; freshAssessment.current = true;
         setPendingId(payload.request_id);
         setRecoveryId(userId && rememberAssessment(userId, payload.request_id) ? payload.request_id : null);
         setRecovered(false); sent = true;
@@ -274,7 +302,8 @@ function QuickEditor({ findId }: { findId: string | null }) {
     setRecoveryId(null); setPendingId(null); setRecovered(false);
   }
   async function calculate() {
-    if (locked.current) return;
+    if (locked.current || preferencesBlocked) return;
+    preferenceSealed.current = true;
     let next = form;
     let repairs: ItemAssessmentConfirmation["repairs"] = [];
     if (evidence && !repairEdit) {
@@ -312,6 +341,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     <header className="quick-intro"><p className="quick-eyebrow">A GOOD FIND STARTS HERE</p><h1>{snapshot ? "Back to your find." : <>See potential?<br /><em>Let's work it out.</em></>}</h1><p>{showPhotoForm ? <>Snap a photo. Tell us what you know.<br />Get a starting offer and a plan for the work.</> : <>Enter what you know.<br />We'll help you work out an offer.</>}</p></header>
     <div className="quick-layout">
       <div className="quick-flow">
+        {!findId && <ItemPreferencesPanel light onResolved={resolvePreferences} disabled={blocked} />}
         {!snapshot && !evidence && showPhotoForm && <section className="quick-card" aria-label="Photo estimate">
           <fieldset disabled={blocked || pendingId !== null}>
             <div className="quick-section-title"><span className="quick-step">01</span><h2>What did you find?</h2><span className="quick-muted">Up to 3 photos</span></div>
@@ -324,10 +354,10 @@ function QuickEditor({ findId }: { findId: string | null }) {
             </div>
             <label className="quick-field" htmlFor="quick-description">Tell me about it<textarea id="quick-description" rows={3} maxLength={500} value={description} onChange={event => setDescription(event.target.value)} placeholder="Wood chair at a garage sale. Scratched seat. They want $20." /></label>
             <div className="quick-input-note"><span>Tap the mic on your keyboard to talk.</span><span>{description.length}/500</span></div>
-            <label className="quick-field quick-asking" htmlFor="quick-asking">Asking price <span className="quick-muted">if you didn't mention it</span><div className="quick-money-input"><span>$</span><input id="quick-asking" type="text" inputMode="decimal" value={form.values.purchase_price} onChange={event => edit(old => ({ ...old, values: { ...old.values, purchase_price: event.target.value } }))} placeholder="Optional" /></div><small>Include any buyer fees or tax.</small></label>
+            <label className="quick-field quick-asking" htmlFor="quick-asking">Asking price <span className="quick-muted">if you didn't mention it</span><div className="quick-money-input"><span>$</span><input id="quick-asking" type="text" inputMode="decimal" value={form.values.purchase_price} onChange={event => { touched.current.add("purchase_price"); edit(old => ({ ...old, values: { ...old.values, purchase_price: event.target.value } })); }} placeholder="Optional" /></div><small>Include any buyer fees or tax.</small></label>
           </fieldset>
           {isLoaded && !isSignedIn ? <SignInButton mode="modal"><button className="quick-primary">Sign in for a photo estimate <span aria-hidden="true">↗</span></button></SignInButton>
-            : <button data-quick-assess className="quick-primary" disabled={!isLoaded || blocked || pendingId !== null || !aiAvailable} onClick={() => void estimate()}>{busy === "ai" ? "Looking at your find…" : "What do you think?"}<span aria-hidden="true">↗</span></button>}
+            : <button data-quick-assess className="quick-primary" disabled={!isLoaded || blocked || pendingId !== null || !aiAvailable || preferencesBlocked} onClick={() => void estimate()}>{busy === "ai" ? "Looking at your find…" : "What do you think?"}<span aria-hidden="true">↗</span></button>}
           <p className="quick-small">Photos go to Anthropic for this estimate. FlipForge doesn't save them.</p>
         </section>}
         {pendingId && <div className="quick-notice" role="status"><strong>Your photo estimate hasn't finished.</strong><p>Check the same estimate without paying for another. You can enter your own numbers below while you wait.</p><button className="quick-secondary" disabled={blocked} onClick={() => void estimate(true)}>Check estimate status</button></div>}
@@ -375,11 +405,12 @@ function QuickEditor({ findId }: { findId: string | null }) {
             <details ref={costsRef} className="quick-details"><summary>Change costs & profit goal</summary>
               <div className="quick-fields">{field("target_profit", "Profit you'd like to make ($)")}{field("pickup", "Pickup cost ($)")}{field("delivery", "Delivery cost ($)")}{field("storage", "Storage cost ($)")}{field("hours", "Your time (hours)")}{field("hourly_value", "Value of your time ($/hour)")}{field("fee_pct", "Selling fees (%)")}{field("fee_fixed", "Fixed selling fee ($)")}{field("contingency_pct", "Repair buffer (%)")}</div>
               <p className="quick-small">Blank means unknown. Fees apply to the sale price; the buffer applies only to repairs.</p>
-              <p className="quick-small">Starting setup: local pickup, $0 transport/storage, no selling fees, no charge for your time, a 15% repair buffer and a $30 profit goal. Your entered changes replace these values.</p>
+              <p className="quick-small">These are this find’s values. Blank stays unknown; 0 means none.</p>
             </details>
+            <p className="quick-small" data-assumption-acknowledgment>Confirming uses these values: {quickAssumptionsDetail(form)}.</p>
             <p className="quick-assumptions">{quickAssumptionsSummary(form)} · <button type="button" className="quick-text-button" onClick={openCosts}>Change</button></p>
             {Object.keys(errors).length > 0 && <div className="quick-error" role="alert">{Object.entries(errors).map(([key, message]) => <p key={key}>{ITEM_LABELS[key as ItemFinancialInput] ?? key}: {message}</p>)}</div>}
-            <button data-quick-calculate className="quick-primary" type="button" onClick={() => void calculate()}>{busy === "calculate" ? "Working it out…" : evidence && !confirmation ? "Looks right - show my offer" : "Calculate my offer"}<span aria-hidden="true">→</span></button>
+            <button data-quick-calculate disabled={preferencesBlocked} className="quick-primary" type="button" onClick={() => void calculate()}>{busy === "calculate" ? "Working it out…" : evidence && !confirmation ? "Looks right - show my offer" : "Calculate my offer"}<span aria-hidden="true">→</span></button>
           </fieldset>
         </section>}
       </div>
