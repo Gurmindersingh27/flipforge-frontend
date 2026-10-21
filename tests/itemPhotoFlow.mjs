@@ -1352,7 +1352,7 @@ async function runPreferenceChecks({ cdp, evaluate, until, fill, click, measure,
   assert.equal((await get()).pickup,41);
   assert.ok(await evaluate(`document.querySelector('[aria-label="Buying preferences"]').textContent.includes('may already have applied')`));
   await put({...profile,pickup:77});
-  await evaluate(`window.prefMode='pass';${button('Retry saving preferences')}.click();${button('Retry saving preferences')}.click()`);
+  await evaluate(`window.prefMode='pass';(()=>{const b=${button('Retry saving preferences')};b.click();b.click()})()`);
   await until(`document.querySelector('[aria-label="Buying preferences"]').textContent.includes('Preferences saved for your next find')`);
   assert.equal((await get()).pickup,41,'Retry intentionally wins over the other device');
   assert.equal(await evaluate(`window.prefRequests.filter(r=>r.method==='PUT').length`),2);
