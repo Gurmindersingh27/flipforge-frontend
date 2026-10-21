@@ -129,14 +129,7 @@ function ItemsEditor({ savedId }: { savedId: string | null }) {
     sequence.current++;
     inFlight.current = false;
     setLoading(false); setSlow(false); setResult(null); setErrors({}); setRequestError("");
-    setForm(previous => {
-      const next = update(previous);
-      for (const key of ITEM_FIELDS) {
-        const pref = key as ItemPreference;
-        if (next.values[key] !== previous.values[key] || next.personalDefaults[pref] !== previous.personalDefaults[pref] || next.useDefault[pref] !== previous.useDefault[pref]) touched.current.add(key);
-      }
-      return next;
-    });
+    setForm(update);
     setEditVersion(value => value + 1); setSavedResult(false);
   }
 
@@ -174,11 +167,11 @@ function ItemsEditor({ savedId }: { savedId: string | null }) {
         value={inherited ? "" : form.values[field]} disabled={inherited}
         placeholder={inherited ? "Using default" : "Unknown"}
         aria-describedby={`${field}-hint${errors[field] ? ` ${field}-error` : ""}`} aria-invalid={Boolean(errors[field])}
-        onChange={event => edit(previous => ({ ...previous, values: { ...previous.values, [field]: event.target.value } }))}
+        onChange={event => { touched.current.add(field); edit(previous => ({ ...previous, values: { ...previous.values, [field]: event.target.value } })); }}
         className={inputClass} />
       {showDefault && preference && <label className="mt-2 flex min-h-11 cursor-pointer items-center gap-2 text-sm text-white/80">
         <input type="checkbox" checked={inherited} aria-label={`${personal ? "Use my personal default" : "Use default"} for ${ITEM_LABELS[field]}`}
-          onChange={event => edit(previous => ({ ...previous, useDefault: { ...previous.useDefault, [preference]: event.target.checked } }))}
+          onChange={event => { touched.current.add(field); edit(previous => ({ ...previous, useDefault: { ...previous.useDefault, [preference]: event.target.checked } })); }}
           className="h-4 w-4 accent-amber-300" />
         {personal ? "Use my personal default" : "Use default"}
       </label>}
@@ -233,13 +226,13 @@ function ItemsEditor({ savedId }: { savedId: string | null }) {
               <label htmlFor={`personal-${field}`} className="mb-2 block text-sm">Personal default: {ITEM_LABELS[field]}</label>
               <input id={`personal-${field}`} type="text" inputMode="decimal" value={form.personalDefaults[field]} autoComplete="off"
                 aria-invalid={Boolean(errors[`personal_${field}`])} aria-describedby={errors[`personal_${field}`] ? `personal-${field}-error` : undefined}
-                onChange={event => edit(previous => {
+                onChange={event => { touched.current.add(field); edit(previous => {
                   const next = { ...previous, personalDefaults: { ...previous.personalDefaults, [field]: event.target.value } };
                   if ((field === "fee_pct" || field === "target_profit") && !hasPersonalDefault(next, field)) {
                     next.useDefault = { ...previous.useDefault, [field]: false };
                   }
                   return next;
-                })} className={inputClass} />
+                }); }} className={inputClass} />
               {errors[`personal_${field}`] && <p id={`personal-${field}-error`} className="mt-1 text-sm text-red-300">{errors[`personal_${field}`]}</p>}
             </div>)}
           </div>

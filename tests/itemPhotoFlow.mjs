@@ -1321,6 +1321,16 @@ async function runPreferenceChecks({ cdp, evaluate, until, fill, click, measure,
   assert.equal(await evaluate(input('quick-contingency_pct')+'.value'),'14.3');
   assert.equal(await evaluate(`document.querySelectorAll('.quick-photo img').length`),1);
   checks.push('A delayed profile loads alongside photo selection and preserves touched zero/blank fields while initializing untouched fields');
+  await open('?manual=1&prefMode=hold'); await until(`typeof window.releasePreference==='function'`);
+  await fill(input('item-pickup'),'0');
+  await evaluate(`document.querySelector('[aria-label="Use default for Value of your time per hour"]').click()`);
+  await evaluate(`window.releasePreference()`); await until(ready);
+  assert.equal(await evaluate(input('item-pickup')+'.value'),'0');
+  assert.equal(await evaluate(input('item-hourly_value')+'.disabled'),false);
+  assert.equal(await evaluate(input('item-hourly_value')+'.value'),'');
+  assert.equal(await evaluate(input('personal-contingency_pct')+'.value'),'14.3');
+  checks.push('Delayed manual initialization respects explicit zero and disabling an application default to keep hourly value unknown');
+
 
   for(const manual of [false,true]){
     await open(manual?'?manual=1&prefMode=fail':'?prefMode=fail');

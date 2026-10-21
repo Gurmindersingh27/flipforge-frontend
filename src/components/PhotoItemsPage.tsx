@@ -3,11 +3,11 @@ import type { ChangeEvent, ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { SignInButton, useAuth, UserButton } from "@clerk/clerk-react";
 import { analyzeItem, assessItem, getItem, getItemAIBudget, getItemAssessment, ItemAssessmentError } from "../lib/api";
-import { formatItemMoney, itemFieldText, ITEM_FIELDS, ITEM_LABELS, parseItemNumber } from "../lib/itemAnalysis";
+import { formatItemMoney, itemFieldText, ITEM_LABELS, parseItemNumber } from "../lib/itemAnalysis";
 import { acceptFreshItemInputs, quickAssumptionsDetail, buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../lib/itemAssessment";
 import { buildSavedItemInputs, restoreItemForm, safeItemLink } from "../lib/savedItems";
 import type { SavedItemForm } from "../lib/savedItems";
-import type { ItemAIBudget, ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResponse, ItemAssessmentResult, ItemFinancialInput, ItemPreference, ItemPreferences, SavedItem } from "../lib/types";
+import type { ItemAIBudget, ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResponse, ItemAssessmentResult, ItemFinancialInput, ItemPreferences, SavedItem } from "../lib/types";
 import { clearAssessmentRecovery, readAssessmentRecovery, rememberAssessment } from "../lib/itemAssessmentRecovery";
 import { createItemTiming, ITEM_TIMING_LABELS } from "../lib/itemTiming";
 import type { ItemTimings } from "../lib/itemTiming";
@@ -229,20 +229,13 @@ function QuickEditor({ findId }: { findId: string | null }) {
 
   function edit(update: (old: SavedItemForm) => SavedItemForm) {
     sequence.current++; setResult(null); setErrors({}); setError("");
-    setForm(previous => {
-      const next = update(previous);
-      for (const key of ITEM_FIELDS) {
-        const pref = key as ItemPreference;
-        if (next.values[key] !== previous.values[key] || next.personalDefaults[pref] !== previous.personalDefaults[pref] || next.useDefault[pref] !== previous.useDefault[pref]) touched.current.add(key);
-      }
-      return next;
-    }); setEditVersion(value => value + 1);
+    setForm(update); setEditVersion(value => value + 1);
   }
   function field(field: ItemFinancialInput, label: string, bothResale = false) {
     return <label className="quick-field" key={field} htmlFor={`quick-${field}`}>{label}
       <input id={`quick-${field}`} value={itemFieldText(form, field)} type="text" inputMode="decimal" autoComplete="off"
         aria-invalid={Boolean(errors[field])} aria-describedby={errors[field] ? `quick-${field}-error` : undefined}
-        onChange={event => { touched.current.add(field); edit(old => ({ ...old, values: { ...old.values, [field]: event.target.value, ...(bothResale ? { resale_high: event.target.value } : {}) },
+        onChange={event => { touched.current.add(field); if (bothResale) touched.current.add("resale_high"); edit(old => ({ ...old, values: { ...old.values, [field]: event.target.value, ...(bothResale ? { resale_high: event.target.value } : {}) },
           useDefault: { ...old.useDefault, ...(field in old.useDefault ? { [field]: false } : {}) } })); }} />
       {(field === "pickup" || field === "fee_fixed") && capturedPreferences && !touched.current.has(field) && <small>My default · editable for this find</small>}
       {errors[field] && <span id={`quick-${field}-error`} className="quick-error">{errors[field]}</span>}
@@ -388,7 +381,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
             {snapshot && <p className="quick-muted">Saved version #{snapshot.id}. Photos aren't kept. Saving changes creates a new version.</p>}
             {evidence && <><p className="quick-muted">Photo-based draft. Check the material and condition in person.</p>{photos.length > 0 && <img className="quick-find-photo" src={`data:${photos[0].media_type};base64,${photos[0].data}`} alt="Your find" />}</>}
             {!evidence && <label className="quick-field" htmlFor="quick-item-name">What is it?<input id="quick-item-name" value={form.item_name} maxLength={200} placeholder="e.g. Wood chair" onChange={event => edit(old => ({ ...old, item_name: event.target.value }))} /></label>}
-            {evidence?.resale && !ownResale && <div className="quick-resale"><p>Similar items are listed for</p><strong>{formatItemMoney(evidence.resale.low)} - {formatItemMoney(evidence.resale.high)}</strong><p className="quick-small">Based on online asking prices, not confirmed sales. Pickup offered; distance isn't verified.</p><button type="button" className="quick-text-button" onClick={() => { setOwnResale(true); edit(old => ({ ...old, values: { ...old.values, resale_low: "", resale_high: "" } })); }}>Use my own sale estimate</button></div>}
+            {evidence?.resale && !ownResale && <div className="quick-resale"><p>Similar items are listed for</p><strong>{formatItemMoney(evidence.resale.low)} - {formatItemMoney(evidence.resale.high)}</strong><p className="quick-small">Based on online asking prices, not confirmed sales. Pickup offered; distance isn't verified.</p><button type="button" className="quick-text-button" onClick={() => { touched.current.add("resale_low"); touched.current.add("resale_high"); setOwnResale(true); edit(old => ({ ...old, values: { ...old.values, resale_low: "", resale_high: "" } })); }}>Use my own sale estimate</button></div>}
             {ownResale && field("resale_low", "What do you think it'll sell for?", true)}
             {ownResale && <p className="quick-small">Labeled as your estimate. You can change it later.</p>}
             {field("purchase_price", "What are they asking, including fees or tax?")}
@@ -399,7 +392,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
                 <p className="quick-small">Assumes supplies you already own; if buying new, replace the allowance with what you'll spend, including tax.</p>
               </>}
               {evidence && !repairEdit ? <>
-                <button type="button" className="quick-text-button" onClick={() => { setRepairEdit(true); edit(old => ({ ...old, values: { ...old.values, repairs: suggestedRepairTotal(evidence) } })); }}>Change repair budget</button>
+                <button type="button" className="quick-text-button" onClick={() => { touched.current.add("repairs"); setRepairEdit(true); edit(old => ({ ...old, values: { ...old.values, repairs: suggestedRepairTotal(evidence) } })); }}>Change repair budget</button>
               </> : <>{evidence?.repair_unknowns.map(note => <p className="quick-notice" key={note}>{note}</p>)}{field("repairs", "What will repairs cost?")}<p className="quick-small">Include materials and hired help. Enter 0 only if no work is needed.</p></>}
             </div>
             <details ref={costsRef} className="quick-details"><summary>Change costs & profit goal</summary>
