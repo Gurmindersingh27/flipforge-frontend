@@ -84,7 +84,7 @@ async function until(expression) {
 const byText = (tag, text) => `Array.from(document.querySelectorAll(${JSON.stringify(tag)})).find(e=>e.textContent.trim()===${JSON.stringify(text)})`;
 async function click(tag, text) {
   const expr = byText(tag, text);
-  await until(`Boolean(${expr})`);
+  await until(`Boolean(${expr})${text === "Save item" ? ` && !(${expr}).disabled` : ""}`);
   await evaluate(`(${expr}).click()`);
 }
 async function fill(expression, value) {
@@ -1528,7 +1528,8 @@ try {
     window.savedItemRequests=[];window.savedItemMode='pass';
     window.fetch=async(input,init={})=>{
       const url=new URL(typeof input==='string'?input:input.url,location.href);
-      if(!url.pathname.startsWith('/api/items') || url.pathname==='/api/items/analyze')return nativeFetch(input,init);
+      // Preferences have their own transport/counter coverage in itemPhotoFlow.
+      if(!url.pathname.startsWith('/api/items') || ['/api/items/analyze','/api/items/preferences'].includes(url.pathname))return nativeFetch(input,init);
       const request={path:url.pathname,method:init.method??'GET',auth:new Headers(init.headers).get('Authorization'),body:init.body?JSON.parse(init.body):null};window.savedItemRequests.push(request);
       const mode=window.savedItemMode;
       if(mode==='headers')return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError'))));
@@ -1550,7 +1551,7 @@ try {
   async function signedItems(values = {}) {
     await evaluate('window.beforeSavedItemsNavigation = true');
     await cdp('Page.navigate', {url:'http://127.0.0.1:5173/items?manual=1'});
-    await until(`!window.beforeSavedItemsNavigation && Boolean(${itemInput('purchase_price')})`);
+    await until(`!window.beforeSavedItemsNavigation && Boolean(${itemInput('purchase_price')}) && !document.querySelector('[data-preferences-panel] fieldset')?.disabled`);
     await evaluate(`document.querySelectorAll('form input[type="checkbox"]:checked').forEach(e=>e.click())`);
     await until(`!(${itemInput('hourly_value')}).disabled && !(${itemInput('contingency_pct')}).disabled`);
     for (const [field,value] of Object.entries(values)) await fill(itemInput(field), value);

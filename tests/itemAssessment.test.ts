@@ -146,3 +146,11 @@ test("compact assumptions reflect changed goals and never describe edited costs 
   form.useDefault.target_profit = true; form.personalDefaults.target_profit = "55";
   assert.equal(quickAssumptionsSummary(form), "Uses your entered costs, $55 profit goal");
 });
+
+test("remembered personal values cannot be hidden by unchanged preset text", () => {
+  const form = newQuickItemForm();
+  form.useDefault.fee_pct = true; form.personalDefaults.fee_pct = "14.3";
+  assert.equal(quickAssumptionsSummary(form), "Uses your entered costs, $30 profit goal");
+  form.personalDefaults.fee_pct = "";
+  assert.equal(quickAssumptionsSummary(form), "Uses your entered costs, $30 profit goal");
+});

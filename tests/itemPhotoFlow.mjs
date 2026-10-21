@@ -81,6 +81,13 @@ def ai_mode(mode: str):
         row.spent_micros = 20000000 if mode == 'cap' else 0
         db.commit()
     return fixture_ai
+@app.delete('/browser-fixture/preferences')
+def reset_preferences():
+    from app.db.models.item_preference import ItemPreference
+    with SessionLocal() as db:
+        db.query(ItemPreference).delete()
+        db.commit()
+    return {'cleared': True}
 @app.get('/browser-fixture/ai')
 def ai_state():
     return fixture_ai
@@ -935,6 +942,8 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
 
   await runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
 
+  await runPreferenceChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api, upload, runAI, calculate, mode });
+
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished")`);
@@ -1216,4 +1225,222 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
   assert.deepEqual(await api('/api/deals'), housesBefore);
   await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: fixture.identifier });
   checks.push('Outcome tracking makes zero assessment/analyze/estimate-save calls and leaves Houses unchanged; all evidence uses simulated finds');
+}
+
+// Real local preference storage, calculator and saved snapshots; synthetic auth,
+// provider and transport delays only. No production writes or real photos.
+async function runPreferenceChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api, upload, runAI, calculate, mode }) {
+  const fields = ['hourly_value','target_profit','contingency_pct','fee_pct','pickup','fee_fixed'];
+  const input = id => `document.getElementById(${JSON.stringify(id)})`;
+  const button = text => `Array.from(document.querySelectorAll('button')).find(e=>e.textContent.trim()===${JSON.stringify(text)})`;
+  const ready = `Boolean(document.querySelector('[data-preferences-panel] fieldset')) && !document.querySelector('[data-preferences-panel] fieldset').disabled`;
+  const get = async (owner='browser-fixture') => (await fetch('http://127.0.0.1:8000/api/items/preferences',{headers:{Authorization:`Bearer ${owner}`}})).json();
+  const put = async (payload, owner='browser-fixture') => {
+    const response = await fetch('http://127.0.0.1:8000/api/items/preferences',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${owner}`},body:JSON.stringify(payload)});
+    assert.equal(response.status,200); return response.json();
+  };
+  const reset = async () => fetch('http://127.0.0.1:8000/browser-fixture/preferences',{method:'DELETE'});
+  await reset(); await mode('normal');
+  const beforeItems = (await api('/api/items')).items;
+  const houses = await api('/api/deals');
+  const beforeAI = await api('/browser-fixture/ai');
+  const fixture = await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`
+    window.prefRequests=[];window.prefMode=new URLSearchParams(location.search).get('prefMode')||'pass';
+    const original=window.fetch;
+    window.fetch=async(input,init={})=>{
+      const path=new URL(typeof input==='string'?input:input.url).pathname;
+      if(!path.startsWith('/api/items'))return original(input,init);
+      const request={path,method:init.method||'GET',body:init.body?JSON.parse(init.body):null,auth:new Headers(init.headers).get('Authorization')};
+      window.prefRequests.push(request);
+      if(path!=='/api/items/preferences')return original(input,init);
+      const mode=window.prefMode;
+      if(mode==='fail'&&request.method==='GET')throw new TypeError('Simulated preference failure');
+      const response=await original(input,init);
+      if((mode==='hold'&&request.method==='GET')||(mode==='hold-put'&&request.method==='PUT')){
+        const body=await response.text(); await new Promise(resolve=>window.releasePreference=resolve);
+        return new Response(body,{status:response.status,headers:{'Content-Type':'application/json'}});
+      }
+      if(mode==='lost'&&request.method==='PUT')throw new TypeError('Simulated lost confirmation');
+      return response;
+    };`});
+  async function open(query='') {
+    await evaluate(`Object.keys(sessionStorage).filter(k=>k.startsWith('flipforge:item-assessment:')).forEach(k=>sessionStorage.removeItem(k));window.beforePreferences=true`);
+    await cdp('Page.navigate',{url:`http://127.0.0.1:5173/items${query}`});
+    await until(`!window.beforePreferences && Boolean(document.querySelector('[data-preferences-panel]'))`);
+    if(!query.includes('prefMode='))await until(ready);
+  }
+  async function expand() { await evaluate(`document.querySelector('[data-preferences-panel]').open=true`); }
+  async function savePreferences() {
+    await click('button','Save preferences');
+    await until(`document.querySelector('[aria-label="Buying preferences"]')?.textContent.includes('Preferences saved for your next find')`);
+  }
+  const profile = {hourly_value:25,target_profit:0,contingency_pct:.143,fee_pct:null,pickup:12.5,fee_fixed:0};
+  for (const width of [390,1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    await open();
+    assert.equal(await evaluate(`document.querySelector('[data-preferences-panel]').open`),false);
+    assert.equal(await evaluate(`window.prefRequests.filter(r=>r.path==='/api/items/preferences').length`),1,'One initial preference GET');
+    await expand();
+    for (const key of fields) await fill(input(`preference-${key}`),key==='contingency_pct'?'14.3':profile[key]===null?'':String(profile[key]));
+    await savePreferences();
+    assert.ok(await measure('document.documentElement.scrollWidth<=innerWidth'));
+    await screenshot(`photo-preferences-editor-${width}.png`);
+    const requests = await evaluate('window.prefRequests');
+    assert.ok(requests.every(r=>r.method==='GET'||(r.path==='/api/items/preferences'&&r.method==='PUT')),'Preferences alone must not assess/analyze/save estimates or outcomes');
+    assert.deepEqual(requests.find(r=>r.method==='PUT').body,profile);
+    await click('button',"I'll enter my own estimate");
+    assert.equal(await evaluate(input('quick-target_profit')+'.value'),width===390?'30':'0','Saving preferences leaves the already open draft unchanged');
+  }
+  assert.deepEqual((await api('/api/items')).items,beforeItems);
+  assert.equal((await api('/browser-fixture/ai')).calls,beforeAI.calls);
+  checks.push('Collapsed 390/1440 preference editor uses one GET and explicit PUT only, round-trips six fields and leaves the current find, saved estimates and provider unchanged');
+
+  // A new browsing session obtains server defaults; no local preference cache.
+  await open('?manual=1'); await expand();
+  assert.equal(await evaluate(input('personal-hourly_value')+'.value'),'25');
+  assert.equal(await evaluate(input('item-hourly_value')+'.disabled'),true);
+  assert.equal(await evaluate(input('item-fee_pct')+'.value'),'');
+  assert.equal(await evaluate(input('item-pickup')+'.value'),'12.5');
+  assert.ok(await evaluate(`document.getElementById('pickup-hint').textContent.includes('My default')`));
+  for(const width of [390,1440]){
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    assert.ok(await measure('document.documentElement.scrollWidth<=innerWidth'));
+    await screenshot(`photo-preferences-manual-${width}.png`);
+  }
+  assert.equal(await get('other-user'),null);
+  checks.push('New photo/manual sessions load backend preferences; four calculator defaults and two per-find prefills stay separate, and another owner has no profile');
+
+  await open('?prefMode=hold'); await until(`typeof window.releasePreference==='function'`);
+  await upload();
+  await click('button',"I'll enter my own estimate");
+  await evaluate(`document.querySelector('.quick-details').open=true`);
+  // The preset already shows zero: make a real edit before returning to zero.
+  await fill(input('quick-pickup'),'9'); await fill(input('quick-pickup'),'0'); await fill(input('quick-hourly_value'),'');
+  await evaluate(`window.releasePreference()`); await until(ready);
+  assert.equal(await evaluate(input('quick-pickup')+'.value'),'0');
+  assert.equal(await evaluate(input('quick-hourly_value')+'.value'),'');
+  assert.equal(await evaluate(input('quick-contingency_pct')+'.value'),'14.3');
+  assert.equal(await evaluate(`document.querySelectorAll('.quick-photo img').length`),1);
+  checks.push('A delayed profile loads alongside photo selection and preserves touched zero/blank fields while initializing untouched fields');
+  await open('?manual=1&prefMode=hold'); await until(`typeof window.releasePreference==='function'`);
+  await fill(input('item-pickup'),'0');
+  await evaluate(`document.querySelector('[aria-label="Use default for Value of your time per hour"]').click()`);
+  await evaluate(`window.releasePreference()`); await until(ready);
+  assert.equal(await evaluate(input('item-pickup')+'.value'),'0');
+  assert.equal(await evaluate(input('item-hourly_value')+'.disabled'),false);
+  assert.equal(await evaluate(input('item-hourly_value')+'.value'),'');
+  assert.equal(await evaluate(input('personal-contingency_pct')+'.value'),'14.3');
+  checks.push('Delayed manual initialization respects explicit zero and disabling an application default to keep hourly value unknown');
+
+
+  for(const manual of [false,true]){
+    await open(manual?'?manual=1&prefMode=fail':'?prefMode=fail');
+    await until(`Boolean(${button('Retry loading preferences')})`);
+    await evaluate(`window.prefMode='pass'`); await click('button','Retry loading preferences'); await until(ready);
+    assert.equal(await evaluate(`window.prefRequests.filter(r=>r.path==='/api/items/preferences').length`),2);
+    await open(manual?'?manual=1&prefMode=fail':'?prefMode=fail');
+    await until(`Boolean(${button('Continue without remembered preferences')})`);
+    const beforeContinue = await get();
+    await click('button','Continue without remembered preferences');
+    await until(`document.querySelector('[aria-label="Buying preferences"]')?.textContent.includes('Retry loading to change your preferences.')`);
+    await expand();
+    assert.equal(await evaluate(`document.querySelector('[data-preferences-panel] fieldset').disabled`),true);
+    assert.equal(await evaluate(`${button('Save preferences')}.matches(':disabled')`),true);
+    await evaluate(`${button('Save preferences')}.click()`);
+    assert.equal(await evaluate(`window.prefRequests.filter(r=>r.method==='PUT').length`),0);
+    assert.deepEqual(await get(),beforeContinue,'Continue must not let an unloaded editor wipe the stored profile');
+    assert.ok(await evaluate(`Boolean(${button('Retry loading preferences')})`));
+    for(const width of [390,1440]){
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+      assert.ok(await measure('document.documentElement.scrollWidth<=innerWidth'));
+      await screenshot(`photo-preferences-continued-${manual?'manual':'photo'}-${width}.png`);
+    }
+    if(!manual)await click('button',"I'll enter my own estimate");
+    assert.equal(await evaluate(input(manual?'personal-hourly_value':'quick-target_profit')+'.value'),manual?'':'30');
+    await evaluate(`window.prefMode='pass'`); await click('button','Retry loading preferences'); await until(ready);
+    for(const key of fields)assert.equal(await evaluate(input(`preference-${key}`)+'.value'),key==='contingency_pct'?'14.3':profile[key]===null?'':String(profile[key]));
+    assert.equal(await evaluate(input(manual?'personal-hourly_value':'quick-target_profit')+'.value'),manual?'':'30','Retry after Continue loads the editor without changing the continued find');
+    assert.deepEqual(await get(),beforeContinue);
+  }
+  checks.push('Preference load failure offers explicit GET retry or continuation without remembered values in both editors');
+  checks.push('After Continue, both preference editors block Save without a PUT or profile change; explicit retry loads the complete profile and leaves the continued find unchanged');
+
+  await open(); await expand(); await fill(input('preference-pickup'),'41');
+  await evaluate(`window.prefMode='lost'`); await click('button','Save preferences');
+  await until(`Boolean(${button('Retry saving preferences')})`);
+  assert.equal((await get()).pickup,41);
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Buying preferences"]').textContent.includes('may already have applied')`));
+  await put({...profile,pickup:77});
+  await evaluate(`window.prefMode='pass';(()=>{const b=${button('Retry saving preferences')};b.click();b.click()})()`);
+  await until(`document.querySelector('[aria-label="Buying preferences"]').textContent.includes('Preferences saved for your next find')`);
+  assert.equal((await get()).pickup,41,'Retry intentionally wins over the other device');
+  assert.equal(await evaluate(`window.prefRequests.filter(r=>r.method==='PUT').length`),2);
+  checks.push('Lost PUT confirmation is disclosed; explicit retry replaces a newer device write with last-write-wins semantics and duplicate clicks send one PUT');
+
+  for(const next of ['other-user',null]){
+    await open('?prefMode=hold'); await until(`typeof window.releasePreference==='function'`);
+    await evaluate(`window.prefMode='pass';window.switchFixtureUser(${JSON.stringify(next)});window.releasePreference()`);
+    if(next)await until(ready); else await until(`Boolean(${button('Sign in for preferences')})`);
+    await click('button',"I'll enter my own estimate");
+    assert.equal(await evaluate(input('quick-pickup')+'.value'),'0');
+    assert.equal(await evaluate(`Boolean(${input('preference-pickup')}) && ${input('preference-pickup')}.value`),next?'':false);
+    await open(); await expand(); await fill(input('preference-pickup'),'52');
+    await evaluate(`window.prefMode='hold-put'`); await click('button','Save preferences'); await until(`typeof window.releasePreference==='function'`);
+    await evaluate(`window.prefMode='pass';window.switchFixtureUser(${JSON.stringify(next)});window.releasePreference()`);
+    await pause(150);
+    assert.equal(await evaluate(`document.body.textContent.includes('Preferences saved for your next find')`),false);
+    await open(); await expand(); await evaluate(`window.authFixture={calls:0,delayMs:350}`);
+    await click('button','Save preferences'); await evaluate(`window.switchFixtureUser(${JSON.stringify(next)})`); await pause(450);
+    assert.equal(await evaluate(`window.prefRequests.filter(r=>r.method==='PUT').length`),0,'No old-owner PUT after token delay');
+  }
+  checks.push('Late preference GET/PUT responses and delayed-token saves cannot cross account changes or sign-out');
+
+  await put(profile); await open(); await upload();
+  await click('button',"I'll enter my own estimate");
+  await fill(input('quick-fee_fixed'),'7'); // override an explicit remembered zero
+  await runAI();
+  assert.equal(await evaluate(input('quick-hourly_value')+'.value'),'25');
+  assert.equal(await evaluate(input('quick-fee_pct')+'.value'),'');
+  assert.equal(await evaluate(input('quick-fee_fixed')+'.value'),'7');
+  assert.equal(await evaluate(input('quick-target_profit')+'.value'),'0');
+  const acknowledgment = await evaluate(`document.querySelector('[data-assumption-acknowledgment]').textContent`);
+  for(const text of ['Time value: $25','Selling fee: unknown','Fixed selling fee: $7','Profit goal: $0'])assert.ok(acknowledgment.includes(text),acknowledgment);
+  await calculate('needs_info');
+  await click('button','Save item');
+  await until(`document.querySelector('[aria-label="Save item"] [role="status"]')?.textContent.startsWith('Saved version #')`);
+  const saved = (await api('/api/items')).items[0];
+  const effective = saved.assessment.effective_inputs;
+  assert.deepEqual(effective,saved.inputs);
+  assert.equal(effective.fee_pct,null); assert.equal(effective.fee_fixed,7); assert.equal(effective.pickup,12.5);
+  assert.equal(effective.personal_defaults.hourly_value,25); assert.equal(effective.personal_defaults.target_profit,0); assert.equal(effective.personal_defaults.contingency_pct,.143);
+  assert.equal(Object.hasOwn(effective.personal_defaults,'pickup'),false); assert.equal(Object.hasOwn(effective.personal_defaults,'fee_fixed'),false);
+  assert.equal(saved.assessment.evidence.inputs.fee_fixed,0); assert.equal(saved.assessment.evidence.inputs.hourly_value,20);
+  await put({...profile,hourly_value:99,pickup:88,fee_pct:.5});
+  await evaluate(`window.beforeSavedPreferences=true`);
+  await cdp('Page.navigate',{url:`http://127.0.0.1:5173/items?find=${saved.id}`});
+  await until(`!window.beforeSavedPreferences && ${input('quick-hourly_value')}?.value==='25'`);
+  assert.equal(await evaluate(`window.prefRequests.filter(r=>r.path==='/api/items/preferences').length`),0);
+  assert.equal(await evaluate(input('quick-pickup')+'.value'),'12.5');
+  assert.deepEqual(await api(`/api/items/${saved.id}`),saved);
+  await cdp('Page.navigate',{url:`http://127.0.0.1:5173/items?saved=${saved.id}`});
+  await until(`Boolean(${input('personal-hourly_value')})`);
+  assert.equal(await evaluate(input('personal-hourly_value')+'.value'),'25');
+  assert.equal(await evaluate(`window.prefRequests.filter(r=>r.path==='/api/items/preferences').length`),0);
+  checks.push('Simulated photo save effective_inputs matches displayed null/zero/preferences/override values; provider evidence stays original and reopening either editor ignores current preferences');
+
+  await open(); await upload(); await runAI();
+  const marker = await evaluate(`sessionStorage.getItem('flipforge:item-assessment:browser-fixture')`);
+  assert.ok(marker);
+  await put({...profile,hourly_value:75,pickup:123});
+  await evaluate(`window.beforeRecoveredPreferences=true`);
+  await cdp('Page.navigate',{url:'http://127.0.0.1:5173/items'});
+  await until(`!window.beforeRecoveredPreferences && document.body.textContent.includes('Recovered your photo estimate')`);
+  assert.equal(await evaluate(input('quick-hourly_value')+'.value'),'20');
+  assert.equal(await evaluate(input('quick-pickup')+'.value'),'0');
+  assert.equal(await evaluate(input('quick-fee_pct')+'.value'),'0');
+  checks.push('Recovered assessments use their original inputs, never current account preferences');
+  assert.deepEqual(await api('/api/deals'),houses);
+  for(const saved of beforeItems)assert.deepEqual(await api(`/api/items/${saved.id}`),saved);
+  await reset();
+  await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:fixture.identifier});
 }

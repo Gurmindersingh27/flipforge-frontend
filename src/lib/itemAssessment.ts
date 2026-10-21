@@ -1,6 +1,6 @@
-import { formatItemMoney, parseItemNumber } from "./itemAnalysis.ts";
+import { formatItemMoney, formatItemPercent, itemFieldText, ITEM_PREFERENCES, parseItemNumber } from "./itemAnalysis.ts";
 import { restoreItemForm } from "./savedItems.ts";
-import type { ItemAnalyzeResponse, ItemAssessmentPhoto, ItemAssessmentRequest, ItemAssessmentResult } from "./types.ts";
+import type { ItemAnalyzeResponse, ItemFinancialInput, ItemAssessmentPhoto, ItemAssessmentRequest, ItemAssessmentResult } from "./types.ts";
 import type { SavedItemForm } from "./savedItems.ts";
 
 export function newQuickItemForm() {
@@ -27,13 +27,34 @@ export function formatItemHeadlineMoney(value: number | null): string {
 }
 export function quickAssumptionsSummary(form: SavedItemForm): string {
   let goal: number | null;
-  try { goal = parseItemNumber(form.useDefault.target_profit ? form.personalDefaults.target_profit : form.values.target_profit, "target_profit"); }
+  try { goal = parseItemNumber(itemFieldText(form, "target_profit"), "target_profit"); }
   catch { return "Check your costs and profit goal"; }
   const goalText = goal === null ? "profit goal unknown" : `${formatItemHeadlineMoney(goal)} profit goal`;
   const preset = newQuickItemForm();
   const unchanged = (["pickup", "delivery", "storage", "fee_fixed", "fee_pct", "hours", "hourly_value", "contingency_pct"] as const)
-    .every(key => form.values[key] === preset.values[key]);
+    .every(key => itemFieldText(form, key) === preset.values[key]);
   return `${unchanged ? "Assumes local pickup, no fees" : "Uses your entered costs"}, ${goalText}`;
+}
+// Keep original provider evidence immutable; only the editable calculation form
+// receives the find's captured defaults and explicit financial overrides.
+export function acceptFreshItemInputs(inputs: ItemAssessmentResult["inputs"], captured: SavedItemForm, touched: ReadonlySet<ItemFinancialInput>): SavedItemForm {
+  const next = restoreItemForm(inputs);
+  for (const key of new Set<ItemFinancialInput>([...ITEM_PREFERENCES, "pickup", "fee_fixed", ...touched])) next.values[key] = captured.values[key];
+  next.personalDefaults = { ...captured.personalDefaults };
+  next.useDefault = { ...captured.useDefault };
+  return next;
+}
+export function quickAssumptionsDetail(form: SavedItemForm): string {
+  const fields = ["pickup", "delivery", "storage", "fee_pct", "fee_fixed", "hours", "hourly_value", "contingency_pct", "target_profit"] as const;
+  const labels = ["Pickup", "Delivery", "Storage", "Selling fee", "Fixed selling fee", "Your time", "Time value", "Repair buffer", "Profit goal"];
+  return fields.map((field, index) => {
+    let text: string;
+    try {
+      const value = parseItemNumber(itemFieldText(form, field), field);
+      text = value === null ? "unknown" : field.endsWith("_pct") ? formatItemPercent(value) : field === "hours" ? `${value} hours` : formatItemHeadlineMoney(value);
+    } catch { text = "check value"; }
+    return `${labels[index]}: ${text}`;
+  }).join(" · ");
 }
 export function itemDecision(result: ItemAnalyzeResponse): string {
   const offer = result.low ? formatItemMoney(result.low.max_offer, true) : "";

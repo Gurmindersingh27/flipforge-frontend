@@ -10,6 +10,8 @@ import type {
   SaveDealRequest,
   SavedDeal,
   ItemAnalyzeRequest,
+  ItemPreferences,
+  SaveItemPreferences,
   ItemAnalyzeResponse,
   SaveItemRequest,
   SavedItem,
@@ -20,6 +22,7 @@ import type {
   ItemOutcomeResponse,
   SaveItemOutcomeRequest,
 } from "./types";
+import { isItemPreferences } from "./itemPreferences";
 import { ITEM_LABELS } from "./itemAnalysis";
 import { isItemOutcome } from "./itemOutcomes";
 
@@ -500,4 +503,24 @@ export async function enrichAddress(
   }
 
   return res.json();
+}
+
+// Complete replacement, last write wins. No automatic retries or conflict protocol.
+async function itemPreferencesRequest(token: string, payload?: SaveItemPreferences): Promise<ItemPreferences | null> {
+  return withStartupDeadline(async signal => {
+    const response = await fetch(`${API_BASE_URL}/api/items/preferences`, {
+      method: payload === undefined ? "GET" : "PUT", signal,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+    });
+    if (!response.ok) throw await itemRejection(response);
+    const data: unknown = await response.json();
+    if (payload === undefined && data === null) return null;
+    if (!isItemPreferences(data)) throw new Error("Preferences response wasn't confirmed.");
+    return data;
+  }, "Preferences request took too long.");
+}
+export function getItemPreferences(token: string) { return itemPreferencesRequest(token); }
+export async function putItemPreferences(payload: SaveItemPreferences, token: string): Promise<ItemPreferences> {
+  return (await itemPreferencesRequest(token, payload))!;
 }

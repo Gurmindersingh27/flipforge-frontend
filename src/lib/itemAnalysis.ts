@@ -111,3 +111,10 @@ export function formatItemPercent(value: number): string {
   const remainder = fraction.slice(2).replace(/0+$/, "");
   return `${percent}${remainder ? `.${remainder}` : ""}%`;
 }
+
+// Read the same effective value used by the request builder, for display only.
+export function itemFieldText(form: ItemForm, field: ItemFinancialInput): string {
+  if (!ITEM_PREFERENCES.includes(field as ItemPreference) || !form.useDefault[field as ItemPreference]) return form.values[field];
+  const personal = form.personalDefaults[field as ItemPreference];
+  return personal || (field === "hourly_value" ? "20" : field === "contingency_pct" ? "15" : "");
+}

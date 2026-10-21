@@ -6,6 +6,9 @@ export type ItemPreference = "hourly_value" | "target_profit" | "contingency_pct
 export type ItemFinancialInput = ItemPreference | "purchase_price" | "resale_low" | "resale_high"
   | "repairs" | "pickup" | "delivery" | "storage" | "fee_fixed" | "hours";
 export type ItemPersonalDefaults = Partial<Record<ItemPreference, number | null>>;
+// Account storage is separate from the calculator's four-field defaults.
+export type SaveItemPreferences = Record<ItemPreference | "pickup" | "fee_fixed", number | null>;
+export type ItemPreferences = SaveItemPreferences & { updated_at: string };
 export type ItemAnalyzeRequest = Partial<Record<ItemFinancialInput, number | null>> & {
   item_name?: string | null;
   category?: string | null;
