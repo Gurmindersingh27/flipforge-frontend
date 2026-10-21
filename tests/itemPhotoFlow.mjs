@@ -1314,7 +1314,8 @@ async function runPreferenceChecks({ cdp, evaluate, until, fill, click, measure,
   await upload();
   await click('button',"I'll enter my own estimate");
   await evaluate(`document.querySelector('.quick-details').open=true`);
-  await fill(input('quick-pickup'),'0'); await fill(input('quick-hourly_value'),'');
+  // The preset already shows zero: make a real edit before returning to zero.
+  await fill(input('quick-pickup'),'9'); await fill(input('quick-pickup'),'0'); await fill(input('quick-hourly_value'),'');
   await evaluate(`window.releasePreference()`); await until(ready);
   assert.equal(await evaluate(input('quick-pickup')+'.value'),'0');
   assert.equal(await evaluate(input('quick-hourly_value')+'.value'),'');
