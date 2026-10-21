@@ -84,7 +84,7 @@ async function until(expression) {
 const byText = (tag, text) => `Array.from(document.querySelectorAll(${JSON.stringify(tag)})).find(e=>e.textContent.trim()===${JSON.stringify(text)})`;
 async function click(tag, text) {
   const expr = byText(tag, text);
-  await until(`Boolean(${expr}) && !(${expr}).disabled`);
+  await until(`Boolean(${expr})${text === "Save item" ? ` && !(${expr}).disabled` : ""}`);
   await evaluate(`(${expr}).click()`);
 }
 async function fill(expression, value) {
