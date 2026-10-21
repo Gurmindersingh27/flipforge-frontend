@@ -18,7 +18,7 @@ export default function ItemPreferencesPanel(props: Props) {
 function PreferencesEditor({ onResolved, light, disabled }: Props) {
   const { getToken } = useAuth();
   const [form, setForm] = useState(() => preferenceForm(null));
-  const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'failed' | 'continued'>('loading');
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -45,7 +45,7 @@ function PreferencesEditor({ onResolved, light, disabled }: Props) {
     return () => { active = false; alive.current = false; generation.current = current + 1; };
   }, [getToken, onResolved, attempt]);
   async function save() {
-    if (savingRef.current || disabled) return;
+    if (status !== 'ready' || savingRef.current || disabled) return;
     let payload;
     try { payload = buildPreferences(form); }
     catch (error) { setMessage((error as Error).message); return; }
@@ -67,9 +67,9 @@ function PreferencesEditor({ onResolved, light, disabled }: Props) {
   }
   return <section aria-label="Buying preferences" className={light ? 'quick-card' : 'min-w-0 rounded-xl border border-white/15 bg-white/5 p-4 sm:p-6'}>
     {status === 'loading' && <p role="status">Loading buying preferences… You can choose photos while you wait.</p>}
-    {status === 'failed' && <div role="alert"><p>Couldn't load your buying preferences.</p>
+    {(status === 'failed' || status === 'continued') && <div role="alert"><p>{status === 'continued' ? 'Retry loading to change your preferences.' : "Couldn't load your buying preferences."}</p>
       <button type="button" className={light ? 'quick-secondary' : 'min-h-11 px-3 underline'} onClick={() => { request.current = null; setStatus('loading'); setAttempt(n => n + 1); }}>Retry loading preferences</button>
-      <button type="button" className={light ? 'quick-text-button' : 'min-h-11 px-3 underline'} onClick={() => { resolved.current = true; onResolved(null); setStatus('ready'); }}>Continue without remembered preferences</button>
+      {status === 'failed' && <button type="button" className={light ? 'quick-text-button' : 'min-h-11 px-3 underline'} onClick={() => { resolved.current = true; onResolved(null); setStatus('continued'); }}>Continue without remembered preferences</button>}
     </div>}
     <details data-preferences-panel>
       <summary className="min-h-11 cursor-pointer py-2 font-semibold">My buying preferences</summary>

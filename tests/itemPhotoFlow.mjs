@@ -1340,11 +1340,30 @@ async function runPreferenceChecks({ cdp, evaluate, until, fill, click, measure,
     assert.equal(await evaluate(`window.prefRequests.filter(r=>r.path==='/api/items/preferences').length`),2);
     await open(manual?'?manual=1&prefMode=fail':'?prefMode=fail');
     await until(`Boolean(${button('Continue without remembered preferences')})`);
-    await click('button','Continue without remembered preferences'); await until(ready);
+    const beforeContinue = await get();
+    await click('button','Continue without remembered preferences');
+    await until(`document.querySelector('[aria-label="Buying preferences"]')?.textContent.includes('Retry loading to change your preferences.')`);
+    await expand();
+    assert.equal(await evaluate(`document.querySelector('[data-preferences-panel] fieldset').disabled`),true);
+    assert.equal(await evaluate(`${button('Save preferences')}.matches(':disabled')`),true);
+    await evaluate(`${button('Save preferences')}.click()`);
+    assert.equal(await evaluate(`window.prefRequests.filter(r=>r.method==='PUT').length`),0);
+    assert.deepEqual(await get(),beforeContinue,'Continue must not let an unloaded editor wipe the stored profile');
+    assert.ok(await evaluate(`Boolean(${button('Retry loading preferences')})`));
+    for(const width of [390,1440]){
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+      assert.ok(await measure('document.documentElement.scrollWidth<=innerWidth'));
+      await screenshot(`photo-preferences-continued-${manual?'manual':'photo'}-${width}.png`);
+    }
     if(!manual)await click('button',"I'll enter my own estimate");
     assert.equal(await evaluate(input(manual?'personal-hourly_value':'quick-target_profit')+'.value'),manual?'':'30');
+    await evaluate(`window.prefMode='pass'`); await click('button','Retry loading preferences'); await until(ready);
+    for(const key of fields)assert.equal(await evaluate(input(`preference-${key}`)+'.value'),key==='contingency_pct'?'14.3':profile[key]===null?'':String(profile[key]));
+    assert.equal(await evaluate(input(manual?'personal-hourly_value':'quick-target_profit')+'.value'),manual?'':'30','Retry after Continue loads the editor without changing the continued find');
+    assert.deepEqual(await get(),beforeContinue);
   }
   checks.push('Preference load failure offers explicit GET retry or continuation without remembered values in both editors');
+  checks.push('After Continue, both preference editors block Save without a PUT or profile change; explicit retry loads the complete profile and leaves the continued find unchanged');
 
   await open(); await expand(); await fill(input('preference-pickup'),'41');
   await evaluate(`window.prefMode='lost'`); await click('button','Save preferences');
