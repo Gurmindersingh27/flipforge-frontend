@@ -5,7 +5,7 @@ import { SignInButton, useAuth, UserButton } from "@clerk/clerk-react";
 import { analyzeItem, assessItem, getItem, getItemAIBudget, getItemAssessment, ItemAssessmentError } from "../lib/api";
 import { formatItemMoney, itemFieldText, ITEM_LABELS, parseItemNumber } from "../lib/itemAnalysis";
 import { acceptFreshItemInputs, quickAssumptionsDetail, buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../lib/itemAssessment";
-import { buildSavedItemInputs, restoreItemForm, safeItemLink } from "../lib/savedItems";
+import { buildSavedItemInputs, restoreItemForm } from "../lib/savedItems";
 import type { SavedItemForm } from "../lib/savedItems";
 import type { ItemAIBudget, ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResponse, ItemAssessmentResult, ItemFinancialInput, ItemPreferences, SavedItem } from "../lib/types";
 import { clearAssessmentRecovery, readAssessmentRecovery, rememberAssessment } from "../lib/itemAssessmentRecovery";
@@ -15,6 +15,8 @@ import ItemPreferencesPanel from "./ItemPreferencesPanel";
 import { applyItemPreferences } from "../lib/itemPreferences";
 import ItemsPage from "./ItemsPage";
 import ItemSavePanel from "./ItemSavePanel";
+import ItemInspectionPanel from "./ItemInspectionPanel";
+import ItemPriceEvidence from "./ItemPriceEvidence";
 import "./PhotoItemsPage.css";
 
 function RepairLabel({ label }: { label: string }) {
@@ -338,6 +340,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
         {!snapshot && !evidence && showPhotoForm && <section className="quick-card" aria-label="Photo estimate">
           <fieldset disabled={blocked || pendingId !== null}>
             <div className="quick-section-title"><span className="quick-step">01</span><h2>What did you find?</h2><span className="quick-muted">Up to 3 photos</span></div>
+            <p className="quick-small quick-photo-guide">Start with the whole piece, then visible damage and a maker’s mark if present. Use clear, well-lit photos.</p>
             <div className="quick-photos">
               {photos.map((photo, index) => <div className="quick-photo" key={index}><img src={`data:${photo.media_type};base64,${photo.data}`} alt={`Your item, photo ${index + 1}`} /><button className="quick-remove" type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => setPhotos(old => old.filter((_, i) => i !== index))}>×</button></div>)}
               {photos.length < 3 && <div className="quick-photo-actions">
@@ -351,7 +354,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
           </fieldset>
           {isLoaded && !isSignedIn ? <SignInButton mode="modal"><button className="quick-primary">Sign in for a photo estimate <span aria-hidden="true">↗</span></button></SignInButton>
             : <button data-quick-assess className="quick-primary" disabled={!isLoaded || blocked || pendingId !== null || !aiAvailable || preferencesBlocked} onClick={() => void estimate()}>{busy === "ai" ? "Looking at your find…" : "What do you think?"}<span aria-hidden="true">↗</span></button>}
-          <p className="quick-small">Photos go to Anthropic for this estimate. FlipForge doesn't save them.</p>
+          <p className="quick-small">Photos go to Anthropic for one paid estimate with a search for similar listings. FlipForge doesn't save the photos. It may take a minute or longer; if it hangs, check the same estimate’s status below.</p>
         </section>}
         {pendingId && <div className="quick-notice" role="status"><strong>Your photo estimate hasn't finished.</strong><p>Check the same estimate without paying for another. You can enter your own numbers below while you wait.</p><button className="quick-secondary" disabled={blocked} onClick={() => void estimate(true)}>Check estimate status</button></div>}
         {busy === "recover" && <p role="status">Recovering your previous estimate…</p>}
@@ -393,8 +396,9 @@ function QuickEditor({ findId }: { findId: string | null }) {
               </>}
               {evidence && !repairEdit ? <>
                 <button type="button" className="quick-text-button" onClick={() => { touched.current.add("repairs"); setRepairEdit(true); edit(old => ({ ...old, values: { ...old.values, repairs: suggestedRepairTotal(evidence) } })); }}>Change repair budget</button>
-              </> : <>{evidence?.repair_unknowns.map(note => <p className="quick-notice" key={note}>{note}</p>)}{field("repairs", "What will repairs cost?")}<p className="quick-small">Include materials and hired help. Enter 0 only if no work is needed.</p></>}
+              </> : <>{field("repairs", "What will repairs cost?")}<p className="quick-small">Include materials and hired help. Enter 0 only if no work is needed.</p></>}
             </div>
+            {evidence && !result && <ItemInspectionPanel unknowns={evidence.repair_unknowns} />}
             <details ref={costsRef} className="quick-details"><summary>Change costs & profit goal</summary>
               <div className="quick-fields">{field("target_profit", "Profit you'd like to make ($)")}{field("pickup", "Pickup cost ($)")}{field("delivery", "Delivery cost ($)")}{field("storage", "Storage cost ($)")}{field("hours", "Your time (hours)")}{field("hourly_value", "Value of your time ($/hour)")}{field("fee_pct", "Selling fees (%)")}{field("fee_fixed", "Fixed selling fee ($)")}{field("contingency_pct", "Repair buffer (%)")}</div>
               <p className="quick-small">Blank means unknown. Fees apply to the sale price; the buffer applies only to repairs.</p>
@@ -418,13 +422,26 @@ function QuickEditor({ findId }: { findId: string | null }) {
             {result.low.max_offer < 0 && <p>Even free misses your profit goal at the low sale estimate. This isn't a negative price to offer the seller.</p>}
             {result.status !== "offer_only" && <>{noTime ? <p className="quick-keep">You'd keep <strong data-quick-keep>{formatItemMoney(result.low.cash_left)}</strong><small>If it sells for {formatItemMoney(result.low.resale)}, after costs & repair buffer.</small></p> : <div className="quick-profits"><div><span>Cash left</span><strong data-quick-cash>{formatItemMoney(result.low.cash_left)}</strong><small>After costs & repair buffer</small></div><div><span>Profit after your time</span><strong data-quick-profit>{formatItemMoney(result.low.profit_after_time)}</strong><small>If it sells for {formatItemMoney(result.low.resale)}</small></div></div>}{result.high.resale !== result.low.resale && <p className="quick-high">If it sells well at {formatItemMoney(result.high.resale)}, {noTime ? "you'd keep " : "profit after your time would be "}{formatItemMoney(result.high.profit_after_time)}.</p>}</>}
             {result.status === "offer_only" && <p>Add an asking price to see how much you'd keep. If it sells well, the offer ceiling is {formatItemMoney(result.high.max_offer, true)}.</p>}
+            <details className="quick-result-details"><summary>Sale assumptions & cost details</summary>
+              <dl>
+                <div><dt>Low sale estimate</dt><dd>{formatItemMoney(result.low.resale)}</dd></div>
+                <div><dt>High sale estimate</dt><dd>{formatItemMoney(result.high.resale)}</dd></div>
+                <div><dt>Repairs</dt><dd>{formatItemMoney(result.assumptions.repairs.value)}</dd></div>
+                <div><dt>Pickup</dt><dd>{formatItemMoney(result.assumptions.pickup.value)}</dd></div>
+                <div><dt>Delivery</dt><dd>{formatItemMoney(result.assumptions.delivery.value)}</dd></div>
+                <div><dt>Storage</dt><dd>{formatItemMoney(result.assumptions.storage.value)}</dd></div>
+                <div><dt>Repair buffer at low sale estimate</dt><dd>{formatItemMoney(result.low.contingency)}</dd></div>
+                <div><dt>Selling fees at low sale estimate</dt><dd>{formatItemMoney(result.low.selling_fees)}</dd></div>
+                <div><dt>Your time value</dt><dd>{formatItemMoney(result.low.own_time_value)}</dd></div>
+                <div><dt>Profit goal</dt><dd>{formatItemMoney(result.assumptions.target_profit.value)}</dd></div>
+              </dl>
+              <p className="quick-small">These are the values used for this result. Change costs and calculate again to update it.</p>
+            </details>
             <p className="quick-small">{ownResale ? "Sale price: your estimate." : "Sale prices: online listings, not confirmed sales."} Before income tax and costs not entered. This is a budget, not an inspection.</p>
           </>}
         </section> : <section className="quick-explainer"><span className="quick-spark" aria-hidden="true">✳</span><h2>Less guessing.<br />More good finds.</h2><p>We'll help you work out three things:</p><ol><li><span>01</span> What it might sell for</li><li><span>02</span> What needs fixing</li><li><span>03</span> What you should pay</li></ol><p className="quick-small">You have the final say. Check the condition, confirm the repairs and adjust anything that doesn't fit.</p></section>}
-        {evidence && <details className="quick-card quick-sources"><summary>See the price sources ({evidence.listings.length})</summary><p className="quick-small">Asking prices only. Shipping listings are reference material and don't set your range.</p>{evidence.listings.map((listing, i) => {
-          const link = safeItemLink(listing.url);
-          return <article key={`${listing.url}-${i}`}><p className="quick-source-label">{listing.source} · {listing.market === "national_shipping" ? "National / shipping" : listing.market === "local_pickup" ? "Pickup offered" : "Location unknown"}</p>{link ? <a href={link} target="_blank" rel="noopener noreferrer">{listing.title} ↗</a> : <strong>{listing.title}</strong>}<p>{formatItemMoney(listing.price)} · {listing.condition}</p><small>Retrieved {new Date(listing.retrieved_at).toLocaleDateString("en-US")}{!listing.eligible ? " · Reference only" : ""}</small></article>;
-        })}</details>}
+        {evidence && result && <ItemInspectionPanel unknowns={evidence.repair_unknowns} />}
+        {evidence && <ItemPriceEvidence evidence={evidence} />}
         {(manual || evidence) && <ItemSavePanel key={initial?.id ?? "new"} light disabled={!result || blocked} form={form} initial={initial} parentId={snapshot?.id ?? null} editVersion={editVersion}
           assessment={assessment?.status === "completed" && confirmation ? { assessment_id: assessment.id, assessment_confirmation: confirmation } : undefined}
           onErrors={setErrors} onBusy={saving => { locked.current = saving; setBusy(saving ? "save" : null); }}
@@ -434,6 +451,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
             }
             setSnapshot(saved); setResult(saved.analysis_result);
           }} />}
+        {snapshot && <p className="quick-small">Next: open <Link to="/my-flips">My Flips</Link> to track a purchase or prepare sale listing text.</p>}
         {(evidence || snapshot) && <a className="quick-text-button" href="/items" onClick={event => {
           if (locked.current) { event.preventDefault(); return; }
           if (userId) clearAssessmentRecovery(userId);

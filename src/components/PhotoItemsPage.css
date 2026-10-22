@@ -141,3 +141,28 @@ body:has(.items-quick) { background: #faf6ee; color-scheme: light; }
   .quick-footer { padding: 22px 20px; }
 }
 @media (prefers-reduced-motion: reduce) { .items-quick * { scroll-behavior: auto; } }
+
+/* Decision context stays beside the existing server result. */
+.quick-photo-guide { margin: 0 0 18px; }
+.quick-inspection { margin-top: 24px; padding: 18px; border: 1px solid #d9c69d; border-radius: 12px; background: #f7efdf; font-size: 13px; }
+.quick-inspection h3 { margin: 0 0 14px; font-size: 17px; font-weight: 700; }
+.quick-inspection h4 { font-weight: 650; margin: 0 0 8px; }
+.quick-inspection ul { padding-left: 20px; margin: 10px 0; }
+.quick-inspection li { margin: 8px 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.quick-inspection summary, .quick-result-details summary { min-height: 44px; align-content: center; color: var(--green); font-weight: 650; }
+.quick-inspection details { border-top: 1px solid #dfd2b6; margin-top: 14px; }
+.quick-sources blockquote { margin: 12px 0 0; padding: 10px 12px; background: #edf1e8; border-left: 3px solid #849b85; overflow-wrap: anywhere; white-space: pre-wrap; }
+.quick-sources blockquote span { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+.quick-result-details { font-size: 13px; border-top: 1px solid #ccd5c5; }
+.quick-result-details dl { margin: 8px 0 16px; }
+.quick-result-details dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .65fr); gap: 16px; padding: 8px 0; border-bottom: 1px solid #d8dfd5; }
+.quick-result-details dt, .quick-result-details dd { overflow-wrap: anywhere; }
+.quick-result-details dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  .quick-layout:has([data-quick-status]) { display: flex; flex-direction: column; }
+  .quick-layout:has([data-quick-status]) > .quick-answer-column { order: -1; }
+  .quick-layout:has([data-quick-status]) > * { width: 100%; }
+  .quick-answer { padding: 20px; }
+  .quick-answer h2 { font-size: 28px; margin: 8px 0 12px; }
+  .quick-answer .quick-offer { margin: 16px 0; padding: 16px 0; }
+}

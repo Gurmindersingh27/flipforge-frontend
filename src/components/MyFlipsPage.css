@@ -67,3 +67,17 @@ body:has(.my-flips) { background: #faf6ee; color-scheme: light; }
   .flips-grid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .flips-card, .flips-message { padding: 20px; border-radius: 16px; }
 }
+
+.flips-card:has(.item-listing-draft) { grid-column: 1 / -1; }
+.item-listing-draft { min-width: 0; border-top: 1px solid var(--flips-line); padding-top: 24px; display: grid; gap: 16px; font-size: 14px; }
+.item-listing-draft h3 { margin: 0; font-size: 20px; font-weight: 700; color: var(--flips-green); }
+.item-listing-draft .listing-note { font-size: 12px; color: var(--flips-muted); }
+.listing-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.listing-field { display: block; min-width: 0; font-size: 13px; font-weight: 600; }
+.listing-field input, .listing-field textarea { display: block; width: 100%; min-width: 0; margin-top: 8px; border: 1px solid #b0bcb0; border-radius: 9px; padding: 12px; background: #fff; color: var(--flips-ink); font-size: 16px; font-weight: 400; line-height: 1.5; }
+.listing-field textarea { resize: vertical; }
+.listing-field :is(input, textarea):focus-visible { outline: 3px solid var(--flips-green); outline-offset: 3px; }
+.item-listing-draft [role=alert] { color: #94391f; }
+.item-listing-draft [role=status] { color: var(--flips-green); }
+.item-listing-draft > button { justify-self: start; }
+@media (max-width: 760px) { .listing-fields { grid-template-columns: minmax(0, 1fr); } }
