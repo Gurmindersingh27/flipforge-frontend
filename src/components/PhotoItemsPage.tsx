@@ -398,7 +398,6 @@ function QuickEditor({ findId }: { findId: string | null }) {
                 <button type="button" className="quick-text-button" onClick={() => { touched.current.add("repairs"); setRepairEdit(true); edit(old => ({ ...old, values: { ...old.values, repairs: suggestedRepairTotal(evidence) } })); }}>Change repair budget</button>
               </> : <>{field("repairs", "What will repairs cost?")}<p className="quick-small">Include materials and hired help. Enter 0 only if no work is needed.</p></>}
             </div>
-            {evidence && !result && <ItemInspectionPanel unknowns={evidence.repair_unknowns} />}
             <details ref={costsRef} className="quick-details"><summary>Change costs & profit goal</summary>
               <div className="quick-fields">{field("target_profit", "Profit you'd like to make ($)")}{field("pickup", "Pickup cost ($)")}{field("delivery", "Delivery cost ($)")}{field("storage", "Storage cost ($)")}{field("hours", "Your time (hours)")}{field("hourly_value", "Value of your time ($/hour)")}{field("fee_pct", "Selling fees (%)")}{field("fee_fixed", "Fixed selling fee ($)")}{field("contingency_pct", "Repair buffer (%)")}</div>
               <p className="quick-small">Blank means unknown. Fees apply to the sale price; the buffer applies only to repairs.</p>
@@ -440,7 +439,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
             <p className="quick-small">{ownResale ? "Sale price: your estimate." : "Sale prices: online listings, not confirmed sales."} Before income tax and costs not entered. This is a budget, not an inspection.</p>
           </>}
         </section> : <section className="quick-explainer"><span className="quick-spark" aria-hidden="true">✳</span><h2>Less guessing.<br />More good finds.</h2><p>We'll help you work out three things:</p><ol><li><span>01</span> What it might sell for</li><li><span>02</span> What needs fixing</li><li><span>03</span> What you should pay</li></ol><p className="quick-small">You have the final say. Check the condition, confirm the repairs and adjust anything that doesn't fit.</p></section>}
-        {evidence && result && <ItemInspectionPanel unknowns={evidence.repair_unknowns} />}
+        {evidence && <ItemInspectionPanel unknowns={evidence.repair_unknowns} />}
         {evidence && <ItemPriceEvidence evidence={evidence} />}
         {(manual || evidence) && <ItemSavePanel key={initial?.id ?? "new"} light disabled={!result || blocked} form={form} initial={initial} parentId={snapshot?.id ?? null} editVersion={editVersion}
           assessment={assessment?.status === "completed" && confirmation ? { assessment_id: assessment.id, assessment_confirmation: confirmation } : undefined}

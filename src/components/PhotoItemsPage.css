@@ -159,9 +159,6 @@ body:has(.items-quick) { background: #faf6ee; color-scheme: light; }
 .quick-result-details dt, .quick-result-details dd { overflow-wrap: anywhere; }
 .quick-result-details dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) {
-  .quick-layout:has([data-quick-status]) { display: flex; flex-direction: column; }
-  .quick-layout:has([data-quick-status]) > .quick-answer-column { order: -1; }
-  .quick-layout:has([data-quick-status]) > * { width: 100%; }
   .quick-answer { padding: 20px; }
   .quick-answer h2 { font-size: 28px; margin: 8px 0 12px; }
   .quick-answer .quick-offer { margin: 16px 0; padding: 16px 0; }

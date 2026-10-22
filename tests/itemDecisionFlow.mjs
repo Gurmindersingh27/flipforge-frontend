@@ -51,7 +51,7 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
   const draftInput = label => `Array.from(document.querySelectorAll('.listing-field')).find(e=>e.firstChild.textContent===${JSON.stringify(label)}).querySelector('input,textarea')`;
   const openDraft = id => evaluate(`document.querySelector('[data-saved-item="${id}"] [aria-controls="listing-${id}"]').click()`);
   for (const width of [390, 1440]) {
-    await cdp('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    await cdp('Emulation.setDeviceMetricsOverride', { width, height: width === 390 ? 844 : 1000, deviceScaleFactor: 1, mobile: width === 390 });
     await openPhoto('');
     const initial = await requests();
     const expectedReads = [{ path: '/api/items/ai-budget', method: 'GET' }, { path: `/api/items/${photo.id}`, method: 'GET' }].sort((a,b)=>a.path.localeCompare(b.path));
@@ -72,10 +72,25 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     for (const [label, value] of [['Low sale estimate',photo.analysis_result.low.resale],['Your time value',photo.analysis_result.low.own_time_value],['Selling fees at low sale estimate',photo.analysis_result.low.selling_fees]]) {
       assert.equal(await evaluate(`Array.from(document.querySelectorAll('.quick-result-details dl>div')).find(e=>e.querySelector('dt').textContent===${JSON.stringify(label)}).querySelector('dd').textContent`), dollars(value));
     }
-    if (width === 390) assert.ok(await measure(`document.querySelector('[data-quick-status]').getBoundingClientRect().top < document.querySelector('.quick-flow').getBoundingClientRect().top`));
     assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'));
     await screenshot(`photo-decision-evidence-${width}.png`);
     await pause(100); assert.deepEqual(await requests(), initial, 'Evidence/check/detail panels send zero requests');
+    if (width === 390) {
+      const goal = `document.getElementById('quick-target_profit')`;
+      await evaluate(`(()=>{const e=${goal};e.closest('details').open=true;e.scrollIntoView({block:'center',behavior:'instant'});e.focus({preventScroll:true});e.setSelectionRange(e.value.length,e.value.length)})()`);
+      const before = await measure(`${goal}.getBoundingClientRect().top`);
+      assert.ok(before >= 0 && before < 844, 'Focused cost field starts on screen');
+      await cdp('Input.insertText', { text: '1' });
+      await until(`!document.querySelector('[data-quick-status]')`);
+      await pause(100);
+      const after = await measure(`(()=>{const e=${goal},r=e.getBoundingClientRect();return {top:r.top,bottom:r.bottom,focused:document.activeElement===e}})()`);
+      assert.equal(after.focused, true, 'First edit retains focus');
+      assert.ok(after.top >= 0 && after.bottom <= 844, `Edited cost field stays on screen: ${JSON.stringify(after)}`);
+      assert.ok(Math.abs(after.top - before) <= 8, `First edit must not move the focused field: ${before}px -> ${after.top}px`);
+      assert.deepEqual(await requests(), initial, 'Editing a cost sends no request');
+      await screenshot('photo-decision-edit-stable-390.png');
+      checks.push('390x844 first cost-field keystroke after a reopened result retains focus and screen position within 8px without requests');
+    }
     await openPhoto('&noRange=1');
     await evaluate(`document.querySelector('.quick-sources').open=true`);
     assert.ok(await evaluate(`document.querySelector('.quick-sources').textContent.includes('Not enough supported nearby listings to set a range.')`));
