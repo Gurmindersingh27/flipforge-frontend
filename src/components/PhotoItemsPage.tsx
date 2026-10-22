@@ -396,7 +396,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
               </>}
               {evidence && !repairEdit ? <>
                 <button type="button" className="quick-text-button" onClick={() => { touched.current.add("repairs"); setRepairEdit(true); edit(old => ({ ...old, values: { ...old.values, repairs: suggestedRepairTotal(evidence) } })); }}>Change repair budget</button>
-              </> : <>{field("repairs", "What will repairs cost?")}<p className="quick-small">Include materials and hired help. Enter 0 only if no work is needed.</p></>}
+              </> : <>{evidence?.repair_unknowns.map(note => <p className="quick-notice" key={note}>{note}</p>)}{field("repairs", "What will repairs cost?")}<p className="quick-small">Include materials and hired help. Enter 0 only if no work is needed.</p></>}
             </div>
             <details ref={costsRef} className="quick-details"><summary>Change costs & profit goal</summary>
               <div className="quick-fields">{field("target_profit", "Profit you'd like to make ($)")}{field("pickup", "Pickup cost ($)")}{field("delivery", "Delivery cost ($)")}{field("storage", "Storage cost ($)")}{field("hours", "Your time (hours)")}{field("hourly_value", "Value of your time ($/hour)")}{field("fee_pct", "Selling fees (%)")}{field("fee_fixed", "Fixed selling fee ($)")}{field("contingency_pct", "Repair buffer (%)")}</div>

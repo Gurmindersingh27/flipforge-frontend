@@ -400,6 +400,16 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.equal(await evaluate(`${input('quick-repairs')}.value`), '', 'Mixed dresser/top work must start empty, never $80');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Change repair budget')`), false);
     assert.ok(await evaluate(`document.querySelector('.quick-inspection').textContent.includes('enter one total repair budget')`));
+    if (width === 390) {
+      assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false, 'Repair guidance must precede the first result');
+      const placement = await measure(`(()=>{const input=document.getElementById('quick-repairs').getBoundingClientRect(),button=document.querySelector('[data-quick-calculate]').getBoundingClientRect();return {inputTop:input.top,buttonTop:button.top,notices:Array.from(document.querySelectorAll('.quick-repairs .quick-notice')).map(e=>{const r=e.getBoundingClientRect();return {text:e.textContent,bottom:r.bottom,height:r.height,width:r.width}})}})()`);
+      assert.ok(placement.notices.some(note => note.text.includes('enter one total repair budget')), 'Blank repair budget has its inline overlap explanation');
+      for (const note of placement.notices) {
+        assert.ok(note.height > 0 && note.width > 0, 'Inline repair unknown must be rendered');
+        assert.ok(note.bottom <= placement.inputTop && note.bottom <= placement.buttonTop, 'Every inline repair unknown appears above the repair input and Calculate button');
+      }
+      checks.push('390px fresh overlap assessment shows inline unknown instructions above the blank required repair field and Calculate button before any result');
+    }
     await evaluate(`document.querySelector('[data-quick-calculate]').click()`);
     await until(`${input('quick-repairs')}.getAttribute('aria-invalid') === 'true'`);
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false);

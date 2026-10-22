@@ -57,7 +57,8 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     const expectedReads = [{ path: '/api/items/ai-budget', method: 'GET' }, { path: `/api/items/${photo.id}`, method: 'GET' }].sort((a,b)=>a.path.localeCompare(b.path));
     assert.deepEqual([...initial].sort((a,b)=>a.path.localeCompare(b.path)), expectedReads, 'Reopen keeps only the existing budget and saved-item GETs');
     assert.equal(await evaluate(`document.querySelectorAll('.quick-inspection li').length`), 6);
-    assert.equal(await evaluate(`document.body.textContent.split('Check the rear joint in person.').length-1`), 1);
+    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.quick-repairs .quick-notice')).map(e=>e.textContent)`), ['Check the rear joint in person.']);
+    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.quick-inspection [data-assessment-unknown]')).map(e=>e.textContent)`), ['Check the rear joint in person.']);
     assert.equal(await evaluate(`document.body.textContent.includes('DO NOT RENDER')`), false);
     await evaluate(`document.querySelector('.quick-inspection summary').click();document.querySelector('.quick-sources summary').click();document.querySelector('.quick-result-details summary').click()`);
     assert.ok(await evaluate(`document.querySelector('.quick-sources').textContent.includes('17 listings support the range.')`), 'Use server count, not client recount');
@@ -157,7 +158,7 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     await evaluate(`window.draftConfirm=true;document.querySelector('.flips-nav a[href="/"]').click()`);
     await until(`location.pathname==='/'`);
   }
-  checks.push('390/1440 reopened photo panels use only the existing budget/saved-item GETs: server counts/numbers, one timestamp, plain-text excerpts, legacy exclusion fallback, null range, single unknowns and labeled general checks; zero interaction requests');
+  checks.push('390/1440 reopened photo panels use only the existing budget/saved-item GETs: server counts/numbers, one timestamp, plain-text excerpts, legacy exclusion fallback, null range, one unknown copy per repair/checklist context and labeled general checks; zero interaction requests');
   checks.push('390/1440 sale drafts start empty, exclude private notes/source URLs/AI guesses, preserve explicit zero and independent pickup text, handle clipboard failure/success and preserve manual text until confirmed rebuild; zero API requests');
   checks.push('One listing draft at a time: close/switch/navigation discard prompts honor cancel and accept; account remount clears drafts and late clipboard UI results');
   const afterAI = await api('/browser-fixture/ai');
