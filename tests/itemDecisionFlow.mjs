@@ -8,6 +8,24 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
   assert.ok(photo);
   const other = rows.find(row => row.id !== photo.id);
   assert.ok(other);
+  // Stateless fixture setup only. Every variant uses real server math, then
+  // substitutes this GET's delivery without changing any saved row.
+  const baseInputs = { resale_low:100,resale_high:120,purchase_price:20,repairs:10,pickup:0,delivery:0,storage:0,
+    fee_pct:0,fee_fixed:0,hours:1,hourly_value:20,contingency_pct:.15,target_profit:30 };
+  const variants = {};
+  for (const [name, changes] of Object.entries({
+    within_budget:{}, stretch:{purchase_price:45}, skip:{purchase_price:75},
+    zero:{resale_low:61.5,resale_high:61.5,purchase_price:0},
+    negative:{resale_low:40,resale_high:40}, offer_only:{purchase_price:null},
+    needs_info:{resale_low:null,resale_high:null,pickup:null},
+  })) {
+    const inputs = {...baseInputs,...changes};
+    const response = await fetch('http://127.0.0.1:8000/api/items/analyze', {
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(inputs),
+    });
+    assert.equal(response.status,200);
+    variants[name] = {inputs,analysis:await response.json()};
+  }
   const beforeAI = await api('/browser-fixture/ai');
   const fixture = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
     const original=window.fetch.bind(window);
@@ -25,6 +43,9 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
       const response=await original(input,init);
       if(path==='/api/items/${photo.id}'&&response.ok){
         const row=await response.json(), evidence=row.assessment.evidence;
+        row.notes='PRIVATE_NEGOTIATION_987';row.listing_url='https://private.example/secret-source';
+        row.inputs.item_name='UNCONFIRMED_ANTIQUE_TEAK_987';
+        row.analysis_result.assumptions.item_name.value='UNCONFIRMED_ANTIQUE_TEAK_987';
         evidence.repair_unknowns=['Check the rear joint in person.'];
         evidence.questions=['DO NOT RENDER THESE SERVER FORM PROMPTS'];
         if(evidence.resale)evidence.resale.eligible_count=17;
@@ -32,7 +53,10 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
           ...evidence.listings[0],url:'https://example.com/evidence/'+i,eligible:false,exclusion_reason:reason,
           supporting_quotes:['<b>Plain search text $75</b> '+ 'x'.repeat(300)]
         }));
-        if(new URLSearchParams(location.search).has('noRange'))evidence.resale=null;
+        const params=new URLSearchParams(location.search),variants=${JSON.stringify(variants)};
+        if(params.has('noRange')){evidence.resale=null;row.assessment.confirmation.resale_source='user_estimate';}
+        const variant=variants[params.get('decision')];
+        if(variant){row.inputs={...row.inputs,...variant.inputs};row.analysis_result=variant.analysis;row.assessment.confirmation.resale_source='user_estimate';evidence.resale=null;}
         return Response.json(row);
       }
       if(path==='/api/items'&&response.ok){
@@ -76,6 +100,22 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'));
     await screenshot(`photo-decision-evidence-${width}.png`);
     await pause(100); assert.deepEqual(await requests(), initial, 'Evidence/check/detail panels send zero requests');
+    assert.equal(await evaluate(`Boolean(document.getElementById('quick-location'))`), false, 'Reopen must not fabricate a new area hint');
+    assert.equal(await evaluate(`document.querySelector('[data-buying-summary]').readOnly`), true);
+    const buyingSummary = await evaluate(`document.querySelector('[data-buying-summary]').value`);
+    assert.ok(buyingSummary.includes(dollars(photo.analysis_result.low.resale)));
+    for (const privateText of ['PRIVATE_NEGOTIATION_987','https://private.example/secret-source','UNCONFIRMED_ANTIQUE_TEAK_987']) assert.ok(!buyingSummary.includes(privateText));
+    await evaluate(`document.querySelector('.quick-buying-summary').open=true`);
+    await click('button','Copy buying summary');
+    await until(`Boolean(document.querySelector('.quick-buying-summary [role=alert]'))`);
+    assert.equal(await evaluate(`document.querySelector('[data-buying-summary]').value`), buyingSummary);
+    assert.equal(await evaluate(`document.querySelector('[data-buying-summary]').readOnly`), true);
+    await evaluate(`window.clipboardMode='ok'`); await click('button','Copy buying summary');
+    await until(`Boolean(document.querySelector('.quick-buying-summary [role=status]'))`);
+    assert.equal(await evaluate('window.copiedListing'), buyingSummary);
+    assert.deepEqual(await requests(), initial, 'Buying summary preview/copy sends zero requests');
+    await evaluate(`document.querySelector('.quick-buying-summary').scrollIntoView({block:'start',behavior:'instant'})`);
+    await screenshot(`photo-buying-summary-${width}.png`);
     if (width === 390) {
       const goal = `document.getElementById('quick-target_profit')`;
       await evaluate(`(()=>{const e=${goal};e.closest('details').open=true;e.scrollIntoView({block:'center',behavior:'instant'});e.focus({preventScroll:true});e.setSelectionRange(e.value.length,e.value.length)})()`);
@@ -83,6 +123,7 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
       assert.ok(before >= 0 && before < 844, 'Focused cost field starts on screen');
       await cdp('Input.insertText', { text: '1' });
       await until(`!document.querySelector('[data-quick-status]')`);
+      assert.equal(await evaluate(`Boolean(document.querySelector('[data-buying-summary]'))`), false, 'First edit removes the stale buying summary');
       await pause(100);
       const after = await measure(`(()=>{const e=${goal},r=e.getBoundingClientRect();return {top:r.top,bottom:r.bottom,focused:document.activeElement===e}})()`);
       assert.equal(after.focused, true, 'First edit retains focus');
@@ -93,10 +134,80 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
       checks.push('390x844 first cost-field keystroke after a reopened result retains focus and screen position within 8px without requests');
     }
     await openPhoto('&noRange=1');
-    await evaluate(`document.querySelector('.quick-sources').open=true`);
-    assert.ok(await evaluate(`document.querySelector('.quick-sources').textContent.includes('Not enough supported nearby listings to set a range.')`));
+    assert.ok(await evaluate(`document.querySelector('.quick-price-guidance').textContent.includes('No supported resale range was returned.')`));
+    const guidancePlacement = await measure(`(()=>{const g=document.querySelector('.quick-price-guidance').getBoundingClientRect(),i=document.getElementById('quick-resale_low').getBoundingClientRect();return {guidance:g.bottom,input:i.top}})()`);
+    assert.ok(guidancePlacement.guidance <= guidancePlacement.input, 'The missing-price explanation precedes the sale estimate field');
+    const resaleBefore = await evaluate(`document.getElementById('quick-resale_low').value`);
+    await click('button','Review price sources');
+    assert.equal(await evaluate(`document.querySelector('.quick-sources').open`), true);
+    assert.equal(await evaluate(`document.activeElement===document.querySelector('.quick-sources summary')`), true);
+    assert.ok(await evaluate(`document.querySelector('.quick-sources').textContent.includes('Not enough supported pickup listings to set a range.')`));
     assert.equal(await evaluate(`document.querySelector('.quick-sources').textContent.includes('17 listings support')`), false);
+    await click('button','Back to sale estimate');
+    assert.equal(await evaluate('document.activeElement.id'), 'quick-resale_low');
+    assert.equal(await evaluate(`document.getElementById('quick-resale_low').value`), resaleBefore, 'Reviewing sources never fills a price');
     assert.deepEqual((await requests()).sort((a,b)=>a.path.localeCompare(b.path)), expectedReads);
+
+    if (width === 390) {
+      for (const [name, variant] of Object.entries(variants)) {
+        await openPhoto('&decision='+name);
+        const before = await requests(), result = variant.analysis;
+        assert.equal(await evaluate(`document.querySelector('[data-quick-status]').dataset.quickStatus`), result.status);
+        if (name === 'needs_info') {
+          assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-offer],[data-buying-summary]'))`), false);
+          assert.equal(await evaluate(`document.querySelectorAll('[data-field-target="quick-resale_low"]').length`), 1, 'Both missing resale bounds share one visible destination');
+          await evaluate(`document.querySelector('[data-field-target="quick-resale_low"]').click()`);
+          assert.equal(await evaluate('document.activeElement.id'), 'quick-resale_low');
+          assert.equal(await evaluate(`document.getElementById('quick-resale_low').value`), '');
+          await evaluate(`document.querySelector('[data-field-target="quick-pickup"]').click()`);
+          assert.equal(await evaluate('document.activeElement.id'), 'quick-pickup');
+          assert.equal(await evaluate(`document.querySelector('.quick-details').open`), true);
+          assert.equal(await evaluate(`document.getElementById('quick-pickup').value`), '');
+        } else {
+          assert.equal(await evaluate(`document.querySelector('[data-quick-offer]').textContent`), new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(result.low.max_offer));
+          const text = await evaluate(`document.querySelector('[data-buying-summary]').value`);
+          assert.ok(text.includes('Your sale estimate'), 'Copied user estimates retain provenance');
+          assert.ok(text.includes(dollars(result.low.resale)));
+          if (name === 'negative') {
+            assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes('Even free misses your profit goal')`));
+            assert.equal(await evaluate(`Boolean(document.querySelector('.quick-offer [data-quick-offer]'))`), false, 'A negative ceiling is supporting detail, not the buying headline');
+            assert.ok(text.includes('Even free misses your profit goal'));
+            assert.ok(!text.includes('Pay no more than'), 'A negative calculated ceiling must not be copied as a buying instruction');
+          }
+          if (name === 'zero') assert.ok(text.includes('Pay no more than: $0'));
+          if (name === 'offer_only') {
+            assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-cash],[data-quick-profit],[data-quick-keep]'))`), false);
+            assert.ok(!/^Cash left(?: at| if)/m.test(text) && !/^Profit after your time(?: at| if)/m.test(text), 'Offer-only summary has no purchase-dependent numeric result lines');
+          } else {
+            assert.equal(await evaluate(`document.querySelector('[data-quick-cash]').textContent`), dollars(result.low.cash_left));
+            assert.equal(await evaluate(`document.querySelector('[data-quick-profit]').textContent`), dollars(result.low.profit_after_time));
+            assert.ok(text.includes(dollars(result.assumptions.purchase_price.value)), 'The copied figures state the entered purchase-price basis');
+            assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes('entered purchase price')`));
+          }
+          if (name === 'skip') assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes("That doesn't necessarily mean a cash loss.")`));
+        }
+        assert.deepEqual(await requests(),before,'Result variants and missing-field navigation send zero requests');
+      }
+      await openPhoto('');
+      const beforeLateEditCopy = await requests();
+      await evaluate(`document.querySelector('.quick-buying-summary').open=true;window.clipboardMode='hold'`); await click('button','Copy buying summary');
+      await until(`typeof window.releaseClipboard==='function'`);
+      await fill(`document.getElementById('quick-purchase_price')`,'18');
+      assert.equal(await evaluate(`Boolean(document.querySelector('[data-buying-summary]'))`), false);
+      await evaluate(`window.releaseClipboard()`); await pause(50);
+      assert.equal(await evaluate(`Boolean(document.querySelector('.quick-buying-summary [role=status]'))`), false, 'A late copy cannot restore an edited result');
+      assert.deepEqual(await requests(),beforeLateEditCopy,'Copy completion after an edit sends no request');
+      await openPhoto('');
+      await evaluate(`document.querySelector('.quick-buying-summary').open=true;window.clipboardMode='hold'`); await click('button','Copy buying summary');
+      await until(`typeof window.releaseClipboard==='function'`);
+      await evaluate(`window.switchFixtureUser('other-user');window.releaseClipboard()`);
+      await until(`document.body.textContent.includes('Item not found.')`);
+      assert.equal(await evaluate(`Boolean(document.querySelector('[data-buying-summary]'))`), false);
+      await evaluate(`window.switchFixtureUser('browser-fixture')`);
+      await until(`Boolean(document.querySelector('[data-buying-summary]'))`);
+      assert.equal(await evaluate(`Boolean(document.querySelector('.quick-buying-summary [role=status]'))`), false, 'An old-account copy cannot update the remounted summary');
+      assert.ok((await requests()).every(request=>request.method==='GET'&&['/api/items/ai-budget',`/api/items/${photo.id}`].includes(request.path)), 'Account remount retains only existing owner-scoped reads');
+    }
 
     await cdp('Page.navigate', { url: 'http://127.0.0.1:5173/my-flips' });
     await until(`Boolean(document.querySelector('[data-saved-item="${photo.id}"]')) && !document.body.textContent.includes('Loading saved items.')`);
@@ -159,6 +270,10 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     await until(`location.pathname==='/'`);
   }
   checks.push('390/1440 reopened photo panels use only the existing budget/saved-item GETs: server counts/numbers, one timestamp, plain-text excerpts, legacy exclusion fallback, null range, one unknown copy per repair/checklist context and labeled general checks; zero interaction requests');
+  checks.push('390/1440 missing-range explanation sits beside sale input; source and return navigation retain values, focus exact controls and send no requests');
+  checks.push('390/1440 read-only buying summaries use current server values, exclude private record text, handle clipboard failure/success and send no requests');
+  checks.push('Seven real-server calculation variants preserve all statuses, zero/negative ceilings, asking-price profit basis and offer-only absence of profit; missing resale destinations deduplicate and costs navigation preserves unknowns without requests');
+  checks.push('Editing and account changes clear buying summaries and ignore late clipboard UI completion');
   checks.push('390/1440 sale drafts start empty, exclude private notes/source URLs/AI guesses, preserve explicit zero and independent pickup text, handle clipboard failure/success and preserve manual text until confirmed rebuild; zero API requests');
   checks.push('One listing draft at a time: close/switch/navigation discard prompts honor cancel and accept; account remount clears drafts and late clipboard UI results');
   const afterAI = await api('/browser-fixture/ai');

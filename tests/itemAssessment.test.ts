@@ -97,6 +97,22 @@ test("quick preset is explicit and leaves unknown purchase, resale and repairs u
   for (const key of ["pickup", "delivery", "storage", "fee_pct", "fee_fixed", "hours"] as const) assert.equal(built.payload[key], 0);
   for (const key of ["purchase_price", "resale_low", "resale_high", "repairs"] as const) assert.equal(built.payload[key], null);
 });
+test("optional search area is trimmed, omitted when blank and stays in the original photo request", () => {
+  const original = buildAssessmentRequest("request-id", "Chair", "0", photos);
+  for (const area of [undefined, "", " \n\t "]) {
+    assert.deepEqual(buildAssessmentRequest("request-id", "Chair", "0", photos, area), original);
+    assert.equal(Object.hasOwn(buildAssessmentRequest("request-id", "Chair", "0", photos, area), "location"), false);
+  }
+  assert.deepEqual(buildAssessmentRequest("request-id", "Chair", "0", photos, "  Atlanta, GA  "), { ...original, location: "Atlanta, GA" });
+});
+test("search area validates 100 Unicode code points and rejects NUL and unpaired surrogates before submission", () => {
+  for (const area of ["x".repeat(100), "🪑".repeat(100), "City 🪑"]) {
+    assert.equal(buildAssessmentRequest("id", "Chair", "", photos, ` ${area} `).location, area);
+  }
+  for (const area of ["x".repeat(101), "🪑".repeat(101), "a\u0000b", "\ud800", "\udc00", "City\ud800 suburb"]) {
+    assert.throws(() => buildAssessmentRequest("id", "Chair", "", photos, area), /100 characters for the city or area/);
+  }
+});
 test("quick editable percentages retain exact wire decimals", () => {
   for (const [percent, wire] of [["14.3", "0.143"], ["2.9", "0.029"], ["7.5", "0.075"]]) {
     const form = newQuickItemForm(); form.values.fee_pct = percent;
