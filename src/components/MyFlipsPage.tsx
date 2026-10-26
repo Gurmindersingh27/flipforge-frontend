@@ -7,6 +7,7 @@ import { safeItemLink } from "../lib/savedItems";
 import type { SavedItem } from "../lib/types";
 import ItemVersionComparison from "./ItemVersionComparison";
 import ItemOutcomePanel from "./ItemOutcomePanel";
+import ItemListingDraft from "./ItemListingDraft";
 import type { OutcomeGuard } from "./ItemOutcomePanel";
 import "./MyFlipsPage.css";
 
@@ -24,6 +25,14 @@ function SavedList() {
   const comparisonPending = useRef(new Set<string>());
   const [trackingItem, setTrackingItem] = useState<number | null>(null);
   const [trackingGuard, setTrackingGuard] = useState<OutcomeGuard>(null);
+
+  const [listingItem, setListingItem] = useState<number | null>(null);
+  const [listingDirty, setListingDirty] = useState(false);
+  function draftListing(itemId: number) {
+    if (listingDirty && !window.confirm("Discard your unsaved listing draft? Copy it first if you want to keep it.")) return;
+    setListingDirty(false);
+    setListingItem(old => old === itemId ? null : itemId);
+  }
 
   function track(itemId: number) {
     if (trackingGuard === "busy") return;
@@ -112,6 +121,13 @@ function SavedList() {
               aria-expanded={trackingItem === item.id} aria-controls={`tracking-${item.id}`} onClick={() => track(item.id)}>
               {trackingItem === item.id ? "Close tracking" : "Track this find"}
             </button>
+            <button type="button" className="flips-link" aria-expanded={listingItem === item.id}
+              aria-controls={`listing-${item.id}`} onClick={() => draftListing(item.id)}>
+              {listingItem === item.id ? "Close listing draft" : "Prepare sale listing"}
+            </button>
+          </div>
+          <div id={`listing-${item.id}`}>
+            {listingItem === item.id && <ItemListingDraft key={item.id} onDirtyChange={setListingDirty} />}
           </div>
           <div id={`tracking-${item.id}`}>
             {trackingItem === item.id && <ItemOutcomePanel key={item.id} rootId={item.root_item_id} itemId={item.id} onGuard={setTrackingGuard} />}

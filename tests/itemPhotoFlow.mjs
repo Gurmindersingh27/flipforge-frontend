@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runDecisionChecks } from "./itemDecisionFlow.mjs";
 
 const fallbackLabels = [
   'Legacy plain title', 'Title (nested (scope))', 'Title (scope) trailing',
@@ -398,7 +399,17 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.equal(rows[0].reason, 'Visible work: clean');
     assert.equal(await evaluate(`${input('quick-repairs')}.value`), '', 'Mixed dresser/top work must start empty, never $80');
     assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Change repair budget')`), false);
-    assert.ok(await evaluate(`document.querySelector('.quick-repairs').textContent.includes('enter one total repair budget')`));
+    assert.ok(await evaluate(`document.querySelector('.quick-inspection').textContent.includes('enter one total repair budget')`));
+    if (width === 390) {
+      assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false, 'Repair guidance must precede the first result');
+      const placement = await measure(`(()=>{const input=document.getElementById('quick-repairs').getBoundingClientRect(),button=document.querySelector('[data-quick-calculate]').getBoundingClientRect();return {inputTop:input.top,buttonTop:button.top,notices:Array.from(document.querySelectorAll('.quick-repairs .quick-notice')).map(e=>{const r=e.getBoundingClientRect();return {text:e.textContent,bottom:r.bottom,height:r.height,width:r.width}})}})()`);
+      assert.ok(placement.notices.some(note => note.text.includes('enter one total repair budget')), 'Blank repair budget has its inline overlap explanation');
+      for (const note of placement.notices) {
+        assert.ok(note.height > 0 && note.width > 0, 'Inline repair unknown must be rendered');
+        assert.ok(note.bottom <= placement.inputTop && note.bottom <= placement.buttonTop, 'Every inline repair unknown appears above the repair input and Calculate button');
+      }
+      checks.push('390px fresh overlap assessment shows inline unknown instructions above the blank required repair field and Calculate button before any result');
+    }
     await evaluate(`document.querySelector('[data-quick-calculate]').click()`);
     await until(`${input('quick-repairs')}.getAttribute('aria-invalid') === 'true'`);
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false);
@@ -465,7 +476,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.deepEqual(rows.map(r=>r.cost), ['$5.00', '$35.00', '$25.00']);
     assert.deepEqual(rows.map(r=>r.label), legacy.assessment.evidence.repair_suggestions.map(r=>r.label));
     assert.equal(await evaluate(`document.querySelectorAll('.quick-repair-scope,.quick-repair-included').length`), 0);
-    assert.equal(await evaluate(`document.querySelectorAll('.quick-repairs .quick-notice').length`), 0);
+    assert.equal(await evaluate(`document.querySelectorAll('[data-assessment-unknown]').length`), 0);
     await fill(input('item-notes'), `Draft1 notes-only version at ${width}.`);
     await click('button', 'Save new version'); await savedConfirmation();
     const child = (await api('/api/items')).items[0];
@@ -943,6 +954,8 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   await runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
 
   await runPreferenceChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api, upload, runAI, calculate, mode });
+
+  await runDecisionChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
 
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();
