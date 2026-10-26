@@ -62,7 +62,7 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     assert.equal(await evaluate(`document.body.textContent.includes('DO NOT RENDER')`), false);
     await evaluate(`document.querySelector('.quick-inspection summary').click();document.querySelector('.quick-sources summary').click();document.querySelector('.quick-result-details summary').click()`);
     assert.ok(await evaluate(`document.querySelector('.quick-sources').textContent.includes('17 listings support the range.')`), 'Use server count, not client recount');
-    for (const phrase of ['price was not found in the cited search text','Not a comparable single item','Not identified as a local-pickup listing','listed price is zero','recognized reason is unavailable']) {
+    for (const phrase of ['No supporting search quote verifies this price.','Not a comparable single item','Not identified as a local-pickup listing','listed price is zero','recognized reason is unavailable']) {
       assert.ok(await evaluate(`document.querySelector('.quick-sources').textContent.includes(${JSON.stringify(phrase)})`));
     }
     assert.equal(await evaluate(`document.querySelector('.quick-sources').textContent.split('Found during the assessment on').length-1`), 1);

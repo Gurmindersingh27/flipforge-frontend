@@ -3,7 +3,7 @@ import { safeItemLink } from "../lib/savedItems";
 import type { ItemAssessmentResult } from "../lib/types";
 
 const reasons: Record<string, string> = {
-  unsupported_price: "The price was not found in the cited search text.",
+  unsupported_price: "No supporting search quote verifies this price.",
   not_comparable: "Not a comparable single item.",
   not_local_pickup: "Not identified as a local-pickup listing.",
   zero_price: "The listed price is zero.",
