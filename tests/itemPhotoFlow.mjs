@@ -711,6 +711,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   checks.push('Late readiness responses cannot enable AI for another account or after sign-out; signed-out users get the sign-in prompt without a budget request');
 
   await mode('normal'); await open(); await upload(); await fill(input('quick-asking'), '20');
+  await fill(input('quick-location'), 'Atlanta recovery-only hint');
   // Inspect storage at the actual fetch boundary, then hold the response while
   // navigating away. The provider and database are still the real fixture path.
   await evaluate(`(()=>{const original=window.fetch;window.fetch=async(input,init)=>{
@@ -723,6 +724,8 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   const beforeRecovery = await requests();
   await evaluate(`document.querySelector('[data-quick-assess]').click()`);
   await until(`Boolean(window.sentId)`);
+  assert.equal(await evaluate(`document.getElementById('quick-location').value`), 'Atlanta recovery-only hint');
+  assert.equal(await evaluate(`document.getElementById('quick-location').matches(':disabled')`), true, 'The area is locked while the existing assessment POST awaits its response');
   const recoveryId = await storedId();
   assert.equal(await evaluate('window.idBeforePost'), recoveryId);
   assert.equal(await evaluate('window.sentId'), recoveryId, 'UUID must be stored before the POST');
@@ -1004,17 +1007,18 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished")`);
-  assert.equal(await evaluate(`document.getElementById('quick-location').matches(':disabled')`), true, 'The area is locked while an assessment is pending');
+  await until(`document.body.textContent.includes('Another estimate is still running.')`);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Photo estimate"], #quick-location'))`), false, 'Settled unavailable readiness hides the photo form and area while an assessment is pending');
   assert.ok(await evaluate(`Boolean((${speedRows})['Estimate request'])`));
   const uncertainId = await storedId();
   const beforePendingRefresh = await requests();
   await open('', true);
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished") && Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Check estimate status' && !e.disabled)`);
+  await until(`document.body.textContent.includes('Another estimate is still running.')`);
   assert.ok(await evaluate(`Boolean((${speedRows})['Status check'])`));
   assert.equal(await evaluate(`Boolean((${speedRows})['Estimate request'])`), false);
   assert.equal(await storedId(), uncertainId);
-  assert.equal(await evaluate(`document.getElementById('quick-location').value`), '', 'Pending recovery does not reconstruct a location');
-  assert.equal(await evaluate(`document.getElementById('quick-location').matches(':disabled')`), true);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Photo estimate"], #quick-location'))`), false, 'Recovered pending assessment keeps the photo form and area hidden after unavailable readiness settles');
   assert.equal((await requests()).reads, beforePendingRefresh.reads + 1);
   assert.equal((await requests()).posts, beforePendingRefresh.posts);
   await click('button', 'Check estimate status');
