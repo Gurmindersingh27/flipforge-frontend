@@ -50,6 +50,7 @@ def photo_provider(payload):
     if mode == 'timeout':
         raise httpx.ReadTimeout('fixture timeout')
     text = json.loads(payload['messages'][0]['content'][-1]['text'])
+    fixture_ai['location_hint'] = text.get('location_hint')
     prices = [65, 75] if mode == 'short' else [65, 75, 90]
     listings = [dict(title='Used wood dining chair', url='https://example.com/chair/' + str(i), price=p, currency='USD', condition='Used, good condition', comparable=True, single_item=True, market='local_pickup', location='Atlanta') for i, p in enumerate(prices)]
     asking = text.get('asking_price')
@@ -135,12 +136,16 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   const speedRows = `Object.fromEntries([...document.querySelectorAll('.quick-speed dl > div')].map(e=>[e.querySelector('dt').textContent,e.querySelector('dd').textContent]))`;
   const speedEntries = `performance.getEntriesByType('measure').filter(e=>e.name.startsWith('flipforge.items.'))`;
   for (const width of [390, 1440]) {
-    await cdp('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    await cdp('Emulation.setDeviceMetricsOverride', { width, height: width === 390 ? 844 : 1000, deviceScaleFactor: 1, mobile: width === 390 });
     await open('?fixtureSignedOut=1');
     await until(`Boolean(document.querySelector('.quick-speed'))`);
     assert.equal(await evaluate(`document.querySelector('.quick-speed').open`), false);
     assert.deepEqual(await evaluate(speedRows), {});
     const before = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
+    if (width === 390) {
+      assert.ok(await measure(`(()=>{const r=document.querySelector('.quick-photo-actions').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight})()`), 'Phone camera choices fit in the first 390x844 viewport');
+      assert.ok(await measure(`Array.from(document.querySelectorAll('.quick-upload')).every(e=>e.getBoundingClientRect().height>=44)`), 'Camera controls retain touch target height');
+    }
     assert.ok(await evaluate(`(()=>{const c=document.querySelector('[aria-label="Take item photo"]'),g=document.querySelector('[aria-label="Choose item photos"]');return c.getAttribute('capture')==='environment'&&!c.multiple&&g.multiple&&!g.hasAttribute('capture')})()`));
     // Simulated picker cancellation, not proof of physical camera behaviour.
     await evaluate(`document.querySelectorAll('.quick-photo-actions input').forEach(e=>{e.files=new DataTransfer().files;e.dispatchEvent(new Event('change',{bubbles:true}));e.dispatchEvent(new Event('cancel',{bubbles:true}));})`);
@@ -163,6 +168,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await geometry();
   }
   checks.push('390/1440 camera and gallery inputs preserve text, support cancel/remove and the three-photo limit, show local preparation timing and send zero assessment POSTs');
+  checks.push('Compact 390x844 photo entry shows both camera choices within the initial viewport with touch targets at least 44px high');
 
   await mode('normal');
   const timingScript = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
@@ -258,7 +264,9 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     const count = await calls();
     await fill(input('quick-description'), 'Wood chair, scratched seat, they want twenty.');
     const askingInput = width === 390 ? '20' : '';
+    const locationInput = width === 390 ? '  Atlanta, GA  ' : '   ';
     await fill(input('quick-asking'), askingInput);
+    await fill(input('quick-location'), locationInput);
     await upload();
     await geometry(); await screenshot(`photo-entry-${width}.png`);
     assert.equal(await calls(), count);
@@ -266,8 +274,15 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await until(`Boolean(document.querySelector('[data-quick-assess]'))`);
     assert.equal(await evaluate(`${input('quick-description')}.value`), 'Wood chair, scratched seat, they want twenty.');
     assert.equal(await evaluate(`${input('quick-asking')}.value`), askingInput);
+    assert.equal(await evaluate(`${input('quick-location')}.value`), locationInput, 'Signing in preserves the anonymous search hint');
     assert.equal(await evaluate(`document.querySelectorAll('.quick-photo img').length`), 1);
+    await evaluate(`(()=>{const original=window.fetch;window.locationPosts=[];window.fetch=(input,init={})=>{if(new URL(typeof input==='string'?input:input.url).pathname==='/api/items/assess'&&init.method==='POST')window.locationPosts.push(JSON.parse(init.body));return original(input,init);};})()`);
     await runAI();
+    const locationPosts = await evaluate('window.locationPosts');
+    assert.equal(locationPosts.length, 1, 'The area is sent with the existing single assessment POST');
+    assert.equal(Object.hasOwn(locationPosts[0],'location'), width === 390, 'Blank area is omitted from the request');
+    assert.equal(locationPosts[0].location, width === 390 ? 'Atlanta, GA' : undefined);
+    assert.equal((await api('/browser-fixture/ai')).location_hint, width === 390 ? 'Atlanta, GA' : null, 'The existing backend passes the hint to the simulated provider');
     assert.ok(await evaluate(`Boolean((${speedRows})['Estimate request'])`));
     assert.ok(await evaluate(`${speedEntries}.length<=5`));
     assert.equal(await calls(), count + 1);
@@ -306,6 +321,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.equal(savedFind.assessment.evidence.listings.length, 3);
     assert.equal(savedFind.assessment.confirmation.resale_source, 'assessment');
     assert.ok(!JSON.stringify(savedFind).includes('base64'));
+    assert.ok(!JSON.stringify(savedFind).includes('Atlanta, GA'), 'The search hint is not added to the saved item');
     await open(`?find=${savedFind.id}`);
     await until(`Boolean(document.querySelector('[data-quick-status]'))`);
     await fill(input('item-notes'), 'Notes-only new version.');
@@ -322,6 +338,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   }
   checks.push('Photo UI at 390/1440 preserves anonymous photos/text through sign-in, confirms repairs before real server math, and shows matching low/high money without overflow');
   checks.push('Photo finds save evidence, confirmed repairs and inputs through the real API; notes-only linked versions preserve results without another paid request');
+  checks.push('390/1440 optional area survives anonymous sign-in, trims or omits in the existing single assessment POST, reaches the simulated provider and is not persisted with the saved find');
   checks.push('Photo reopen ownership is enforced; switching accounts clears private inputs, results and notes');
   checks.push('Zero-hour results show one keep amount; entered hours restore distinct cash/profit, compact assumptions reflect edits, and Change focuses the costs');
 
@@ -413,6 +430,13 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await evaluate(`document.querySelector('[data-quick-calculate]').click()`);
     await until(`${input('quick-repairs')}.getAttribute('aria-invalid') === 'true'`);
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false);
+    const callsBeforeRepairNavigation = await calls();
+    await evaluate(`(()=>{const original=window.fetch;window.repairNavigationRequests=[];window.fetch=(input,init={})=>{const path=new URL(typeof input==='string'?input:input.url).pathname;if(path.startsWith('/api/'))window.repairNavigationRequests.push({path,method:init.method||'GET'});return original(input,init);};})()`);
+    await evaluate(`document.querySelector('[data-missing-field="repairs"]').click()`);
+    assert.equal(await evaluate('document.activeElement.id'), 'quick-repairs');
+    assert.equal(await evaluate(`${input('quick-repairs')}.value`), '', 'Repair-error navigation does not turn unknown into zero');
+    assert.equal(await calls(), callsBeforeRepairNavigation);
+    assert.deepEqual(await evaluate('window.repairNavigationRequests'), [], 'Repair-error navigation sends no API request');
     await repairGeometry(); await screenshot(`photo-overlap-empty-${width}.png`);
     await fill(input('quick-repairs'), '0'); await calculate('within_budget');
     await fill(input('quick-repairs'), '72'); await calculate('skip');
@@ -494,6 +518,25 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   checks.push('Signed-out photo reopen shows a sign-in prompt without fetching private data');
 
   await mode('normal'); await open(); await upload();
+  await until(`!document.querySelector('[data-quick-assess]').disabled`);
+  await evaluate(`(()=>{const original=window.fetch;window.areaRequests=[];window.fetch=(input,init={})=>{const path=new URL(typeof input==='string'?input:input.url).pathname;if(path.startsWith('/api/'))window.areaRequests.push({path,method:init.method||'GET'});return original(input,init);};})()`);
+  const invalidAreaCount = await calls();
+  for (const area of ['x'.repeat(101), 'bad\u0000area', 'bad\ud800area']) {
+    await fill(input('quick-location'), area);
+    await evaluate(`document.querySelector('[data-quick-assess]').click()`);
+    await until(`Boolean(document.querySelector('[role=alert]'))`);
+    assert.deepEqual(await evaluate('window.areaRequests'), [], 'Invalid area must fail before any API request');
+    assert.equal(await calls(), invalidAreaCount);
+  }
+  await fill(input('quick-location'), 'Area draft that must clear');
+  assert.deepEqual(await evaluate('window.areaRequests'), [], 'Typing the area does not send a request');
+  await evaluate(`window.switchFixtureUser('other-user')`);
+  await until(`Boolean(${input('quick-location')}) && ${input('quick-location')}.value==='' && !document.querySelector('[data-quick-assess]').disabled`);
+  await evaluate(`window.switchFixtureUser('browser-fixture')`);
+  await until(`Boolean(${input('quick-location')}) && ${input('quick-location')}.value==='' && !document.querySelector('[data-quick-assess]').disabled`);
+  assert.equal(await calls(), invalidAreaCount);
+  await upload();
+  checks.push('Area length/NUL/surrogate failures and typing make zero requests; account switches clear the transient hint without provider calls');
   await fill(input('quick-asking'), '1e3'); const invalidCount = await calls();
   await evaluate(`document.querySelector('[data-quick-assess]').click()`);
   await until(`document.querySelector('[role=alert]')?.textContent.includes('plain number')`);
@@ -530,6 +573,10 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     if (kind === 'cap') assert.ok(await evaluate(`document.body.textContent.includes('AI estimates are paused until the 1st')`));
     await fill(input('quick-resale_low'), '65'); await fill(input('quick-repairs'), '15');
     await calculate('offer_only');
+    assert.equal(await evaluate(`document.querySelector('.quick-sale-assumptions > p').textContent`), 'Your sale estimate, not a confirmed sale price.', 'No-photo results identify the user-entered resale estimate');
+    assert.ok(await evaluate(`document.querySelector('[data-buying-summary]').value.includes('Your sale estimate, not a confirmed sale price.')`), 'No-photo buying summaries identify the user-entered resale estimate');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes('source not recorded')`), false);
+    assert.equal(await evaluate(`document.querySelector('[data-buying-summary]').value.includes('source not recorded')`), false);
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-cash]'))`), false);
     await fill(input('quick-purchase_price'), '60'); await calculate('skip');
     assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes("I'd pass at $60. Offer $17 or walk.")`));
@@ -668,6 +715,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   checks.push('Late readiness responses cannot enable AI for another account or after sign-out; signed-out users get the sign-in prompt without a budget request');
 
   await mode('normal'); await open(); await upload(); await fill(input('quick-asking'), '20');
+  await fill(input('quick-location'), 'Atlanta recovery-only hint');
   // Inspect storage at the actual fetch boundary, then hold the response while
   // navigating away. The provider and database are still the real fixture path.
   await evaluate(`(()=>{const original=window.fetch;window.fetch=async(input,init)=>{
@@ -680,6 +728,8 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   const beforeRecovery = await requests();
   await evaluate(`document.querySelector('[data-quick-assess]').click()`);
   await until(`Boolean(window.sentId)`);
+  assert.equal(await evaluate(`document.getElementById('quick-location').value`), 'Atlanta recovery-only hint');
+  assert.equal(await evaluate(`document.getElementById('quick-location').matches(':disabled')`), true, 'The area is locked while the existing assessment POST awaits its response');
   const recoveryId = await storedId();
   assert.equal(await evaluate('window.idBeforePost'), recoveryId);
   assert.equal(await evaluate('window.sentId'), recoveryId, 'UUID must be stored before the POST');
@@ -693,6 +743,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   assert.equal(afterRecovery.reads, beforeRecovery.reads + 1, 'Exactly one automatic recovery GET');
   assert.equal(await storedId(), recoveryId, 'Completion must retain the ID until save/dismiss/new find');
   assert.ok(await evaluate(`Boolean(document.querySelector('.quick-sources'))`));
+  assert.equal(await evaluate(`Boolean(document.getElementById('quick-location'))`), false, 'Recovery does not reconstruct the original area hint');
   assert.equal(await evaluate(`document.querySelectorAll('.quick-photo').length`), 0, 'Photos are not stored');
   checks.push('ID is stored before POST; refresh while awaiting the response restores the same result through exactly one GET and no extra paid request');
 
@@ -960,14 +1011,18 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished")`);
+  await until(`document.body.textContent.includes('Another estimate is still running.')`);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Photo estimate"], #quick-location'))`), false, 'Settled unavailable readiness hides the photo form and area while an assessment is pending');
   assert.ok(await evaluate(`Boolean((${speedRows})['Estimate request'])`));
   const uncertainId = await storedId();
   const beforePendingRefresh = await requests();
   await open('', true);
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished") && Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Check estimate status' && !e.disabled)`);
+  await until(`document.body.textContent.includes('Another estimate is still running.')`);
   assert.ok(await evaluate(`Boolean((${speedRows})['Status check'])`));
   assert.equal(await evaluate(`Boolean((${speedRows})['Estimate request'])`), false);
   assert.equal(await storedId(), uncertainId);
+  assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Photo estimate"], #quick-location'))`), false, 'Recovered pending assessment keeps the photo form and area hidden after unavailable readiness settles');
   assert.equal((await requests()).reads, beforePendingRefresh.reads + 1);
   assert.equal((await requests()).posts, beforePendingRefresh.posts);
   await click('button', 'Check estimate status');

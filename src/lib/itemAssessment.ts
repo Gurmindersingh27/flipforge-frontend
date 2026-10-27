@@ -8,14 +8,18 @@ export function newQuickItemForm() {
   return restoreItemForm({ pickup: 0, delivery: 0, storage: 0, fee_fixed: 0, fee_pct: 0,
     hours: 0, hourly_value: 20, contingency_pct: .15, target_profit: 30 });
 }
-export function buildAssessmentRequest(id: string, description: string, asking: string, photos: ItemAssessmentPhoto[]): ItemAssessmentRequest {
+export function buildAssessmentRequest(id: string, description: string, asking: string, photos: ItemAssessmentPhoto[], location = ""): ItemAssessmentRequest {
   if (description.length > 500 || description.includes("\u0000") || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(description)) {
     throw new Error("Use up to 500 characters and remove unsupported characters.");
   }
   if (photos.length < 1 || photos.length > 3) throw new Error("Add one to three photos first.");
+  const area = location.trim();
+  if ([...area].length > 100 || area.includes("\u0000") || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(area)) {
+    throw new Error("Use up to 100 characters for the city or area and remove unsupported characters.");
+  }
   const price = parseItemNumber(asking, "purchase_price");
   // Omission lets the server extract the asking price from the description.
-  return { request_id: id, description, photos, ...(price === null ? {} : { asking_price: price }) };
+  return { request_id: id, description, photos, ...(price === null ? {} : { asking_price: price }), ...(area ? { location: area } : {}) };
 }
 export function suggestedRepairTotal(result: ItemAssessmentResult): string {
   // Add normalized catalog cents only. The server does all offer/profit math.

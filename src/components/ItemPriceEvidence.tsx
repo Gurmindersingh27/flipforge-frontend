@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import { formatItemMoney } from "../lib/itemAnalysis";
 import { safeItemLink } from "../lib/savedItems";
 import type { ItemAssessmentResult } from "../lib/types";
@@ -9,13 +10,18 @@ const reasons: Record<string, string> = {
   zero_price: "The listed price is zero.",
 };
 
-export default function ItemPriceEvidence({ evidence }: { evidence: ItemAssessmentResult }) {
+export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate }: {
+  evidence: ItemAssessmentResult;
+  panelRef?: Ref<HTMLDetailsElement>;
+  onBackToEstimate?: () => void;
+}) {
   const date = new Date(evidence.assessed_at);
-  return <details className="quick-card quick-sources">
+  return <details ref={panelRef} id="quick-price-sources" className="quick-card quick-sources">
     <summary>See the price sources ({evidence.listings.length})</summary>
     <p className="quick-small">{evidence.resale
       ? `${evidence.resale.eligible_count} listings support the range.`
-      : "Not enough supported nearby listings to set a range."}</p>
+      : "Not enough supported pickup listings to set a range."}</p>
+    {onBackToEstimate && <button type="button" className="quick-text-button" onClick={onBackToEstimate}>Back to sale estimate</button>}
     <p className="quick-small">Asking prices only, not confirmed sales. Pickup offered does not verify distance. Shipping listings are reference material and don’t set your range.</p>
     <p className="quick-small">{Number.isNaN(date.getTime()) ? "Assessment date unavailable." : `Found during the assessment on ${date.toLocaleDateString("en-US")}.`} This is when FlipForge processed the answer, not a listing’s posting date or a check that it is still available.</p>
     {evidence.listings.map((listing, index) => {
