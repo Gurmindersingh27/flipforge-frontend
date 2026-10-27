@@ -440,7 +440,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
 
       <aside className="quick-answer-column">
         {result ? <section ref={resultRef} tabIndex={-1} className={`quick-answer tone-${result.status}`} aria-label="Your offer" data-quick-status={result.status}>
-          <ItemBuyingDecision result={result} resaleSource={confirmation?.resale_source ?? null} ownResale={ownResale} onOpenCosts={openCosts} onFocusField={focusField} />
+          <ItemBuyingDecision result={result} resaleSource={evidence ? confirmation?.resale_source ?? null : "user_estimate"} ownResale={ownResale} onOpenCosts={openCosts} onFocusField={focusField} />
         </section> : evidence ? <section className="quick-explainer quick-next-step"><h2>Finish your buying estimate.</h2><p>Review the sale estimate and repair budget above, then calculate what you should pay.</p><p className="quick-small">Leave anything you don't know blank. Enter 0 only when a cost is none.</p></section> : <section className="quick-explainer"><span className="quick-spark" aria-hidden="true">✳</span><h2>Less guessing.<br />More good finds.</h2><p>We'll help you work out three things:</p><ol><li><span>01</span> What it might sell for</li><li><span>02</span> What needs fixing</li><li><span>03</span> What you should pay</li></ol><p className="quick-small">You have the final say. Check the condition, confirm the repairs and adjust anything that doesn't fit.</p></section>}
         {evidence && <ItemInspectionPanel unknowns={evidence.repair_unknowns} />}
         {evidence && <ItemPriceEvidence evidence={evidence} panelRef={sourcesRef} onBackToEstimate={backToResale} />}

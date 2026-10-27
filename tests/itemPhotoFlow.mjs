@@ -573,6 +573,10 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     if (kind === 'cap') assert.ok(await evaluate(`document.body.textContent.includes('AI estimates are paused until the 1st')`));
     await fill(input('quick-resale_low'), '65'); await fill(input('quick-repairs'), '15');
     await calculate('offer_only');
+    assert.equal(await evaluate(`document.querySelector('.quick-sale-assumptions > p').textContent`), 'Your sale estimate, not a confirmed sale price.', 'No-photo results identify the user-entered resale estimate');
+    assert.ok(await evaluate(`document.querySelector('[data-buying-summary]').value.includes('Your sale estimate, not a confirmed sale price.')`), 'No-photo buying summaries identify the user-entered resale estimate');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes('source not recorded')`), false);
+    assert.equal(await evaluate(`document.querySelector('[data-buying-summary]').value.includes('source not recorded')`), false);
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-cash]'))`), false);
     await fill(input('quick-purchase_price'), '60'); await calculate('skip');
     assert.ok(await evaluate(`document.querySelector('[aria-label="Your offer"]').textContent.includes("I'd pass at $60. Offer $17 or walk.")`));
