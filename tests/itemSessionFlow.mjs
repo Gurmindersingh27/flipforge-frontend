@@ -157,6 +157,13 @@ export async function runSessionChecks({ cdp, evaluate, until, fill, click, paus
   const preferenceBody=await sameBodies('/api/items/preferences','PUT');assert.equal(preferenceBody.pickup,13);
   assert.equal((await api('/api/items/preferences')).pickup,13);
   checks.push('Preferences PUT retries the same captured whole replacement once and stores the expected values');
+  await evaluate(`window.sessionRequests=[]`);await fill(input('preference-pickup'),'14');
+  await faults('/api/items/preferences','PUT',2);await click('button','Save preferences');
+  await until(`document.body.textContent.includes('Sign in again to continue.')`);
+  await sameBodies('/api/items/preferences','PUT');await noRaw();
+  assert.equal((await api('/api/items/preferences')).pickup,13);
+  assert.equal(await evaluate(input('preference-pickup')+'.value'),'14');
+  checks.push('Second preferences PUT 401 stops, preserves edited values and the existing uncertainty warning, and leaves the stored profile unchanged');
 
   // Second 401 POST is definitively unspent; second 401 GET cannot settle a prior POST.
   await navigate();await ready();await photo();await faults('/api/items/assess','POST',2);
@@ -177,6 +184,15 @@ export async function runSessionChecks({ cdp, evaluate, until, fill, click, paus
   await click('button','Check estimate status');await complete();
   await checkCount('/api/items/assess','POST',1);
   checks.push('Lost assessment response is never retried; second status GET 401 retains recovery ID; a later free GET recovers the result without another POST');
+  const recoverySetup=await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`window.sessionFaults={'GET /api/items/assessments/${id}':{remaining:1}};window.sessionTokenFixture.delayMs=120;`});
+  await evaluate(`window.beforeRecoveryReload=true`);await cdp('Page.reload');
+  await until(`!window.beforeRecoveryReload && document.body.textContent.includes('Recovered your photo estimate')`);
+  await until(`${measure('status')}.length===1`);
+  await checkCount('/api/items/assessments/'+id,'GET',2);await checkCount('/api/items/assess','POST',0);
+  assert.ok((await evaluate(measure('status')))[0].duration>=120);
+  assert.equal(await evaluate(marker),retained);
+  await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:recoverySetup.identifier});
+  checks.push('Automatic recovery GET refreshes once under StrictMode, keeps the same ID, sends no POST and records one status timing including refresh');
 
   for(const mode of ['null','reject','hold']){
     await navigate();await ready();await photo();await fill(input('quick-description'),'Keep after failed refresh');
@@ -201,13 +217,17 @@ export async function runSessionChecks({ cdp, evaluate, until, fill, click, paus
   }
   checks.push('Account switch, sign-out and same-user session replacement during refresh prevent retry and clear old photos/text/results');
 
-  // Original operation deadline, not a fresh 120 seconds for the retried request.
+  // Fire the original deadline deterministically after refresh; no wall-clock race.
   await navigate();await ready();await photo();await faults('/api/items/assess','POST');
-  await evaluate(`window.sessionTokenFixture.delayMs=90;const prior=setTimeout;window.setTimeout=(fn,ms,...args)=>prior(fn,ms===120000?130:ms,...args);const priorFetch=window.fetch;window.fetch=async(input,init)=>{const response=await priorFetch(input,init);if(new URL(input).pathname==='/api/items/assess'&&response.status===401)window.sessionFaults['POST /api/items/assess']={remaining:1,mode:'hang'};return response;};window.sessionStarted=performance.now();`);
-  await estimate();await until(`document.body.textContent.includes('Check estimate status')`);
+  await evaluate(`window.operationDeadlines=[];window.sessionTokenFixture.mode='hold';const prior=setTimeout;window.setTimeout=(fn,ms,...args)=>{if(ms===120000){window.operationDeadlines.push(()=>fn(...args));return prior(()=>{},120000);}return prior(fn,ms,...args);};const priorFetch=window.fetch;window.fetch=async(input,init)=>{const response=await priorFetch(input,init);if(new URL(input).pathname==='/api/items/assess'&&response.status===401)window.sessionFaults['POST /api/items/assess']={remaining:1,mode:'hang'};return response;};`);
+  await estimate();await until(`typeof window.releaseSessionToken==='function'`);
+  assert.equal(await evaluate('window.operationDeadlines.length'),1);
+  await evaluate(`window.releaseSessionToken()`);await until(`${rows('/api/items/assess','POST')}.length===2`);
+  assert.equal(await evaluate('window.operationDeadlines.length'),1,'Refresh must not start a new operation deadline');
+  await evaluate(`window.operationDeadlines[0]()`);
+  await until(`document.body.textContent.includes('Check estimate status') && !document.body.textContent.includes('Finding similar listings.')`);
   await checkCount('/api/items/assess','POST',2);assert.ok(await evaluate(marker));
-  const duration=(await evaluate(measure('assessment')))[0].duration;
-  assert.ok(duration>=120 && duration<210,`One compressed 130ms deadline, not a second deadline after refresh: ${duration}`);
+  assert.equal((await evaluate(measure('assessment'))).length,1);
   checks.push('Retry shares the original operation deadline; an unconfirmed second HTTP attempt keeps status recovery and one timing');
 
   await noRaw();assert.deepEqual(await api('/api/deals'),originalHouses);

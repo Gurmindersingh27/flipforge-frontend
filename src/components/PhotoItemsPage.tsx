@@ -188,6 +188,9 @@ function QuickEditor({ findId }: { findId: string | null }) {
     setRecoveryId(id); setPendingId(id); locked.current = true; setBusy("recover");
     // Reuse the promise through StrictMode's effect replay: one GET, no polling.
     recoveryRequest.current ??= (async () => {
+      // Start after StrictMode effect replay, which resets the timing recorder.
+      // The cached promise still represents one logical status operation.
+      await Promise.resolve();
       const finishTiming = timing.begin("status");
       try { return await withSession((token, signal) => getItemAssessment(id, token, signal)); }
       finally { finishTiming(); }
