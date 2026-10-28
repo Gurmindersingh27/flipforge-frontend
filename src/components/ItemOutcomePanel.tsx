@@ -1,3 +1,5 @@
+import { useItemSession } from "../lib/useItemSession";
+import { ItemSessionChangedError, ItemSignInError } from "../lib/itemSession";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import { getItemOutcome, ItemApiError, saveItemOutcome, UnconfirmedOutcomeSaveError } from "../lib/api";
@@ -15,7 +17,8 @@ interface Props { rootId: number; itemId: number; onGuard: (guard: OutcomeGuard)
 interface Attempt { owner: string; payload: SaveItemOutcomeRequest }
 
 export default function ItemOutcomePanel({ rootId, itemId, onGuard }: Props) {
-  const { getToken, userId } = useAuth();
+  const { userId } = useAuth();
+  const withSession = useItemSession();
   const [phase, setPhase] = useState<Phase>("loading");
   const [form, setForm] = useState<OutcomeForm>(() => outcomeForm());
   const [latest, setLatest] = useState<ItemOutcomeResponse | null>(null);
@@ -42,10 +45,7 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard }: Props) {
   async function readLatest(reason: ReloadReason, generation: number) {
     setReloadReason(reason); setPhase("loading");
     try {
-      const token = await getToken();
-      if (generation !== sequence.current) return;
-      if (!token) throw new Error("Sign in again to load tracking.");
-      const saved = await getItemOutcome(rootId, token);
+      const saved = await withSession((token, signal) => getItemOutcome(rootId, token, signal), () => generation === sequence.current);
       if (generation !== sequence.current) return;
       setLatest(saved); setErrors({});
       if (reason === "initial" || reason === "saved") {
@@ -57,7 +57,7 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard }: Props) {
         setMessage(reason === "conflict" ? "This find was updated since you started editing. Your unsaved changes are kept."
           : "Latest tracking loaded. Your unsaved changes are kept. Choose which version to use.");
       }
-    } catch (error) {
+    } catch (error) { if (error instanceof ItemSessionChangedError) return;
       if (generation !== sequence.current) return;
       setPhase("reload");
       setMessage(`${reason === "saved" ? "Your save was confirmed. " : ""}${error instanceof Error ? error.message : "Could not load tracking."} Reload before saving.`);
@@ -89,21 +89,18 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard }: Props) {
     const wasConflict = phase === "conflict";
     setPhase("saving"); setMessage(""); setErrors({});
     try {
-      const token = await getToken();
-      if (generation !== sequence.current) return;
-      if (!token) throw new Error("Sign in again to save tracking.");
-      const saved = await saveItemOutcome(rootId, attempt.payload, token);
+      const saved = await withSession((token, signal) => saveItemOutcome(rootId, attempt.payload, token, signal), () => generation === sequence.current);
       if (generation !== sequence.current) return;
       pending.current = null; setLatest(saved);
       // A successful replay may be an older snapshot. Refresh before the next edit.
       await readLatest("saved", generation);
-    } catch (error) {
+    } catch (error) { if (error instanceof ItemSessionChangedError) return;
       if (generation !== sequence.current) return;
-      const status = error instanceof ItemApiError ? error.status : undefined;
+      const status = error instanceof ItemSignInError || error instanceof ItemApiError ? error.status : undefined;
       const keep = outcomeIsUncertain(wasUncertain, error instanceof UnconfirmedOutcomeSaveError, status);
       if (keep) {
         setPhase("uncertain");
-        setMessage("This outcome may already be saved. Retry this save to confirm it, or discard and reload before editing.");
+        setMessage(`${error instanceof ItemSignInError ? `${error.message} ` : ""}This outcome may already be saved. Retry this save to confirm it, or discard and reload before editing.`);
       } else {
         pending.current = null;
         if (status === 409) await readLatest("conflict", generation);

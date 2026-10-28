@@ -1,3 +1,5 @@
+import { useItemSession } from "../lib/useItemSession";
+import { ItemSessionChangedError } from "../lib/itemSession";
 import { useEffect, useRef, useState } from "react";
 import { SignInButton, useAuth } from "@clerk/clerk-react";
 import { Link } from "react-router-dom";
@@ -24,7 +26,8 @@ interface SaveAttempt {
   editVersion: number;
 }
 export default function ItemSavePanel({ form, initial, parentId, editVersion, onErrors, onBusy, onSaved, assessment, light, disabled }: Props) {
-  const { isLoaded, isSignedIn, userId, getToken } = useAuth();
+  const { isLoaded, isSignedIn, userId } = useAuth();
+  const withSession = useItemSession();
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [link, setLink] = useState(initial?.listing_url ?? "");
   const [busy, setBusy] = useState(false);
@@ -61,14 +64,11 @@ export default function ItemSavePanel({ form, initial, parentId, editVersion, on
     setBusy(true); onBusy(true); setMessage(""); setSavedVersion(null);
     let keepPending = uncertain;
     try {
-      const token = await getToken();
-      if (current !== sequence.current) return;
-      if (!token) throw new Error("Sign in again to save this item.");
-      const saved = await saveItem(attempt.payload, token);
+      const saved = await withSession((token, signal) => saveItem(attempt.payload, token, signal), () => current === sequence.current);
       if (current !== sequence.current) return;
       keepPending = false; pending.current = null; setUncertain(false);
       setSavedVersion(attempt.editVersion); setMessage(`Saved version #${saved.id}.`); onSaved(saved);
-    } catch (error) {
+    } catch (error) { if (error instanceof ItemSessionChangedError) return;
       if (current !== sequence.current) return;
       // Only app rejections after the backend replay lookup resolve an earlier
       // uncertain POST. Auth, rate limits, outages and token failures do not.

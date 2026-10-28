@@ -10,6 +10,7 @@ import { restoreItemForm, buildSavedItemInputs } from "../src/lib/savedItems.ts"
 import { formatItemMoney, ITEM_STATUS_TEXT } from "../src/lib/itemAnalysis.ts";
 import { roundTripCases } from "./savedItems.test.ts";
 import { photoBackendFixture, runPhotoItemChecks } from "./itemPhotoFlow.mjs";
+import { sessionClerkFixture, runSessionChecks } from "./itemSessionFlow.mjs";
 
 const root = process.cwd();
 const backend = resolve(process.env.BACKEND_DIR ?? "../flipforge-backend");
@@ -201,9 +202,9 @@ async function screenshot(name) {
 }
 
 try {
-  writeFileSync(join(temp, "fixture.py"), `import os\nos.environ['DATABASE_URL'] = ${JSON.stringify(`sqlite:///${temp}/fixture.db`)}\nos.environ['CLERK_JWKS_URL'] = ''\nfrom app.main import app\nfrom app.auth import get_current_user_id\nfrom fastapi import Header\ndef fixture_owner(authorization: str = Header(default='Bearer browser-fixture')):\n    return authorization.removeprefix('Bearer ')\napp.dependency_overrides[get_current_user_id] = fixture_owner\n${photoBackendFixture}`);
+  writeFileSync(join(temp, "fixture.py"), `import os\nos.environ['DATABASE_URL'] = ${JSON.stringify(`sqlite:///${temp}/fixture.db`)}\nos.environ['CLERK_JWKS_URL'] = ''\nfrom app.main import app\nfrom app.auth import get_current_user_id\nfrom fastapi import Header\ndef fixture_owner(authorization: str = Header(default='Bearer browser-fixture')):\n    return authorization.removeprefix('Bearer ')\napp.dependency_overrides[get_current_user_id] = fixture_owner\n${photoBackendFixture}\nos.environ['ITEMS_AI_ALLOWED_USER_IDS'] += ',session-recovery-fixture'\n`);
   // Signed-out selection exists only in this temporary fixture, never in production.
-  writeFileSync(join(temp, "clerk.ts"), `import {useSyncExternalStore} from 'react';const signedIn=!new URLSearchParams(location.search).has('fixtureSignedOut');let state={isSignedIn:signedIn,isLoaded:!new URLSearchParams(location.search).has('fixtureAuthLoading'),userId:signedIn?'browser-fixture':null};const listeners=new Set();window.switchFixtureUser=userId=>{state={isSignedIn:Boolean(userId),isLoaded:true,userId};listeners.forEach(fn=>fn());};const subscribe=fn=>{listeners.add(fn);return()=>listeners.delete(fn);};const getToken=async()=>{const user=state.userId;const fixture=window.authFixture;if(fixture){fixture.calls++;await new Promise(resolve=>setTimeout(resolve,fixture.delayMs));}return user;};export const useAuth=()=>({...useSyncExternalStore(subscribe,()=>state),getToken});export const SignedIn=({children})=>useAuth().isSignedIn?children:null;export const SignedOut=({children})=>useAuth().isSignedIn?null:children;export const ClerkProvider=({children})=>children;export const UserButton=()=>null;export const SignInButton=({children})=>children;export const SignUpButton=({children})=>children;`);
+  writeFileSync(join(temp, "clerk.ts"), sessionClerkFixture);
   writeFileSync(join(temp, "vite.mjs"), `import base from ${JSON.stringify(join(root, "vite.config.ts"))};export default {...base,root:${JSON.stringify(root)},resolve:{alias:{'@clerk/clerk-react':${JSON.stringify(join(temp, "clerk.ts"))}}},server:{host:'127.0.0.1',port:5173,strictPort:true,fs:{allow:[${JSON.stringify(root)},${JSON.stringify(temp)}]}}};`);
   start(process.env.PYTHON ?? "python", ["-m", "uvicorn", "fixture:app", "--host", "127.0.0.1", "--port", "8000"], { PYTHONPATH: `${backend}:${temp}` });
   start(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "--config", join(temp, "vite.mjs"), "--configLoader", "native"], { VITE_API_BASE_URL: "http://127.0.0.1:8000" });
@@ -225,6 +226,14 @@ try {
   ({ sessionId } = await cdp("Target.attachToTarget", { targetId, flatten: true }, false));
   await cdp("Page.enable"); await cdp("Runtime.enable"); await cdp("Network.enable");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  if (process.env.ITEM_SESSION_ONLY === "1") {
+    await cdp("Page.navigate", {url:"http://127.0.0.1:5173/items?fixtureSignedOut=1"});
+    await until(`Boolean(document.querySelector('.items-quick'))`);
+    await runSessionChecks({ cdp, evaluate, until, fill, click, pause, checks, api });
+    assert.deepEqual(errors, []);
+    writeFileSync(join(artifacts, "session-results.json"), JSON.stringify({checks, errors}, null, 2));
+    console.log(JSON.stringify({result:"PASS", scope:"session-only", checks}));
+  } else {
   const beforeSample = await api("/api/deals");
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/?fixtureSignedOut=1" });
   await until(`Boolean(document.querySelector('section[aria-label="Sample deal"]'))`);
@@ -1643,7 +1652,9 @@ try {
   await click('button','Save item'); await until(`document.body.textContent.includes('NUL')`);
   assert.equal(await evaluate('window.savedItemRequests.length'),0);
   await fill(itemInput('item_name'),'Valid');
-  await evaluate('window.authFixture={calls:0,delayMs:250}');
+  // The total Items deadline now includes token retrieval; keep the delayed
+  // duplicate-click probe within this fixture's compressed 160ms deadline.
+  await evaluate('window.authFixture={calls:0,delayMs:70}');
   await evaluate(`(()=>{const b=${byText('button','Save item')};b.click();b.click();})()`);
   await until(hasStatus('Saved version #'));
   assert.equal(await evaluate('window.authFixture.calls'),1);
@@ -1658,15 +1669,16 @@ try {
     const before=(await api('/api/items')).items.map(i=>i.id);
     await click('button','Save item');
     const definite=['401','403','409','422'].includes(mode);
-    await until(hasAlert(['401','403'].includes(mode)?'session':mode==='422'?'Invalid notes':definite?'Items request failed':'may already be saved'));
-    assert.equal(await evaluate('window.savedItemRequests.length'),1);
+    await until(hasAlert(mode==='401'?'Sign in again to continue.':mode==='403'?'session':mode==='422'?'Invalid notes':definite?'Items request failed':'may already be saved'));
+    assert.equal(await evaluate('window.savedItemRequests.length'),mode==='401'?2:1);
+    if(mode==='401')assert.deepEqual(await evaluate('window.savedItemRequests[1].body'),await evaluate('window.savedItemRequests[0].body'),'Auth retry must reuse the exact captured request');
     const captured=await evaluate('window.savedItemRequests[0].body');
     assert.match(captured.request_id,/^[0-9a-f-]{36}$/);
     assert.equal(await evaluate(`(${itemInput('purchase_price')}).value`),'0');
     if (definite) {
       assert.ok(await evaluate(`!(${itemInput('purchase_price')}).matches(':disabled') && !document.getElementById('item-notes').matches(':disabled')`));
       await evaluate('window.savedItemMode="pass"'); await saveCurrent();
-      assert.notEqual(await evaluate('window.savedItemRequests[1].body.request_id'),captured.request_id);
+      assert.notEqual(await evaluate('window.savedItemRequests.at(-1).body.request_id'),captured.request_id);
     } else {
       for(const input of [itemInput('purchase_price'),`document.getElementById('item-notes')`,`document.getElementById('item-listing-url')`]) assert.ok(await evaluate(`(${input}).matches(':disabled')`));
       assert.ok(await evaluate(`!(${byText('button','Retry this save')}).disabled`));
@@ -1696,7 +1708,7 @@ try {
     }
   }
   checks.push('Manual save header/body timeouts, 500/503 and lost responses retain one captured request; explicit double-clicked retries produce one immutable record and preserve notes/link');
-  checks.push('First-attempt 401/403/409/422 save rejections unlock editing and discard request IDs; success followed by editing uses a fresh ID and linked version');
+  checks.push('Exhausted 401 refresh and first-attempt 403/409/422 save rejections unlock editing and discard request IDs; success followed by editing uses a fresh ID and linked version');
 
   await signedItems(dresser); await fill(`document.getElementById('item-notes')`,'Committed before rejected retries');
   await evaluate(`window.savedItemMode='lost'`); await click('button','Save item'); await until(hasAlert('may already be saved'));
@@ -2013,6 +2025,7 @@ try {
   checks.push("No browser runtime exceptions");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));
   console.log(JSON.stringify({ result: "PASS", checks }));
+  }
 } catch (error) {
   console.error(error);
   if (socket && sessionId) {

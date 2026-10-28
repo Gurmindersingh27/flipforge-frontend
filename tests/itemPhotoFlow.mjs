@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { runDecisionChecks } from "./itemDecisionFlow.mjs";
+import { runSessionChecks } from "./itemSessionFlow.mjs";
 
 const fallbackLabels = [
   'Legacy plain title', 'Title (nested (scope))', 'Title (scope) trailing',
@@ -1007,6 +1008,9 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   await runPreferenceChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api, upload, runAI, calculate, mode });
 
   await runDecisionChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
+
+  // Recovery checks use their own owner, before the final deliberately held global gate.
+  await runSessionChecks({ cdp, evaluate, until, fill, click, pause, checks, api });
 
   // Last because the real timeout intentionally holds the shared budget gate.
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();

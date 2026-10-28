@@ -1,3 +1,5 @@
+import { useItemSession } from "../lib/useItemSession";
+import { ItemSessionChangedError } from "../lib/itemSession";
 import { useEffect, useRef, useState } from "react";
 import { SignInButton, useAuth } from "@clerk/clerk-react";
 import { Link } from "react-router-dom";
@@ -12,7 +14,7 @@ import type { OutcomeGuard } from "./ItemOutcomePanel";
 import "./MyFlipsPage.css";
 
 function SavedList() {
-  const { getToken } = useAuth();
+  const withSession = useItemSession();
   const [items, setItems] = useState<SavedItem[]>([]);
   const [next, setNext] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,14 +55,12 @@ function SavedList() {
     comparisonPending.current.add(key);
     setComparisons(old => ({ ...old, [key]: { open: true, loading: true, error: "" } }));
     try {
-      const token = await getToken();
-      if (generation !== comparisonGeneration.current) return;
-      if (!token) throw new Error("Sign in again to compare your saved estimates.");
-      const parent = await getItem(item.parent_item_id, token);
+      const parentId = item.parent_item_id;
+      const parent = await withSession((token, signal) => getItem(parentId, token, signal), () => generation === comparisonGeneration.current);
       if (generation !== comparisonGeneration.current) return;
       if (parent.id !== item.parent_item_id || parent.root_item_id !== item.root_item_id) throw new Error("Previous version could not be confirmed.");
       setComparisons(old => ({ ...old, [key]: { open: true, loading: false, error: "", parent } }));
-    } catch (failure) {
+    } catch (failure) { if (failure instanceof ItemSessionChangedError) return;
       if (generation === comparisonGeneration.current) setComparisons(old => ({ ...old, [key]: {
         open: true, loading: false, error: failure instanceof Error ? failure.message : "Could not load the previous version.",
       } }));
@@ -74,14 +74,11 @@ function SavedList() {
     locked.current = true; const current = ++sequence.current;
     setLoading(true); setError(""); setRetryOffset(offset);
     try {
-      const token = await getToken();
-      if (current !== sequence.current) return;
-      if (!token) throw new Error("Sign in again to load your saved items.");
-      const page = await getItems(token, offset);
+      const page = await withSession((token, signal) => getItems(token, offset, signal), () => current === sequence.current);
       if (current !== sequence.current) return;
       setItems(previous => offset === 0 ? page.items : [...previous, ...page.items.filter(item => !previous.some(p => p.id === item.id))]);
       setNext(page.next_offset);
-    } catch (failure) {
+    } catch (failure) { if (failure instanceof ItemSessionChangedError) return;
       if (current === sequence.current) setError(failure instanceof Error ? failure.message : "Could not load your saved items.");
     } finally {
       if (current === sequence.current) { locked.current = false; setLoading(false); }
@@ -148,12 +145,12 @@ function SavedList() {
   </>;
 }
 export default function MyFlipsPage() {
-  const { isLoaded, isSignedIn, userId } = useAuth();
+  const { isLoaded, isSignedIn, userId, sessionId } = useAuth();
   return <div className="my-flips">
     <nav className="flips-nav" aria-label="My Flips navigation"><Link to="/items" className="flips-brand">Flip<span>Forge</span><small>FIND THE POTENTIAL.</small></Link><div><Link to="/items" className="flips-link">New item</Link><Link to="/" className="flips-link">Back to Houses</Link></div></nav>
     <main className="flips-main">
       <header className="flips-intro"><p className="flips-eyebrow">PICK UP WHERE YOU LEFT OFF</p><h1>My Flips</h1><p>Your saved item versions, newest first. Saved items can’t be deleted yet.</p></header>
-      {!isLoaded ? <p className="flips-message" role="status">Loading sign-in…</p> : isSignedIn ? <SavedList key={userId} />
+      {!isLoaded ? <p className="flips-message" role="status">Loading sign-in…</p> : isSignedIn ? <SavedList key={`${userId}:${sessionId}`} />
         : <div className="flips-message"><h2>Your finds, in one place.</h2><p>Sign in to return to your saved estimates and notes.</p><SignInButton mode="modal"><button className="flips-primary">Sign in to view My Flips</button></SignInButton></div>}
     </main>
   </div>;

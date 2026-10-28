@@ -1,3 +1,5 @@
+import { useItemSession } from "../lib/useItemSession";
+import { ItemSessionChangedError, ItemSignInError } from "../lib/itemSession";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -55,8 +57,8 @@ export default function PhotoItemsPage() {
   return <QuickAccount findId={params.get("find")} />;
 }
 function QuickAccount({ findId }: { findId: string | null }) {
-  const { isLoaded, isSignedIn, userId } = useAuth();
-  const [identity, setIdentity] = useState({ user: isLoaded ? userId ?? null : null, generation: 0 });
+  const { isLoaded, isSignedIn, userId, sessionId } = useAuth();
+  const [identity, setIdentity] = useState({ user: isLoaded ? userId ?? null : null, session: sessionId, generation: 0 });
   const previousUser = useRef(isLoaded ? userId ?? null : null);
   useEffect(() => {
     if (!isLoaded) return;
@@ -64,8 +66,8 @@ function QuickAccount({ findId }: { findId: string | null }) {
     if (previousUser.current && previousUser.current !== nextUser) clearAssessmentRecovery(previousUser.current);
     previousUser.current = nextUser;
   }, [isLoaded, userId]);
-  if (isLoaded && identity.user !== (userId ?? null)) {
-    setIdentity({ user: userId ?? null, generation: identity.generation + (identity.user === null ? 0 : 1) });
+  if (isLoaded && (identity.user !== (userId ?? null) || identity.session !== sessionId)) {
+    setIdentity({ user: userId ?? null, session: sessionId, generation: identity.generation + (identity.user === null ? 0 : 1) });
   }
   if (findId !== null && !isLoaded) return <Shell><main className="quick-main"><p role="status">Loading sign-in…</p></main></Shell>;
   if (findId !== null && !isSignedIn) return <Shell><main className="quick-main"><h1>Pick up where you left off.</h1><p>Sign in to reopen this saved find.</p><SignInButton mode="modal"><button className="quick-primary">Sign in to reopen item</button></SignInButton></main></Shell>;
@@ -73,7 +75,8 @@ function QuickAccount({ findId }: { findId: string | null }) {
 }
 
 function QuickEditor({ findId }: { findId: string | null }) {
-  const { isLoaded, isSignedIn, userId, getToken } = useAuth();
+  const { isLoaded, isSignedIn, userId } = useAuth();
+  const withSession = useItemSession();
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [photos, setPhotos] = useState<ItemAssessmentPhoto[]>([]);
@@ -148,11 +151,8 @@ function QuickEditor({ findId }: { findId: string | null }) {
     budgetInFlight.current = true; setReadiness("checking"); setBudgetNote("");
     let finishTiming = () => {};
     try {
-      const token = await getToken();
-      if (current !== budgetSequence.current) return;
-      if (!token) throw new Error("Sign in again to check AI availability.");
       finishTiming = timing.begin("availability");
-      const status = await getItemAIBudget(token);
+      const status = await withSession((token, signal) => getItemAIBudget(token, signal), () => current === budgetSequence.current);
       if (current !== budgetSequence.current) return;
       setBudget(status);
       setReadiness(status.available === true ? "available" : "unavailable");
@@ -160,7 +160,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
         setBudgetNote(status.message ?? (status.reason === "assessment_busy" ? "Another estimate is still running. Enter your own numbers while you wait." : "AI estimates aren't available yet. You can still work out an offer below."));
         setManual(true);
       }
-    } catch (failure) {
+    } catch (failure) { if (failure instanceof ItemSessionChangedError) return;
       if (current !== budgetSequence.current) return;
       setBudget(null);
       setReadiness(failure instanceof ItemAssessmentError && failure.status === 403 ? "unavailable" : "failed");
@@ -169,7 +169,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     } finally {
       if (current === budgetSequence.current) { finishTiming(); budgetInFlight.current = false; }
     }
-  }, [getToken, isLoaded, isSignedIn, timing]);
+  }, [withSession, isLoaded, isSignedIn, timing]);
   const cancelAvailability = useCallback(() => {
     budgetSequence.current++; budgetInFlight.current = false;
   }, []);
@@ -188,16 +188,18 @@ function QuickEditor({ findId }: { findId: string | null }) {
     setRecoveryId(id); setPendingId(id); locked.current = true; setBusy("recover");
     // Reuse the promise through StrictMode's effect replay: one GET, no polling.
     recoveryRequest.current ??= (async () => {
-      const token = await getToken();
-      if (!token) throw new Error("Sign in again to recover this estimate.");
+      // Start after StrictMode effect replay, which resets the timing recorder.
+      // The cached promise still represents one logical status operation.
+      await Promise.resolve();
       const finishTiming = timing.begin("status");
-      try { return await getItemAssessment(id, token); }
+      try { return await withSession((token, signal) => getItemAssessment(id, token, signal)); }
       finally { finishTiming(); }
     })();
     void recoveryRequest.current.then(response => {
       if (!active) return;
       acceptAssessment(response); setRecovered(response.status === "completed");
     }).catch(failure => {
+      if (failure instanceof ItemSessionChangedError) return;
       if (!active) return;
       if (failure instanceof ItemAssessmentError && failure.status === 404) {
         clearAssessmentRecovery(userId, id); setRecoveryId(null); setPendingId(null);
@@ -208,7 +210,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
       if (active) { recoveryFinished.current = true; locked.current = false; setBusy(null); }
     });
     return () => { active = false; };
-  }, [findId, isLoaded, isSignedIn, userId, getToken, acceptAssessment, timing]);
+  }, [findId, isLoaded, isSignedIn, userId, withSession, acceptAssessment, timing]);
 
   useEffect(() => {
     if (findId === null) return;
@@ -216,10 +218,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     void (async () => {
       try {
         if (!/^[1-9]\d*$/.test(findId) || !Number.isSafeInteger(Number(findId))) throw new Error("Item not found.");
-        const token = await getToken();
-        if (!active) return;
-        if (!token) throw new Error("Sign in again to reopen this item.");
-        const saved = await getItem(Number(findId), token);
+        const saved = await withSession((token, signal) => getItem(Number(findId), token, signal), () => active);
         if (!active) return;
         setForm(restoreItemForm(saved.inputs)); setInitial(saved); setSnapshot(saved);
         setResult(saved.analysis_result); setManual(true); setRepairEdit(true);
@@ -227,11 +226,11 @@ function QuickEditor({ findId }: { findId: string | null }) {
         setConfirmation(saved.assessment?.confirmation ?? null);
         setOwnResale(saved.assessment?.confirmation.resale_source !== "assessment");
         if (saved.assessment) setAssessment({ id: saved.assessment.assessment_id, schema_version: 1, status: "completed", result: saved.assessment.evidence, failure_code: null, actual_cost: null, message: null });
-      } catch (failure) { if (active) setError(failure instanceof Error ? failure.message : "Could not reopen this find."); }
+      } catch (failure) { if (failure instanceof ItemSessionChangedError) return; if (active) setError(failure instanceof Error ? failure.message : "Could not reopen this find."); }
       finally { if (active) setBusy(null); }
     })();
     return () => { active = false; };
-  }, [findId, getToken, loadAttempt]);
+  }, [findId, withSession, loadAttempt]);
 
   function edit(update: (old: SavedItemForm) => SavedItemForm) {
     sequence.current++; setResult(null); setErrors({}); setError("");
@@ -267,9 +266,6 @@ function QuickEditor({ findId }: { findId: string | null }) {
     const current = ++sequence.current; locked.current = true; setBusy("ai"); setError("");
     let sent = false;
     try {
-      const token = await getToken();
-      if (current !== sequence.current) return;
-      if (!token) throw new Error("Sign in again to estimate this find.");
       if (payload) {
         preferenceSealed.current = true; freshAssessment.current = true;
         setPendingId(payload.request_id);
@@ -278,14 +274,20 @@ function QuickEditor({ findId }: { findId: string | null }) {
       }
       const finishTiming = timing.begin(payload ? "assessment" : "status");
       let response: ItemAssessmentResponse;
-      try { response = payload ? await assessItem(payload, token) : await getItemAssessment(pendingId!, token); }
+      try {
+        // Capture this operation once; refresh never re-reads editable state.
+        const request = payload
+          ? (token: string, signal: AbortSignal) => assessItem(payload, token, signal)
+          : (token: string, signal: AbortSignal) => getItemAssessment(pendingId!, token, signal);
+        response = await withSession(request, () => current === sequence.current);
+      }
       finally { if (current === sequence.current) finishTiming(); }
       if (current !== sequence.current) return;
       acceptAssessment(response);
       void checkAvailability();
-    } catch (failure) {
+    } catch (failure) { if (failure instanceof ItemSessionChangedError) return;
       if (current !== sequence.current) return;
-      const rejected = failure instanceof ItemAssessmentError && (failure.status < 500 || failure.status === 503);
+      const rejected = failure instanceof ItemSignInError || failure instanceof ItemAssessmentError && (failure.status < 500 || failure.status === 503);
       if ((!checkOnly && rejected) || (checkOnly && failure instanceof ItemAssessmentError && failure.status === 404)) {
         const id = payload?.request_id ?? pendingId;
         if (userId && id) clearAssessmentRecovery(userId, id);

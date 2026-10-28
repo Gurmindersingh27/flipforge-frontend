@@ -26,6 +26,8 @@ import { isItemPreferences } from "./itemPreferences";
 import { ITEM_LABELS } from "./itemAnalysis";
 import { isItemOutcome } from "./itemOutcomes";
 
+import { ITEM_SIGN_IN_MESSAGE } from "./itemSession";
+
 export class ItemApiError extends Error {
   status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
@@ -34,18 +36,19 @@ export class UnconfirmedItemSaveError extends Error {
   constructor() { super("This item may already be saved. Check My Flips before saving again."); }
 }
 async function itemRejection(res: Response): Promise<ItemApiError> {
+  if (res.status === 401) return new ItemApiError(401, ITEM_SIGN_IN_MESSAGE);
   const data = await res.json().catch(() => null);
   const detail = res.status === 422 && Array.isArray(data?.detail)
     ? data.detail.map((entry: { loc?: unknown[]; msg?: string }) => `${entry.loc?.filter(v => v !== "body").join(" / ") || "Inputs"}: ${entry.msg || "Check this value."}`).join("\n")
     : res.status === 404 ? "Item not found."
-    : res.status === 401 || res.status === 403 ? "Your session could not be verified. Sign in again to access saved items."
+    : res.status === 403 ? "Your session could not be verified. Sign in again to access saved items."
     : `Items request failed (HTTP ${res.status}). Try again.`;
   return new ItemApiError(res.status, detail);
 }
-export async function saveItem(payload: SaveItemRequest, token: string): Promise<SavedItem> {
+export async function saveItem(payload: SaveItemRequest, token: string, signal?: AbortSignal): Promise<SavedItem> {
   let rejection: ItemApiError | null = null;
   try {
-    return await withStartupDeadline(async signal => {
+    return await withItemDeadline(async signal => {
       const res = await fetch(`${API_BASE_URL}/api/items/save`, {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload), signal,
@@ -60,35 +63,35 @@ export async function saveItem(payload: SaveItemRequest, token: string): Promise
       const saved: SavedItem = await res.json();
       if (!saved || !Number.isSafeInteger(saved.id) || saved.id <= 0 || saved.schema_version !== 1 || !saved.analysis_result || !saved.inputs) throw new UnconfirmedItemSaveError();
       return saved;
-    }, "Save confirmation took too long.");
+    }, "Save confirmation took too long.", signal);
   } catch { throw rejection ?? new UnconfirmedItemSaveError(); }
 }
-async function readItem<T>(path: string, token: string): Promise<T> {
-  return withStartupDeadline(async signal => {
+async function readItem<T>(path: string, token: string, signal?: AbortSignal): Promise<T> {
+  return withItemDeadline(async signal => {
     const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal });
     if (!res.ok) throw await itemRejection(res);
     return await res.json();
-  }, "Loading saved items took too long. Try again.");
+  }, "Loading saved items took too long. Try again.", signal);
 }
-export function getItems(token: string, offset = 0): Promise<SavedItemList> {
-  return readItem(`/api/items?limit=20&offset=${offset}`, token);
+export function getItems(token: string, offset = 0, signal?: AbortSignal): Promise<SavedItemList> {
+  return readItem(`/api/items?limit=20&offset=${offset}`, token, signal);
 }
-export function getItem(id: number, token: string): Promise<SavedItem> {
-  return readItem(`/api/items/${id}`, token);
+export function getItem(id: number, token: string, signal?: AbortSignal): Promise<SavedItem> {
+  return readItem(`/api/items/${id}`, token, signal);
 }
 
-export async function getItemOutcome(rootId: number, token: string): Promise<ItemOutcomeResponse | null> {
-  const value = await readItem<unknown>(`/api/items/${rootId}/outcomes`, token);
+export async function getItemOutcome(rootId: number, token: string, signal?: AbortSignal): Promise<ItemOutcomeResponse | null> {
+  const value = await readItem<unknown>(`/api/items/${rootId}/outcomes`, token, signal);
   if (value === null || isItemOutcome(value, rootId)) return value;
   throw new Error("The saved tracking could not be confirmed. Reload before saving.");
 }
 export class UnconfirmedOutcomeSaveError extends Error {
   constructor() { super("This outcome may already be saved. Retry this save to confirm it, or discard and reload before editing."); }
 }
-export async function saveItemOutcome(rootId: number, payload: SaveItemOutcomeRequest, token: string): Promise<ItemOutcomeResponse> {
+export async function saveItemOutcome(rootId: number, payload: SaveItemOutcomeRequest, token: string, signal?: AbortSignal): Promise<ItemOutcomeResponse> {
   let rejection: ItemApiError | null = null;
   try {
-    return await withStartupDeadline(async signal => {
+    return await withItemDeadline(async signal => {
       const response = await fetch(`${API_BASE_URL}/api/items/${rootId}/outcomes`, {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload), signal,
@@ -103,7 +106,7 @@ export async function saveItemOutcome(rootId: number, payload: SaveItemOutcomeRe
       if (!isItemOutcome(saved, rootId) || saved.id !== payload.request_id || saved.based_on_item_id !== payload.based_on_item_id
         || saved.previous_id !== payload.expected_previous_id) throw new UnconfirmedOutcomeSaveError();
       return saved;
-    }, "Tracking confirmation took too long.");
+    }, "Tracking confirmation took too long.", signal);
   } catch { throw rejection ?? new UnconfirmedOutcomeSaveError(); }
 }
 
@@ -111,13 +114,14 @@ export class ItemAssessmentError extends Error {
   status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
 }
-async function itemAIRequest<T>(path: string, token: string, payload?: ItemAssessmentRequest): Promise<T> {
-  return withStartupDeadline(async signal => {
+async function itemAIRequest<T>(path: string, token: string, payload?: ItemAssessmentRequest, signal?: AbortSignal): Promise<T> {
+  return withItemDeadline(async signal => {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method: payload ? "POST" : "GET", signal,
       headers: { Authorization: `Bearer ${token}`, ...(payload ? { "Content-Type": "application/json" } : {}) },
       ...(payload ? { body: JSON.stringify(payload) } : {}),
     });
+    if (response.status === 401) throw new ItemAssessmentError(401, ITEM_SIGN_IN_MESSAGE);
     const data = await response.json().catch(() => null);
     if (!response.ok) {
       const detail = data?.detail;
@@ -129,16 +133,16 @@ async function itemAIRequest<T>(path: string, token: string, payload?: ItemAsses
     }
     if (!data) throw new Error("The estimate wasn't confirmed. Check its status before trying another photo estimate.");
     return data as T;
-  }, "The estimate wasn't confirmed in time. Check its status before trying another photo estimate.");
+  }, "The estimate wasn't confirmed in time. Check its status before trying another photo estimate.", signal);
 }
-export function assessItem(payload: ItemAssessmentRequest, token: string): Promise<ItemAssessmentResponse> {
-  return itemAIRequest("/api/items/assess", token, payload);
+export function assessItem(payload: ItemAssessmentRequest, token: string, signal?: AbortSignal): Promise<ItemAssessmentResponse> {
+  return itemAIRequest("/api/items/assess", token, payload, signal);
 }
-export function getItemAssessment(id: string, token: string): Promise<ItemAssessmentResponse> {
-  return itemAIRequest(`/api/items/assessments/${encodeURIComponent(id)}`, token);
+export function getItemAssessment(id: string, token: string, signal?: AbortSignal): Promise<ItemAssessmentResponse> {
+  return itemAIRequest(`/api/items/assessments/${encodeURIComponent(id)}`, token, undefined, signal);
 }
-export function getItemAIBudget(token: string): Promise<ItemAIBudget> {
-  return itemAIRequest("/api/items/ai-budget", token);
+export function getItemAIBudget(token: string, signal?: AbortSignal): Promise<ItemAIBudget> {
+  return itemAIRequest("/api/items/ai-budget", token, undefined, signal);
 }
 
 /**
@@ -176,6 +180,21 @@ async function fetchWithTimeout(
     });
   } finally {
     clearTimeout(id);
+  }
+}
+
+// Authenticated Items operations share their caller's deadline across one refresh.
+async function withItemDeadline<T>(request: (signal: AbortSignal) => Promise<T>,
+  timeoutMessage: string, signal?: AbortSignal): Promise<T> {
+  if (!signal) return withStartupDeadline(request, timeoutMessage);
+  if (signal.aborted) throw new Error(timeoutMessage);
+  try {
+    const result = await request(signal);
+    if (signal.aborted) throw new Error(timeoutMessage);
+    return result;
+  } catch (error) {
+    if (signal.aborted && !(error instanceof Error && "status" in error && error.status === 401)) throw new Error(timeoutMessage);
+    throw error;
   }
 }
 
@@ -505,9 +524,10 @@ export async function enrichAddress(
   return res.json();
 }
 
-// Complete replacement, last write wins. No automatic retries or conflict protocol.
-async function itemPreferencesRequest(token: string, payload?: SaveItemPreferences): Promise<ItemPreferences | null> {
-  return withStartupDeadline(async signal => {
+// Complete replacement, last write wins. Only the session wrapper may retry a
+// definite 401; uncertain writes are never automatically replayed.
+async function itemPreferencesRequest(token: string, payload?: SaveItemPreferences, signal?: AbortSignal): Promise<ItemPreferences | null> {
+  return withItemDeadline(async signal => {
     const response = await fetch(`${API_BASE_URL}/api/items/preferences`, {
       method: payload === undefined ? "GET" : "PUT", signal,
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -518,9 +538,9 @@ async function itemPreferencesRequest(token: string, payload?: SaveItemPreferenc
     if (payload === undefined && data === null) return null;
     if (!isItemPreferences(data)) throw new Error("Preferences response wasn't confirmed.");
     return data;
-  }, "Preferences request took too long.");
+  }, "Preferences request took too long.", signal);
 }
-export function getItemPreferences(token: string) { return itemPreferencesRequest(token); }
-export async function putItemPreferences(payload: SaveItemPreferences, token: string): Promise<ItemPreferences> {
-  return (await itemPreferencesRequest(token, payload))!;
+export function getItemPreferences(token: string, signal?: AbortSignal) { return itemPreferencesRequest(token, undefined, signal); }
+export async function putItemPreferences(payload: SaveItemPreferences, token: string, signal?: AbortSignal): Promise<ItemPreferences> {
+  return (await itemPreferencesRequest(token, payload, signal))!;
 }
