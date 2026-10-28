@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { runDecisionChecks } from "./itemDecisionFlow.mjs";
 import { runSessionChecks } from "./itemSessionFlow.mjs";
+import { runNationalPriceChecks } from "./itemNationalPriceFlow.mjs";
 
 const fallbackLabels = [
   'Legacy plain title', 'Title (nested (scope))', 'Title (scope) trailing',
@@ -53,11 +54,27 @@ def photo_provider(payload):
     text = json.loads(payload['messages'][0]['content'][-1]['text'])
     fixture_ai['location_hint'] = text.get('location_hint')
     prices = [65, 75] if mode == 'short' else [65, 75, 90]
+    if mode.startswith('national'):
+        prices = [65, 75, 90, 100, 200, 300] if mode == 'national_local' else [100, 200, 300, 400] if mode == 'national_mixed' else list(range(100, 1300, 100)) if mode == 'national_reasons' else [100, 200, 300]
     listings = [dict(title='Used wood dining chair', url='https://example.com/chair/' + str(i), price=p, currency='USD', condition='Used, good condition', comparable=True, single_item=True, market='local_pickup', location='Atlanta') for i, p in enumerate(prices)]
+    if mode.startswith('national'):
+        for row in listings:
+            row.update(market='national_shipping', condition_type='used', price_basis='item_only')
+        if mode in ('national_local', 'national_mixed'):
+            for row in listings[:3 if mode == 'national_local' else 2]:
+                row['market'] = 'local_pickup'
+        if mode == 'national_reasons':
+            for row, changes in zip(listings, [{}, {'condition_type':'unknown'}, {'condition_type':'new'},
+                {'price_basis':'unknown'}, {'price_basis':'shipping_included'}, {'market':'unknown'},
+                {'comparable':False}, {'single_item':False}, {'price':0}, {}, {}, {'condition_type':'unknown','price_basis':'unknown'}]):
+                row.update(changes)
+            listings[10].pop('condition_type'); listings[10].pop('price_basis')
     asking = text.get('asking_price')
     if asking is None and 'twenty' in text.get('description', ''):
         asking = 20
     report = dict(item_name='Wood dining chair', category='Chair', asking_price=asking, repairs=[dict(job_id='sand_seat', reason='Visible scratches on the seat')], repair_unknowns=[], listings=listings)
+    if mode == 'national':
+        report['repair_unknowns'] = ['Check the chair joints and enter one total repair budget.']
     jobs = {
         'paint_chair': ['clean', 'scratch_touchup', 'paint_chair'],
         'paint_dresser': ['clean', 'scratch_touchup', 'paint_dresser'],
@@ -69,7 +86,10 @@ def photo_provider(payload):
     }.get(mode)
     if jobs:
         report['repairs'] = [dict(job_id=job, reason='Visible work: ' + job) for job in jobs]
-    return dict(stop_reason='end_turn', usage=dict(input_tokens=12000, output_tokens=1000, server_tool_use=dict(web_search_requests=2)), content=[dict(type='text', text=json.dumps(report), citations=[dict(type='web_search_result_location', url=row['url'], cited_text='Used chair $' + str(row['price']) + ', local pickup.') for row in listings])])
+    citations = [dict(type='web_search_result_location', url=row['url'], cited_text='Used chair $' + str(row['price']) + (', plus shipping.' if row['market'] == 'national_shipping' else ', local pickup.')) for row in listings]
+    if mode == 'national_reasons':
+        citations[9]['cited_text'] = 'Used chair, no stated price.'
+    return dict(stop_reason='end_turn', usage=dict(input_tokens=12000, output_tokens=1000, server_tool_use=dict(web_search_requests=2)), content=[dict(type='text', text=json.dumps(report), citations=citations)])
 ai.call_provider = photo_provider
 @app.post('/browser-fixture/ai/{mode}')
 def ai_mode(mode: str):
@@ -1008,6 +1028,8 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   await runPreferenceChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api, upload, runAI, calculate, mode });
 
   await runDecisionChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
+
+  await runNationalPriceChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks });
 
   // Recovery checks use their own owner, before the final deliberately held global gate.
   await runSessionChecks({ cdp, evaluate, until, fill, click, pause, checks, api });

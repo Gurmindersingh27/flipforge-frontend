@@ -1,7 +1,7 @@
 import { formatItemMoney, formatItemPercent, ITEM_STATUS_TEXT } from "./itemAnalysis.ts";
-import type { ItemAnalyzeResponse, ItemAssumption, ItemFinancialInput } from "./types.ts";
+import type { ItemAnalyzeResponse, ItemAssumption, ItemAssessmentConfirmation, ItemFinancialInput } from "./types.ts";
 
-export type BuyingResaleSource = "assessment" | "user_estimate" | null;
+export type BuyingResaleSource = ItemAssessmentConfirmation["resale_source"] | null;
 export type BuyingFinancialResult = Omit<ItemAnalyzeResponse, "assumptions"> & {
   assumptions: Record<ItemFinancialInput, ItemAssumption>;
 };
@@ -24,16 +24,17 @@ const FIELD_TARGETS: Record<ItemFinancialInput, BuyingFieldTarget> = {
 };
 
 // Mapping only: the server and existing form builder still decide what is missing.
-export function buyingFieldTarget(field: string, ownResale: boolean): BuyingFieldTarget | null {
+export function buyingFieldTarget(field: string, ownResale: boolean, resaleRange = false): BuyingFieldTarget | null {
   if (!Object.hasOwn(FIELD_TARGETS, field)) return null;
   if (!ownResale && (field === "resale_low" || field === "resale_high")) return null;
+  if (resaleRange && field === "resale_high") return { id: "quick-resale_high", inCosts: false };
   return { ...FIELD_TARGETS[field as ItemFinancialInput] };
 }
 
-export function buyingMissingTargets(fields: readonly string[], ownResale: boolean): { field: string; target: BuyingFieldTarget | null }[] {
+export function buyingMissingTargets(fields: readonly string[], ownResale: boolean, resaleRange = false): { field: string; target: BuyingFieldTarget | null }[] {
   const seen = new Set<string>();
   return fields.flatMap(field => {
-    const target = buyingFieldTarget(field, ownResale);
+    const target = buyingFieldTarget(field, ownResale, resaleRange);
     if (target && seen.has(target.id)) return [];
     if (target) seen.add(target.id);
     return [{ field, target }];
@@ -41,6 +42,7 @@ export function buyingMissingTargets(fields: readonly string[], ownResale: boole
 }
 
 export function buyingResaleLabel(source: BuyingResaleSource): string {
+  if (source === "national_reference") return "National used asking prices; shipping excluded. Not confirmed sales. Local prices and condition may differ.";
   if (source === "assessment") return "Sale prices: online listings, not confirmed sales.";
   if (source === "user_estimate") return "Your sale estimate, not a confirmed sale price.";
   return "Sale assumptions used for this calculation; source not recorded.";

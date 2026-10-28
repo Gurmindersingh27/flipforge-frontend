@@ -7,7 +7,7 @@ import { SignInButton, useAuth, UserButton } from "@clerk/clerk-react";
 import { analyzeItem, assessItem, getItem, getItemAIBudget, getItemAssessment, ItemAssessmentError } from "../lib/api";
 import { formatItemMoney, itemFieldText, ITEM_LABELS, parseItemNumber } from "../lib/itemAnalysis";
 import { acceptFreshItemInputs, quickAssumptionsDetail, buildAssessmentRequest, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../lib/itemAssessment";
-import { buyingFieldTarget, buyingMissingTargets } from "../lib/itemBuyingDecision";
+import { buyingFieldTarget, buyingMissingTargets, buyingResaleLabel } from "../lib/itemBuyingDecision";
 import { buildSavedItemInputs, restoreItemForm } from "../lib/savedItems";
 import type { SavedItemForm } from "../lib/savedItems";
 import type { ItemAIBudget, ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResponse, ItemAssessmentResult, ItemFinancialInput, ItemPreferences, SavedItem } from "../lib/types";
@@ -21,6 +21,7 @@ import ItemSavePanel from "./ItemSavePanel";
 import ItemInspectionPanel from "./ItemInspectionPanel";
 import ItemPriceEvidence from "./ItemPriceEvidence";
 import ItemBuyingDecision from "./ItemBuyingDecision";
+import ItemNationalPriceReference from "./ItemNationalPriceReference";
 import "./PhotoItemsPage.css";
 
 function RepairLabel({ label }: { label: string }) {
@@ -108,7 +109,9 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const preferencesBlocked = !findId && isSignedIn && !preferencesReady && !(userId && readAssessmentRecovery(userId));
   const [manual, setManual] = useState(false);
   const [repairEdit, setRepairEdit] = useState(false);
-  const [ownResale, setOwnResale] = useState(true);
+  const [resaleSource, setResaleSource] = useState<ItemAssessmentConfirmation["resale_source"]>("user_estimate");
+  const ownResale = resaleSource !== "assessment";
+  const [resaleRange, setResaleRange] = useState(false);
   const [confirmation, setConfirmation] = useState<ItemAssessmentConfirmation | null>(null);
   const [initial, setInitial] = useState<SavedItem | null>(null);
   const [snapshot, setSnapshot] = useState<SavedItem | null>(null);
@@ -138,7 +141,8 @@ function QuickEditor({ findId }: { findId: string | null }) {
     const inputs = response.result.inputs;
     setForm(old => freshAssessment.current ? acceptFreshItemInputs(inputs, old, touched.current) : restoreItemForm(inputs));
     setResult(null);
-    setConfirmation(null); setOwnResale(response.result.resale === null || (freshAssessment.current && (touched.current.has("resale_low") || touched.current.has("resale_high"))));
+    setConfirmation(null); setResaleSource(response.result.resale === null || (freshAssessment.current && (touched.current.has("resale_low") || touched.current.has("resale_high"))) ? "user_estimate" : "assessment");
+    setResaleRange(false);
     setRepairEdit(response.result.repair_unknowns.length > 0 || (freshAssessment.current && touched.current.has("repairs"))); setManual(true); setErrors({}); setError("");
     setEditVersion(value => value + 1);
   }, []);
@@ -224,7 +228,10 @@ function QuickEditor({ findId }: { findId: string | null }) {
         setResult(saved.analysis_result); setManual(true); setRepairEdit(true);
         setEvidence(saved.assessment?.evidence ?? null);
         setConfirmation(saved.assessment?.confirmation ?? null);
-        setOwnResale(saved.assessment?.confirmation.resale_source !== "assessment");
+        const savedSource = saved.assessment?.confirmation.resale_source ?? "user_estimate";
+        setResaleSource(savedSource);
+        // Numeric inequality chooses the editor layout only, never provenance.
+        setResaleRange(savedSource === "national_reference" || (savedSource === "user_estimate" && (saved.inputs.resale_low ?? null) !== (saved.inputs.resale_high ?? null)));
         if (saved.assessment) setAssessment({ id: saved.assessment.assessment_id, schema_version: 1, status: "completed", result: saved.assessment.evidence, failure_code: null, actual_cost: null, message: null });
       } catch (failure) { if (failure instanceof ItemSessionChangedError) return; if (active) setError(failure instanceof Error ? failure.message : "Could not reopen this find."); }
       finally { if (active) setBusy(null); }
@@ -240,7 +247,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     return <label className="quick-field" key={field} htmlFor={`quick-${field}`}>{label}
       <input id={`quick-${field}`} value={itemFieldText(form, field)} type="text" inputMode="decimal" autoComplete="off"
         aria-invalid={Boolean(errors[field])} aria-describedby={errors[field] ? `quick-${field}-error` : undefined}
-        onChange={event => { touched.current.add(field); if (bothResale) touched.current.add("resale_high"); edit(old => ({ ...old, values: { ...old.values, [field]: event.target.value, ...(bothResale ? { resale_high: event.target.value } : {}) },
+        onChange={event => { touched.current.add(field); if (bothResale) touched.current.add("resale_high"); if (field === "resale_low" || field === "resale_high") setResaleSource("user_estimate"); edit(old => ({ ...old, values: { ...old.values, [field]: event.target.value, ...(bothResale ? { resale_high: event.target.value } : {}) },
           useDefault: { ...old.useDefault, ...(field in old.useDefault ? { [field]: false } : {}) } })); }} />
       {(field === "pickup" || field === "fee_fixed") && capturedPreferences && !touched.current.has(field) && <small>My default · editable for this find</small>}
       {errors[field] && <span id={`quick-${field}-error`} className="quick-error">{errors[field]}</span>}
@@ -324,7 +331,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
       const response = await analyzeItem(built.payload);
       if (sequence.current !== current) return;
       setForm(next); setResult(response);
-      setConfirmation(evidence ? { repairs, resale_source: ownResale ? "user_estimate" : "assessment", preset_acknowledged: true } : null);
+      setConfirmation(evidence ? { repairs, resale_source: resaleSource, preset_acknowledged: true } : null);
     } catch (failure) { if (sequence.current === current) setError((failure as Error).message); }
     finally { if (sequence.current === current) { locked.current = false; setBusy(null); } }
   }
@@ -333,9 +340,9 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const blocked = Boolean(busy);
   const aiAvailable = readiness === "available";
   const showPhotoForm = !isSignedIn || readiness !== "unavailable";
-  const errorTargets = buyingMissingTargets(Object.keys(errors), ownResale);
+  const errorTargets = buyingMissingTargets(Object.keys(errors), ownResale, resaleRange);
   function focusField(field: string) {
-    const target = buyingFieldTarget(field, ownResale);
+    const target = buyingFieldTarget(field, ownResale, resaleRange);
     if (!target) return;
     if (target.inCosts && costsRef.current) costsRef.current.open = true;
     document.getElementById(target.id)?.focus();
@@ -352,6 +359,15 @@ function QuickEditor({ findId }: { findId: string | null }) {
   function backToResale() {
     if (ownResale) focusField("resale_low");
     else document.getElementById("quick-resale-reference")?.focus();
+  }
+  const nationalRange = evidence?.resale == null ? evidence?.national_resale : null;
+  function chooseNational(useReference: boolean) {
+    if (locked.current || preferencesBlocked || !nationalRange) return;
+    touched.current.add("resale_low"); touched.current.add("resale_high");
+    setResaleRange(true); setResaleSource(useReference ? "national_reference" : "user_estimate");
+    edit(old => ({ ...old, values: { ...old.values,
+      resale_low: useReference ? String(nationalRange.low) : "",
+      resale_high: useReference ? String(nationalRange.high) : "" } }));
   }
   return <main className="quick-main">
     <header className="quick-intro"><p className="quick-eyebrow">A GOOD FIND STARTS HERE</p><h1>{snapshot ? "Back to your find." : <>See potential?<br /><em>Let's work it out.</em></>}</h1><p>{showPhotoForm ? <>Snap a photo. Tell us what you know.<br />Get a starting offer and a plan for the work.</> : <>Enter what you know.<br />We'll help you work out an offer.</>}</p></header>
@@ -407,13 +423,14 @@ function QuickEditor({ findId }: { findId: string | null }) {
             {snapshot && <p className="quick-muted">Saved version #{snapshot.id}. Photos aren't kept. Saving changes creates a new version.</p>}
             {evidence && <><p className="quick-muted">Photo-based draft. Check the material and condition in person.</p>{photos.length > 0 && <img className="quick-find-photo" src={`data:${photos[0].media_type};base64,${photos[0].data}`} alt="Your find" />}</>}
             {!evidence && <label className="quick-field" htmlFor="quick-item-name">What is it?<input id="quick-item-name" value={form.item_name} maxLength={200} placeholder="e.g. Wood chair" onChange={event => edit(old => ({ ...old, item_name: event.target.value }))} /></label>}
-            {evidence?.resale && !ownResale && <div id="quick-resale-reference" tabIndex={-1} className="quick-resale"><p>Similar items are listed for</p><strong>{formatItemMoney(evidence.resale.low)} - {formatItemMoney(evidence.resale.high)}</strong><p className="quick-small">Based on online asking prices, not confirmed sales. Pickup offered; distance isn't verified.</p><button type="button" className="quick-text-button" onClick={() => { touched.current.add("resale_low"); touched.current.add("resale_high"); setOwnResale(true); edit(old => ({ ...old, values: { ...old.values, resale_low: "", resale_high: "" } })); }}>Use my own sale estimate</button></div>}
+            {evidence?.resale && !ownResale && <div id="quick-resale-reference" tabIndex={-1} className="quick-resale"><p>Similar items are listed for</p><strong>{formatItemMoney(evidence.resale.low)} - {formatItemMoney(evidence.resale.high)}</strong><p className="quick-small">Based on online asking prices, not confirmed sales. Pickup offered; distance isn't verified.</p><button type="button" className="quick-text-button" onClick={() => { touched.current.add("resale_low"); touched.current.add("resale_high"); setResaleSource("user_estimate"); setResaleRange(false); edit(old => ({ ...old, values: { ...old.values, resale_low: "", resale_high: "" } })); }}>Use my own sale estimate</button></div>}
+            {nationalRange && <ItemNationalPriceReference range={nationalRange} selected={resaleSource === "national_reference"} disabled={Boolean(blocked || preferencesBlocked)} onApply={() => chooseNational(true)} onOwnEstimate={() => chooseNational(false)} />}
             {evidence && <div className="quick-price-guidance">
-              {evidence.resale === null && <p>No supported resale range was returned. Review the price sources or enter your own sale estimate.</p>}
+              {evidence.resale === null && <p>{nationalRange ? "No supported pickup range was returned. You can choose the national reference or enter your own sale estimate." : "No supported resale range was returned. Review the price sources or enter your own sale estimate."}</p>}
               <button type="button" className="quick-text-button" onClick={openSources}>Review price sources</button>
             </div>}
-            {ownResale && field("resale_low", "What do you think it'll sell for?", true)}
-            {ownResale && <p className="quick-small">Your sale estimate. You can change it later.</p>}
+            {ownResale && (resaleRange ? <div className="quick-fields">{field("resale_low", "Low sale estimate ($)")}{field("resale_high", "High sale estimate ($)")}</div> : field("resale_low", "What do you think it'll sell for?", true))}
+            {ownResale && <p className="quick-small" data-sale-input-source>{resaleSource === "national_reference" ? buyingResaleLabel(resaleSource) : "Your sale estimate. You can change it later."}</p>}
             {field("purchase_price", "What are they asking, including fees or tax?")}
             <div className="quick-repairs"><h3>The work to do</h3>
               {evidence && <>
@@ -442,7 +459,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
 
       <aside className="quick-answer-column">
         {result ? <section ref={resultRef} tabIndex={-1} className={`quick-answer tone-${result.status}`} aria-label="Your offer" data-quick-status={result.status}>
-          <ItemBuyingDecision result={result} resaleSource={evidence ? confirmation?.resale_source ?? null : "user_estimate"} ownResale={ownResale} onOpenCosts={openCosts} onFocusField={focusField} />
+          <ItemBuyingDecision result={result} resaleSource={evidence ? confirmation?.resale_source ?? null : "user_estimate"} ownResale={ownResale} resaleRange={resaleRange} onOpenCosts={openCosts} onFocusField={focusField} />
         </section> : evidence ? <section className="quick-explainer quick-next-step"><h2>Finish your buying estimate.</h2><p>Review the sale estimate and repair budget above, then calculate what you should pay.</p><p className="quick-small">Leave anything you don't know blank. Enter 0 only when a cost is none.</p></section> : <section className="quick-explainer"><span className="quick-spark" aria-hidden="true">✳</span><h2>Less guessing.<br />More good finds.</h2><p>We'll help you work out three things:</p><ol><li><span>01</span> What it might sell for</li><li><span>02</span> What needs fixing</li><li><span>03</span> What you should pay</li></ol><p className="quick-small">You have the final say. Check the condition, confirm the repairs and adjust anything that doesn't fit.</p></section>}
         {evidence && <ItemInspectionPanel unknowns={evidence.repair_unknowns} />}
         {evidence && <ItemPriceEvidence evidence={evidence} panelRef={sourcesRef} onBackToEstimate={backToResale} />}

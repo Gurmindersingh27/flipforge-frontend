@@ -9,11 +9,12 @@ interface Props {
   result: ItemAnalyzeResponse;
   resaleSource: BuyingResaleSource;
   ownResale: boolean;
+  resaleRange?: boolean;
   onOpenCosts: () => void;
   onFocusField: (field: string) => void;
 }
 
-export default function ItemBuyingDecision({ result, resaleSource, ownResale, onOpenCosts, onFocusField }: Props) {
+export default function ItemBuyingDecision({ result, resaleSource, ownResale, resaleRange = false, onOpenCosts, onFocusField }: Props) {
   const summaryId = useId();
   const [copyState, setCopyState] = useState<{ result: ItemAnalyzeResponse | null; source: BuyingResaleSource; status: "idle" | "copying" | "copied" | "failed" }>({ result: null, source: null, status: "idle" });
   const copyGeneration = useRef(0);
@@ -34,7 +35,7 @@ export default function ItemBuyingDecision({ result, resaleSource, ownResale, on
   if (result.status === "needs_info") return <>
     <p className="quick-eyebrow">FINISH YOUR BUYING ESTIMATE</p><h2>{itemDecision(result)}</h2>
     <p>Fill in these missing details before we can give you an offer.</p>
-    <ul className="quick-missing-fields">{buyingMissingTargets(result.missing_inputs, ownResale).map(({ field, target }, index) => <li key={`${field}-${index}`}>
+    <ul className="quick-missing-fields">{buyingMissingTargets(result.missing_inputs, ownResale, resaleRange).map(({ field, target }, index) => <li key={`${field}-${index}`}>
       {target ? <button type="button" className="quick-text-button" data-missing-field={field} data-field-target={target.id} onClick={() => onFocusField(field)}>{ITEM_LABELS[field as ItemFinancialInput]}</button>
         : Object.hasOwn(ITEM_LABELS, field) ? ITEM_LABELS[field as ItemFinancialInput] : field}
     </li>)}</ul>

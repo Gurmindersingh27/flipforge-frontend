@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: Gurmindersingh27/flipforge-backend
-          ref: e72439777bc48236da6e6867afb6ffbde2778a9d
+          ref: 8c6cc425f73501b83c784349e953f9675468bfff
           path: backend
       - uses: actions/setup-node@v4
         with:
@@ -57,6 +57,12 @@ jobs:
         env:
           BACKEND_DIR: ../backend
           ITEM_SESSION_ONLY: '1'
+      - name: Focused national reference browser checks
+        run: node tests/browserFlow.mjs
+        working-directory: frontend
+        env:
+          BACKEND_DIR: ../backend
+          ITEM_NATIONAL_ONLY: '1'
       - name: Browser to API to database regression
         run: node tests/browserFlow.mjs
         working-directory: frontend

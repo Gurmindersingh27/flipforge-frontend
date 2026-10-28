@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compareItemVersions } from '../src/lib/itemComparison.ts';
 import { ITEM_FIELDS } from '../src/lib/itemAnalysis.ts';
-import type { ItemAssumptions, ItemScenario, SavedItem } from '../src/lib/types.ts';
+import type { ItemAssumptions, ItemScenario, SavedItem, SavedItemAssessment } from '../src/lib/types.ts';
 
 function fixture(): SavedItem {
   const assumptions = Object.fromEntries([...ITEM_FIELDS, 'item_name', 'category'].map(field =>
@@ -14,6 +14,30 @@ function fixture(): SavedItem {
 }
 const scenario: ItemScenario = { resale: 300, contingency: 9, selling_fees: 0, own_time_value: 100,
   raw_max_offer: -50.4, max_offer: -51, cash_left: 49.6, profit_after_time: -50.4, target_shortfall: 150.4 };
+
+test('national versus own-estimate provenance is a change even when every saved number is equal', () => {
+  const previous = fixture(), current = fixture();
+  // Comparison consumes confirmation only, never evidence or recalculated prices.
+  previous.assessment = { confirmation: { resale_source: 'national_reference' } } as SavedItemAssessment;
+  current.assessment = { confirmation: { resale_source: 'user_estimate' } } as SavedItemAssessment;
+  current.notes = 'Only the numeric values are unchanged.';
+  const before = structuredClone([previous, current]);
+  const compared = compareItemVersions(previous, current);
+  assert.ok(compared.resaleSource.previous.includes('National used asking prices; shipping excluded.'));
+  assert.equal(compared.resaleSource.current, 'Your sale estimate, not a confirmed sale price.');
+  assert.equal(compared.resaleSource.changed, true);
+  assert.equal(compared.resaleSource.difference, null);
+  assert.equal(compared.onlyNotesOrLink, false);
+  assert.deepEqual([previous, current], before);
+});
+
+test('comparison preserves legacy unknown provenance and never infers national source from values', () => {
+  const previous = fixture(), current = fixture();
+  previous.assessment = { confirmation: {} } as SavedItemAssessment;
+  const compared = compareItemVersions(previous, current);
+  assert.equal(compared.resaleSource.previous, 'Sale assumptions used for this calculation; source not recorded.');
+  assert.equal(compared.resaleSource.current, 'Your sale estimate, not a confirmed sale price.');
+});
 
 test('saved assumptions distinguish unknown and zero, ignoring raw inputs without mutation', () => {
   const previous = fixture(), current = fixture();
