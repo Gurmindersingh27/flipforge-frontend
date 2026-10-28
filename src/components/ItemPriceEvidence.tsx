@@ -9,6 +9,17 @@ const reasons: Record<string, string> = {
   not_local_pickup: "Not identified as a local-pickup listing.",
   zero_price: "The listed price is zero.",
 };
+const nationalReasons: Record<string, string> = {
+  unsupported_price: "No supporting search quote verifies this price.",
+  zero_price: "The listed price is zero.",
+  not_comparable: "Not a comparable single item.",
+  not_shipped: "Not identified as a shipped listing.",
+  condition_new: "Identified as new, not used.",
+  condition_unknown: "Used condition was not established from the source.",
+  shipping_included: "The price includes shipping; an item-only price was not established.",
+  price_basis_unknown: "It is unclear whether this price excludes shipping.",
+  not_recorded: "National eligibility was not recorded for this assessment.",
+};
 
 export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate }: {
   evidence: ItemAssessmentResult;
@@ -21,8 +32,9 @@ export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate
     <p className="quick-small">{evidence.resale
       ? `${evidence.resale.eligible_count} listings support the range.`
       : "Not enough supported pickup listings to set a range."}</p>
+    {!evidence.resale && evidence.national_resale && <p className="quick-small">{evidence.national_resale.eligible_count} shipped used listings support the optional national reference.</p>}
     {onBackToEstimate && <button type="button" className="quick-text-button" onClick={onBackToEstimate}>Back to sale estimate</button>}
-    <p className="quick-small">Asking prices only, not confirmed sales. Pickup offered does not verify distance. Shipping listings are reference material and don’t set your range.</p>
+    <p className="quick-small">Asking prices only, not confirmed sales. Pickup offered does not verify distance. A qualifying national reference is optional and uses shipped item prices excluding shipping. Condition and price basis are extracted from the source, not independently verified.</p>
     <p className="quick-small">{Number.isNaN(date.getTime()) ? "Assessment date unavailable." : `Found during the assessment on ${date.toLocaleDateString("en-US")}.`} This is when FlipForge processed the answer, not a listing’s posting date or a check that it is still available.</p>
     {evidence.listings.map((listing, index) => {
       const link = safeItemLink(listing.url);
@@ -33,6 +45,12 @@ export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate
         <p>{formatItemMoney(listing.price)} · {listing.condition}</p>
         <p className="quick-small">{listing.eligible ? "Eligible price evidence" : "Reference only"}</p>
         {!listing.eligible && <p className="quick-small">Main reason: {listing.exclusion_reason && Object.hasOwn(reasons, listing.exclusion_reason) ? reasons[listing.exclusion_reason] : "This listing was excluded from the range; a recognized reason is unavailable."}</p>}
+        <p className="quick-small" data-national-reason>{listing.national_eligible === true
+          ? "National reference: eligible price evidence."
+          : `National reference · main reason: ${listing.national_exclusion_reason && Object.hasOwn(nationalReasons, listing.national_exclusion_reason)
+            ? nationalReasons[listing.national_exclusion_reason]
+            : listing.national_eligible === undefined || listing.national_exclusion_reason === undefined
+              ? nationalReasons.not_recorded : "This listing does not qualify; a recognized reason is unavailable."}`}</p>
         {quote && <blockquote><span>Search excerpt</span>{quote.length > 240 ? `${quote.slice(0, 240)}…` : quote}</blockquote>}
       </article>;
     })}

@@ -118,19 +118,27 @@ export interface ItemListingEvidence {
   condition: string; market: "local_pickup" | "national_shipping" | "unknown";
   location: string | null; retrieved_at: string; price_type: "asking";
   eligible: boolean; exclusion_reason: string | null; supporting_quotes: string[];
+  condition_type?: "used" | "new" | "unknown";
+  price_basis?: "item_only" | "shipping_included" | "unknown";
+  national_eligible?: boolean;
+  national_exclusion_reason?: string | null;
 }
 export interface ItemAssessmentConfirmation {
   repairs: { job_id: string; materials_cost: number }[];
-  resale_source: "assessment" | "user_estimate";
+  resale_source: "assessment" | "user_estimate" | "national_reference";
   preset_acknowledged: boolean;
+}
+export interface ItemResaleEstimate {
+  low: number; high: number; source: "online_asking_prices";
+  eligible_count: number; method: "linear_quartiles_v1"; label: string;
 }
 export interface ItemAssessmentResult {
   schema_version: 1;
   item_name: string; category: string; asking_price: number | null;
   asking_price_source: "user_entered" | "description_extraction";
   listings: ItemListingEvidence[];
-  resale: { low: number; high: number; source: "online_asking_prices";
-    eligible_count: number; method: "linear_quartiles_v1"; label: string } | null;
+  resale: ItemResaleEstimate | null;
+  national_resale?: ItemResaleEstimate | null;
   repair_suggestions: { job_id: string; label: string; materials_cost: number; reason: string; confirmed: false }[];
   repair_unknowns: string[]; repair_catalog_version: string; assessed_at: string; questions: string[];
   preset: { id: string; label: string; values: ItemAnalyzeRequest };

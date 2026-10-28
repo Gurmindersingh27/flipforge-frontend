@@ -23,7 +23,7 @@ export default function ItemVersionComparison({ previous, current }: { previous:
     <p className="flips-meta">Previous #{previous.id} → Current #{current.id}. Saved figures; neither version is recalculated or changed.</p>
     {(previous.assessment || current.assessment) && <p className="flips-evidence">Includes AI photo evidence: {previous.assessment && `previous #${previous.id}`}{previous.assessment && current.assessment && " and "}{current.assessment && `current #${current.id}`}. Evidence is not compared here.</p>}
     {comparison.onlyNotesOrLink && <p className="flips-parent">Only notes or the link changed.</p>}
-    <dl><Row row={comparison.assumptions[0]} /><Row row={comparison.status} /></dl>
+    <dl><Row row={comparison.assumptions[0]} /><Row row={comparison.status} /><Row row={comparison.resaleSource} /></dl>
     {comparison.scenarios.map(scenario => <div key={scenario.key}>
       <h4>{scenario.label}</h4><dl>{scenario.rows.map(row => <Row key={row.key} row={row} />)}</dl>
       {(scenario.previousNegative || scenario.currentNegative) && <p className="flips-caution">Even a free item misses your target under this resale estimate ({scenario.previousNegative && "previous"}{scenario.previousNegative && scenario.currentNegative && " and "}{scenario.currentNegative && "current"}).</p>}

@@ -58,6 +58,26 @@ test("summary provenance is explicit and never inferred from a stored number", (
   assert.equal(buildBuyingSummary(result(), null).includes("Your sale estimate"), false);
 });
 
+test("editable ranges navigate to distinct low/high inputs while single-price navigation stays deduplicated", () => {
+  assert.deepEqual(buyingMissingTargets(["resale_low", "resale_high", "resale_high"], true, true), [
+    { field: "resale_low", target: { id: "quick-resale_low", inCosts: false } },
+    { field: "resale_high", target: { id: "quick-resale_high", inCosts: false } },
+  ]);
+  assert.equal(buyingMissingTargets(["resale_low", "resale_high"], true, false).length, 1);
+  assert.equal(buyingFieldTarget("resale_high", false, true), null);
+});
+
+test("national summaries retain explicit shipping and condition caveats without changing server figures", () => {
+  const current = result(), before = structuredClone(current);
+  const text = buildBuyingSummary(current, "national_reference");
+  assert.ok(text.includes("National used asking prices; shipping excluded. Not confirmed sales. Local prices and condition may differ."));
+  assert.ok(text.includes("Low sale estimate: $200.00"));
+  assert.ok(text.includes("High sale estimate: $250.00"));
+  assert.ok(text.includes("Pay no more than: $115"));
+  assert.equal(text.includes("Your sale estimate"), false);
+  assert.deepEqual(current, before);
+});
+
 test("zero ceiling and explicit zero remain real values; null assumptions never become zero", () => {
   const current = result(); current.low!.max_offer = 0;
   current.assumptions.pickup.value = null; current.assumptions.fee_pct.value = null;

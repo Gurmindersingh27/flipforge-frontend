@@ -1,5 +1,6 @@
 import { formatItemMoney, formatItemPercent, ITEM_FIELDS, ITEM_LABELS, ITEM_STATUS_TEXT } from "./itemAnalysis.ts";
 import type { ItemAssumption, SavedItem } from "./types.ts";
+import { buyingResaleLabel } from "./itemBuyingDecision.ts";
 
 type Unit = "money" | "offer" | "percent" | "hours" | "text";
 export interface ComparisonRow {
@@ -48,6 +49,9 @@ export function compareItemVersions(previous: SavedItem, current: SavedItem) {
       old.value, next.value, textField ? "text" : field.endsWith("_pct") ? "percent" : field === "hours" ? "hours" : "money", provenance(old), provenance(next));
   });
   const status = row("status", "Saved status", ITEM_STATUS_TEXT[a.status].title, ITEM_STATUS_TEXT[b.status].title, "text");
+  const resaleSource = row("resale_source", "Sale estimate source",
+    buyingResaleLabel(previous.assessment ? previous.assessment.confirmation.resale_source ?? null : "user_estimate"),
+    buyingResaleLabel(current.assessment ? current.assessment.confirmation.resale_source ?? null : "user_estimate"), "text");
   const scenarios = (["low", "high"] as const).map(side => ({
     key: side, label: side === "low" ? "Low resale estimate" : "High resale estimate",
     previousNegative: (a[side]?.max_offer ?? 0) < 0,
@@ -58,7 +62,7 @@ export function compareItemVersions(previous: SavedItem, current: SavedItem) {
   }));
   const metadata = [row("notes", "Notes", previous.notes, current.notes, "text"),
     row("listing_url", "Listing link", previous.listing_url, current.listing_url, "text")];
-  const estimateChanged = [status, ...assumptions, ...scenarios.flatMap(s => s.rows)].some(r => r.changed);
-  return { assumptions, status, scenarios, metadata,
+  const estimateChanged = [status, resaleSource, ...assumptions, ...scenarios.flatMap(s => s.rows)].some(r => r.changed);
+  return { assumptions, status, resaleSource, scenarios, metadata,
     onlyNotesOrLink: !estimateChanged && metadata.some(r => r.changed) };
 }
