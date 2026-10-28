@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 export const sessionClerkFixture = `
 import {useSyncExternalStore} from 'react';
 const signedIn=!new URLSearchParams(location.search).has('fixtureSignedOut');
-let state={isSignedIn:signedIn,isLoaded:!new URLSearchParams(location.search).has('fixtureAuthLoading'),userId:signedIn?'browser-fixture':null,sessionId:signedIn?'session-browser-fixture':null};
+const initialUser=window.sessionFixtureUser??'browser-fixture';
+let state={isSignedIn:signedIn,isLoaded:!new URLSearchParams(location.search).has('fixtureAuthLoading'),userId:signedIn?initialUser:null,sessionId:signedIn?'session-'+initialUser:null};
 const listeners=new Set();
 window.switchFixtureUser=userId=>{state={isSignedIn:Boolean(userId),isLoaded:true,userId,sessionId:userId?'session-'+userId:null};listeners.forEach(fn=>fn());};
 window.switchFixtureSession=sessionId=>{state={...state,sessionId};listeners.forEach(fn=>fn());};
@@ -57,15 +58,17 @@ window.fetch=async(input,init={})=>{
 };
 `;
 
-export async function runSessionChecks({ cdp, evaluate, until, fill, click, pause, checks, api }) {
+export async function runSessionChecks({ cdp, evaluate, until, fill, click, pause, checks, api: originalApi }) {
+  const owner='session-recovery-fixture';
+  const api=async path=>{const response=await fetch('http://127.0.0.1:8000'+path,{headers:{Authorization:'Bearer '+owner}});assert.equal(response.status,200);return response.json();};
   const input = id => `document.getElementById(${JSON.stringify(id)})`;
-  const marker = `sessionStorage.getItem('flipforge:item-assessment:browser-fixture')`;
+  const marker = `sessionStorage.getItem('flipforge:item-assessment:session-recovery-fixture')`;
   const rows = (path, method = 'GET') => `window.sessionRequests.filter(r=>r.path===${JSON.stringify(path)}&&r.method===${JSON.stringify(method)})`;
   const measure = kind => `performance.getEntriesByName('flipforge.items.${kind}_ms')`;
   const faults = async (path, method='GET', remaining=1, extra={}) => evaluate(`window.sessionFaults[${JSON.stringify(method+' '+path)}]=${JSON.stringify({remaining,...extra})}`);
   const refreshes = () => evaluate('window.sessionTokenFixture.refreshes');
   const noRaw = async () => assert.equal(await evaluate(`/Token has expired|Invalid token:|private Clerk detail|Token missing sub/.test(document.body.textContent)`),false);
-  const fixture = await cdp('Page.addScriptToEvaluateOnNewDocument',{source:networkFixture});
+  const fixture = await cdp('Page.addScriptToEvaluateOnNewDocument',{source:networkFixture+`window.sessionFixtureUser=${JSON.stringify(owner)};`});
   async function navigate(path='/items', startup='') {
     await evaluate(`Object.keys(sessionStorage).filter(k=>k.startsWith('flipforge:item-assessment:')).forEach(k=>sessionStorage.removeItem(k));window.beforeSessionNavigation=true`);
     let setup;
@@ -90,9 +93,8 @@ export async function runSessionChecks({ cdp, evaluate, until, fill, click, paus
     while(offset!==null){const page=await api('/api/items?limit=20&offset='+offset);items.push(...page.items);offset=page.next_offset;}
     return items;
   }
-  const originalHouses=await api('/api/deals');
+  const originalHouses=await originalApi('/api/deals');
   await fetch('http://127.0.0.1:8000/browser-fixture/ai/normal',{method:'POST'});
-  await fetch('http://127.0.0.1:8000/browser-fixture/preferences',{method:'DELETE'});
   await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await navigate('/items',`window.sessionFaults={'GET /api/items/ai-budget':{remaining:1},'GET /api/items/preferences':{remaining:1}};window.sessionTokenFixture.delayMs=120;`);
   await ready();
@@ -211,7 +213,7 @@ export async function runSessionChecks({ cdp, evaluate, until, fill, click, paus
     await estimate();await until(`typeof window.releaseSessionToken==='function'`);
     await evaluate(`${change};window.releaseSessionToken()`);await pause(100);
     await checkCount('/api/items/assess','POST',1);
-    assert.equal(await evaluate(input('quick-description')+'?.value'),'');
+    assert.equal(await evaluate(input('quick-description')+"?.value??''"),'');
     assert.equal(await evaluate('document.querySelectorAll(".quick-photo img").length'),0);
     assert.equal(await evaluate(`Boolean(document.querySelector('.quick-resale'))`),false);
   }
@@ -230,6 +232,6 @@ export async function runSessionChecks({ cdp, evaluate, until, fill, click, paus
   assert.equal((await evaluate(measure('assessment'))).length,1);
   checks.push('Retry shares the original operation deadline; an unconfirmed second HTTP attempt keeps status recovery and one timing');
 
-  await noRaw();assert.deepEqual(await api('/api/deals'),originalHouses);
+  await noRaw();assert.deepEqual(await originalApi('/api/deals'),originalHouses);
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:fixture.identifier});
 }
