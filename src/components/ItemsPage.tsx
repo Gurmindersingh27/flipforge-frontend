@@ -1,3 +1,5 @@
+import { useItemSession } from "../lib/useItemSession";
+import { ItemSessionChangedError } from "../lib/itemSession";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -49,15 +51,15 @@ function Scenario({ value, high, offersOnly }: { value: ItemScenario; high?: boo
 }
 
 export default function ItemsPage() {
-  const { isLoaded, isSignedIn, userId } = useAuth();
+  const { isLoaded, isSignedIn, userId, sessionId } = useAuth();
   const [params] = useSearchParams();
   const saved = params.get("saved");
-  const [identity, setIdentity] = useState({ userId: isLoaded ? userId ?? null : null, generation: 0 });
+  const [identity, setIdentity] = useState({ userId: isLoaded ? userId ?? null : null, sessionId, generation: 0 });
   const resolvedUser = userId ?? null;
-  if (isLoaded && identity.userId !== resolvedUser) {
+  if (isLoaded && (identity.userId !== resolvedUser || identity.sessionId !== sessionId)) {
     // Anonymous drafts survive sign-in. Leaving an established account clears
     // the entire editor, including pending saves and any private saved data.
-    setIdentity({ userId: resolvedUser, generation: identity.generation + (identity.userId === null ? 0 : 1) });
+    setIdentity({ userId: resolvedUser, sessionId, generation: identity.generation + (identity.userId === null ? 0 : 1) });
   }
   if (saved !== null && !isLoaded) return <p role="status">Loading sign-in…</p>;
   if (saved !== null && !isSignedIn) return <div className="space-y-4 py-8"><p>Sign in to reopen this saved item.</p><SignInButton mode="modal"><button className="min-h-11 rounded-lg border border-white/30 px-4 py-2">Sign in to reopen item</button></SignInButton><Link to="/items" className="block py-2 text-amber-200 underline">New item</Link></div>;
@@ -65,7 +67,8 @@ export default function ItemsPage() {
 }
 
 function ItemsEditor({ savedId }: { savedId: string | null }) {
-  const { getToken, isSignedIn } = useAuth();
+  const { isSignedIn } = useAuth();
+  const withSession = useItemSession();
   const [form, setForm] = useState(newSavedItemForm);
   const touched = useRef(new Set<ItemFinancialInput>());
   const preferenceSealed = useRef(false);
@@ -102,19 +105,16 @@ function ItemsEditor({ savedId }: { savedId: string | null }) {
     void (async () => {
       try {
         if (!/^[1-9]\d*$/.test(savedId) || !Number.isSafeInteger(Number(savedId))) throw new Error("Item not found.");
-        const token = await getToken();
-        if (!active) return;
-        if (!token) throw new Error("Sign in again to reopen this item.");
-        const saved = await getItem(Number(savedId), token);
+        const saved = await withSession((token, signal) => getItem(Number(savedId), token, signal), () => active);
         if (!active) return;
         setForm(restoreItemForm(saved.inputs)); setSnapshot(saved); setInitial(saved);
         setResult(saved.analysis_result); setSavedResult(true); setReopenError("");
-      } catch (error) {
+      } catch (error) { if (error instanceof ItemSessionChangedError) return;
         if (active) setReopenError(error instanceof Error ? error.message : "Could not reopen this item.");
       } finally { if (active) setReopening(false); }
     })();
     return () => { active = false; };
-  }, [savedId, getToken, loadAttempt]);
+  }, [savedId, withSession, loadAttempt]);
 
   useEffect(() => () => { sequence.current++; inFlight.current = false; }, []);
   useEffect(() => {

@@ -1,3 +1,5 @@
+import { useItemSession } from "../lib/useItemSession";
+import { ItemSessionChangedError, ItemSignInError } from "../lib/itemSession";
 import { useEffect, useRef, useState } from 'react';
 import { useAuth, SignInButton } from '@clerk/clerk-react';
 import { getItemPreferences, putItemPreferences } from '../lib/api';
@@ -7,43 +9,37 @@ import type { ItemPreferences } from '../lib/types';
 
 type Props = { onResolved: (profile: ItemPreferences | null) => void; light?: boolean; disabled?: boolean };
 export default function ItemPreferencesPanel(props: Props) {
-  const { isLoaded, isSignedIn, userId } = useAuth();
+  const { isLoaded, isSignedIn, userId, sessionId } = useAuth();
   if (!isLoaded) return <p role="status">Loading buying preferences…</p>;
   if (!isSignedIn) return <details className={props.light ? 'quick-details' : 'rounded-xl border border-white/15 p-4'}>
     <summary>My buying preferences</summary><p>Sign in to remember preferences across devices.</p>
     <SignInButton mode="modal"><button type="button" className={props.light ? 'quick-secondary' : 'min-h-11 underline'}>Sign in for preferences</button></SignInButton>
   </details>;
-  return <PreferencesEditor key={userId} {...props} />;
+  return <PreferencesEditor key={`${userId}:${sessionId}`} {...props} />;
 }
 function PreferencesEditor({ onResolved, light, disabled }: Props) {
-  const { getToken } = useAuth();
+  const withSession = useItemSession();
   const [form, setForm] = useState(() => preferenceForm(null));
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed' | 'continued'>('loading');
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [saveFailed, setSaveFailed] = useState(false);
-  const alive = useRef(false);
   const request = useRef<Promise<ItemPreferences | null> | null>(null);
   const resolved = useRef(false);
   const generation = useRef(0);
   const savingRef = useRef(false);
   useEffect(() => {
     let active = true;
-    alive.current = true; const current = ++generation.current;
-    request.current ??= (async () => {
-      const token = await getToken();
-      if (!alive.current) throw new Error('Account changed.');
-      if (!token) throw new Error('Sign in again to load preferences.');
-      return getItemPreferences(token);
-    })();
+    const current = ++generation.current;
+    request.current ??= withSession((token, signal) => getItemPreferences(token, signal));
     void request.current.then(profile => {
       if (!active) return;
       setForm(preferenceForm(profile)); setStatus('ready');
       if (!resolved.current) { resolved.current = true; onResolved(profile); }
-    }).catch(() => { if (active) setStatus('failed'); });
-    return () => { active = false; alive.current = false; generation.current = current + 1; };
-  }, [getToken, onResolved, attempt]);
+    }).catch(error => { if (active && !(error instanceof ItemSessionChangedError)) { setStatus('failed'); setMessage(error instanceof ItemSignInError ? error.message : ''); } });
+    return () => { active = false; generation.current = current + 1; };
+  }, [withSession, onResolved, attempt]);
   async function save() {
     if (status !== 'ready' || savingRef.current || disabled) return;
     let payload;
@@ -52,22 +48,19 @@ function PreferencesEditor({ onResolved, light, disabled }: Props) {
     const current = generation.current;
     savingRef.current = true; setSaving(true); setMessage(''); setSaveFailed(false);
     try {
-      const token = await getToken();
-      if (current !== generation.current) return;
-      if (!token) throw new Error('Sign in again.');
-      const profile = await putItemPreferences(payload, token);
+      const profile = await withSession((token, signal) => putItemPreferences(payload, token, signal), () => current === generation.current);
       if (current !== generation.current) return;
       setForm(preferenceForm(profile)); setMessage('Preferences saved for your next find. This find is unchanged.');
-    } catch {
+    } catch (error) { if (error instanceof ItemSessionChangedError) return;
       if (current !== generation.current) return;
-      setSaveFailed(true); setMessage('Save not confirmed. It may already have applied. Retrying replaces the whole set, including changes from another device.');
+      setSaveFailed(true); setMessage(`${error instanceof ItemSignInError ? `${error.message} ` : ''}Save not confirmed. It may already have applied. Retrying replaces the whole set, including changes from another device.`);
     } finally {
       if (current === generation.current) { savingRef.current = false; setSaving(false); }
     }
   }
   return <section aria-label="Buying preferences" className={light ? 'quick-card' : 'min-w-0 rounded-xl border border-white/15 bg-white/5 p-4 sm:p-6'}>
     {status === 'loading' && <p role="status">Loading buying preferences… You can choose photos while you wait.</p>}
-    {(status === 'failed' || status === 'continued') && <div role="alert"><p>{status === 'continued' ? 'Retry loading to change your preferences.' : "Couldn't load your buying preferences."}</p>
+    {(status === 'failed' || status === 'continued') && <div role="alert"><p>{status === 'continued' ? 'Retry loading to change your preferences.' : message || "Couldn't load your buying preferences."}</p>
       <button type="button" className={light ? 'quick-secondary' : 'min-h-11 px-3 underline'} onClick={() => { request.current = null; setStatus('loading'); setAttempt(n => n + 1); }}>Retry loading preferences</button>
       {status === 'failed' && <button type="button" className={light ? 'quick-text-button' : 'min-h-11 px-3 underline'} onClick={() => { resolved.current = true; onResolved(null); setStatus('continued'); }}>Continue without remembered preferences</button>}
     </div>}
