@@ -51,6 +51,12 @@ jobs:
       - run: npm ci
         working-directory: frontend
       - run: pip install -r backend/requirements.txt
+      - name: Focused session recovery browser checks
+        run: node tests/browserFlow.mjs
+        working-directory: frontend
+        env:
+          BACKEND_DIR: ../backend
+          ITEM_SESSION_ONLY: '1'
       - name: Browser to API to database regression
         run: node tests/browserFlow.mjs
         working-directory: frontend

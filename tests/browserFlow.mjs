@@ -10,7 +10,7 @@ import { restoreItemForm, buildSavedItemInputs } from "../src/lib/savedItems.ts"
 import { formatItemMoney, ITEM_STATUS_TEXT } from "../src/lib/itemAnalysis.ts";
 import { roundTripCases } from "./savedItems.test.ts";
 import { photoBackendFixture, runPhotoItemChecks } from "./itemPhotoFlow.mjs";
-import { sessionClerkFixture } from "./itemSessionFlow.mjs";
+import { sessionClerkFixture, runSessionChecks } from "./itemSessionFlow.mjs";
 
 const root = process.cwd();
 const backend = resolve(process.env.BACKEND_DIR ?? "../flipforge-backend");
@@ -226,6 +226,14 @@ try {
   ({ sessionId } = await cdp("Target.attachToTarget", { targetId, flatten: true }, false));
   await cdp("Page.enable"); await cdp("Runtime.enable"); await cdp("Network.enable");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+  if (process.env.ITEM_SESSION_ONLY === "1") {
+    await cdp("Page.navigate", {url:"http://127.0.0.1:5173/items?fixtureSignedOut=1"});
+    await until(`Boolean(document.querySelector('.items-quick'))`);
+    await runSessionChecks({ cdp, evaluate, until, fill, click, pause, checks, api });
+    assert.deepEqual(errors, []);
+    writeFileSync(join(artifacts, "session-results.json"), JSON.stringify({checks, errors}, null, 2));
+    console.log(JSON.stringify({result:"PASS", scope:"session-only", checks}));
+  } else {
   const beforeSample = await api("/api/deals");
   await cdp("Page.navigate", { url: "http://127.0.0.1:5173/?fixtureSignedOut=1" });
   await until(`Boolean(document.querySelector('section[aria-label="Sample deal"]'))`);
@@ -2017,6 +2025,7 @@ try {
   checks.push("No browser runtime exceptions");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));
   console.log(JSON.stringify({ result: "PASS", checks }));
+  }
 } catch (error) {
   console.error(error);
   if (socket && sessionId) {

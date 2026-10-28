@@ -64,7 +64,7 @@ export async function runSessionChecks({ cdp, evaluate, until, fill, click, paus
   const input = id => `document.getElementById(${JSON.stringify(id)})`;
   const marker = `sessionStorage.getItem('flipforge:item-assessment:session-recovery-fixture')`;
   const rows = (path, method = 'GET') => `window.sessionRequests.filter(r=>r.path===${JSON.stringify(path)}&&r.method===${JSON.stringify(method)})`;
-  const measure = kind => `performance.getEntriesByName('flipforge.items.${kind}_ms')`;
+  const measure = kind => `performance.getEntriesByName('flipforge.items.${kind}_ms').map(e=>({duration:e.duration,startTime:e.startTime}))`;
   const faults = async (path, method='GET', remaining=1, extra={}) => evaluate(`window.sessionFaults[${JSON.stringify(method+' '+path)}]=${JSON.stringify({remaining,...extra})}`);
   const refreshes = () => evaluate('window.sessionTokenFixture.refreshes');
   const noRaw = async () => assert.equal(await evaluate(`/Token has expired|Invalid token:|private Clerk detail|Token missing sub/.test(document.body.textContent)`),false);
