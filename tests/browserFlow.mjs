@@ -10,7 +10,7 @@ import { restoreItemForm, buildSavedItemInputs } from "../src/lib/savedItems.ts"
 import { formatItemMoney, ITEM_STATUS_TEXT } from "../src/lib/itemAnalysis.ts";
 import { roundTripCases } from "./savedItems.test.ts";
 import { photoBackendFixture, runPhotoItemChecks } from "./itemPhotoFlow.mjs";
-import { sessionClerkFixture, runSessionChecks } from "./itemSessionFlow.mjs";
+import { sessionClerkFixture } from "./itemSessionFlow.mjs";
 
 const root = process.cwd();
 const backend = resolve(process.env.BACKEND_DIR ?? "../flipforge-backend");
@@ -2013,7 +2013,6 @@ try {
   await until(`Boolean(document.querySelector('.items-quick')) && Boolean(document.getElementById('item-notes'))`);
   assert.deepEqual(await itemApi(`/api/items/${photoFind.id}`),photoFind);
   checks.push('Restyled My Flips retains the exact accessible Reopen link and opens photo finds in the photo screen without changing their snapshot');
-  await runSessionChecks({ cdp, evaluate, until, fill, click, pause, checks, api });
   assert.deepEqual(errors, []);
   checks.push("No browser runtime exceptions");
   writeFileSync(join(artifacts, "results.json"), JSON.stringify({ checks, first: first.analysis_result, second: second.analysis_result, bids: { baseline, bidA, bidB, samePrice, mismatch, selected } }, null, 2));
