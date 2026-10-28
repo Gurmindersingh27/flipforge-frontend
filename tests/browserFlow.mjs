@@ -20,6 +20,7 @@ mkdirSync(artifacts, { recursive: true });
 const children = [], errors = [], checks = [];
 const browserApiRequests = [];
 const browserApiWrites = [];
+const savedItemTimings = [];
 let socket, sequence = 0, sessionId;
 const pending = new Map();
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -204,7 +205,18 @@ async function screenshot(name) {
 try {
   writeFileSync(join(temp, "fixture.py"), `import os\nos.environ['DATABASE_URL'] = ${JSON.stringify(`sqlite:///${temp}/fixture.db`)}\nos.environ['CLERK_JWKS_URL'] = ''\nfrom app.main import app\nfrom app.auth import get_current_user_id\nfrom fastapi import Header\ndef fixture_owner(authorization: str = Header(default='Bearer browser-fixture')):\n    return authorization.removeprefix('Bearer ')\napp.dependency_overrides[get_current_user_id] = fixture_owner\n${photoBackendFixture}\nos.environ['ITEMS_AI_ALLOWED_USER_IDS'] += ',session-recovery-fixture'\n`);
   // Signed-out selection exists only in this temporary fixture, never in production.
-  writeFileSync(join(temp, "clerk.ts"), sessionClerkFixture);
+  // Instrument only the temporary Clerk substitute. Production auth is unchanged.
+  const tokenDeclaration = "const getToken=async options=>{";
+  const authExport = "export const useAuth=";
+  assert.equal(sessionClerkFixture.split(tokenDeclaration).length, 2);
+  assert.equal(sessionClerkFixture.split(authExport).length, 2);
+  const timedClerkFixture = sessionClerkFixture
+    .replace(tokenDeclaration, "const fixtureGetToken=async options=>{")
+    .replace(authExport, `const getToken=async options=>{
+      const finish=window.beginSavedItemTokenTiming?.();
+      try{return await fixtureGetToken(options);}finally{finish?.();}
+    };\n${authExport}`);
+  writeFileSync(join(temp, "clerk.ts"), timedClerkFixture);
   writeFileSync(join(temp, "vite.mjs"), `import base from ${JSON.stringify(join(root, "vite.config.ts"))};export default {...base,root:${JSON.stringify(root)},resolve:{alias:{'@clerk/clerk-react':${JSON.stringify(join(temp, "clerk.ts"))}}},server:{host:'127.0.0.1',port:5173,strictPort:true,fs:{allow:[${JSON.stringify(root)},${JSON.stringify(temp)}]}}};`);
   start(process.env.PYTHON ?? "python", ["-m", "uvicorn", "fixture:app", "--host", "127.0.0.1", "--port", "8000"], { PYTHONPATH: `${backend}:${temp}` });
   start(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "--config", join(temp, "vite.mjs"), "--configLoader", "native"], { VITE_API_BASE_URL: "http://127.0.0.1:8000" });
@@ -217,6 +229,17 @@ try {
     const msg = JSON.parse(event.data);
     if (msg.id) { const waiter = pending.get(msg.id); if (!waiter) return; pending.delete(msg.id); msg.error ? waiter.reject(new Error(JSON.stringify(msg.error))) : waiter.resolve(msg.result); }
     if (msg.method === "Runtime.exceptionThrown") errors.push(JSON.stringify(msg.params.exceptionDetails));
+    if (msg.method === "Runtime.consoleAPICalled" && msg.params.args?.[0]?.value === "ITEM_TEST_TIMING") {
+      // Explicit allowlist: no tokens, bodies, URLs, request UUIDs or exception text.
+      const raw = JSON.parse(msg.params.args[1].value), row = { context: msg.params.executionContextId };
+      for (const key of ["id", "at_ms", "elapsed_ms", "budget_ms", "status", "deadline_id"])
+        if (Number.isFinite(raw[key])) row[key] = raw[key];
+      if (["deadline_start", "deadline_fired", "deadline_clear", "token_start", "token_end", "send", "response", "body_complete", "body_error", "abort", "fetch_error"].includes(raw.event)) row.event = raw.event;
+      if (["pass", "headers", "body", "401", "403", "404", "409", "422", "429", "500", "503", "slow", "lost", "held-save", "hold-list", "hold-comparison", "delayed-read", "hostile-link"].includes(raw.mode)) row.mode = raw.mode;
+      if (["GET", "POST"].includes(raw.method)) row.method = raw.method;
+      if (["save", "list", "item"].includes(raw.route)) row.route = raw.route;
+      savedItemTimings.push(row);
+    }
     if (msg.method === "Network.requestWillBeSent" && new URL(msg.params.request.url).origin === "http://127.0.0.1:8000") {
       browserApiRequests.push(msg.params.request.url);
       if (!["GET", "HEAD", "OPTIONS"].includes(msg.params.request.method)) browserApiWrites.push({url:msg.params.request.url,method:msg.params.request.method});
@@ -1532,21 +1555,61 @@ try {
   }
   checks.push('267 representative/generated restore-and-rebuild requests match the complete real backend analysis, including assumptions and sources');
   const { identifier: savedItemsFixture } = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
-    const nativeFetch=window.fetch.bind(window), nativeTimeout=window.setTimeout.bind(window);
-    window.setTimeout=(fn,ms,...args)=>nativeTimeout(fn,ms===120000?(['hold-list','hold-comparison'].includes(window.savedItemMode)?10000:160):ms===8000?40:ms,...args);
+    const nativeFetch=window.fetch.bind(window), nativeTimeout=window.setTimeout.bind(window), nativeClearTimeout=window.clearTimeout.bind(window);
     window.savedItemRequests=[];window.savedItemMode='pass';
+    window.savedItemDeadlines=[];window.savedItemRequestTimings=[];window.savedItemTokenTimings=[];
+    const timers=new Map();let serial=0,firingDeadline=null;
+    const now=()=>Math.round(performance.now()*10)/10;
+    const record=(event,fields)=>console.debug('ITEM_TEST_TIMING',JSON.stringify({event,at_ms:now(),...fields}));
+    window.beginSavedItemTokenTiming=()=>{
+      const row={id:++serial,mode:window.savedItemMode,start_ms:now()};window.savedItemTokenTimings.push(row);
+      record('token_start',{id:row.id,mode:row.mode});
+      return ()=>{row.end_ms=now();row.elapsed_ms=row.end_ms-row.start_ms;record('token_end',{id:row.id,mode:row.mode,elapsed_ms:row.elapsed_ms});};
+    };
+    window.setTimeout=(fn,ms,...args)=>{
+      const mode=window.savedItemMode, fault=['headers','body'].includes(mode);
+      // Normal requests retain 120 seconds. Only deliberate hangs get 160ms.
+      // Held reads retain their existing bounded 10-second window.
+      const budget=ms===120000?(fault?160:['hold-list','hold-comparison'].includes(mode)?10000:ms):ms===8000&&(fault||mode==='slow')?40:ms;
+      if(ms!==120000)return nativeTimeout(fn,budget,...args);
+      const row={id:++serial,mode,budget_ms:budget,start_ms:now()};window.savedItemDeadlines.push(row);
+      record('deadline_start',{id:row.id,mode,budget_ms:budget});
+      const timer=nativeTimeout(()=>{
+        row.fired_ms=now();record('deadline_fired',{id:row.id,mode,budget_ms:budget,elapsed_ms:row.fired_ms-row.start_ms});
+        firingDeadline=row.id;try{fn(...args);}finally{firingDeadline=null;}
+      },budget);
+      timers.set(timer,row);return timer;
+    };
+    window.clearTimeout=timer=>{
+      const row=timers.get(timer);
+      if(row){record('deadline_clear',{id:row.id,mode:row.mode,elapsed_ms:now()-row.start_ms});timers.delete(timer);}
+      nativeClearTimeout(timer);
+    };
     window.fetch=async(input,init={})=>{
       const url=new URL(typeof input==='string'?input:input.url,location.href);
       // Preferences have their own transport/counter coverage in itemPhotoFlow.
       if(!url.pathname.startsWith('/api/items') || ['/api/items/analyze','/api/items/preferences'].includes(url.pathname))return nativeFetch(input,init);
       const request={path:url.pathname,method:init.method??'GET',auth:new Headers(init.headers).get('Authorization'),body:init.body?JSON.parse(init.body):null};window.savedItemRequests.push(request);
-      const mode=window.savedItemMode;
+      const mode=window.savedItemMode, timing={id:++serial,mode,method:request.method,route:url.pathname==='/api/items/save'?'save':url.pathname==='/api/items'?'list':'item',send_ms:now(),deadline_ids:[...timers.values()].map(row=>row.id)};
+      window.savedItemRequestTimings.push(timing);
+      const event=(kind,extra={})=>record(kind,{id:timing.id,mode,method:timing.method,route:timing.route,elapsed_ms:now()-timing.send_ms,...extra});
+      event('send');
+      init.signal?.addEventListener('abort',()=>{timing.abort_ms=now();timing.deadline_id=firingDeadline;event('abort',{deadline_id:firingDeadline});},{once:true});
+      const observe=response=>{
+        timing.response_ms=now();timing.status=response.status;event('response',{status:response.status});
+        const json=response.json.bind(response);
+        response.json=async()=>{
+          try{const data=await json();timing.body_ms=now();event('body_complete');return data;}
+          catch(error){timing.body_error_ms=now();event('body_error');throw error;}
+        };
+        return response;
+      };
       if(mode==='headers')return new Promise((resolve,reject)=>init.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError'))));
-      if(mode==='body')return new Response(new ReadableStream({start(controller){init.signal.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')));}}),{status:200});
-      if(['401','403','404','409','422','429','500','503'].includes(mode))return Response.json({detail:mode==='422'?[{loc:['body','notes'],msg:'Invalid notes fixture'}]:'Rejected fixture'},{status:Number(mode)});
+      if(mode==='body')return observe(new Response(new ReadableStream({start(controller){init.signal.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')));}}),{status:200}));
+      if(['401','403','404','409','422','429','500','503'].includes(mode))return observe(Response.json({detail:mode==='422'?[{loc:['body','notes'],msg:'Invalid notes fixture'}]:'Rejected fixture'},{status:Number(mode)}));
       if(mode==='slow')await new Promise(resolve=>nativeTimeout(resolve,70));
       if(mode==='hold-list' && url.pathname==='/api/items')await new Promise(resolve=>window.releaseSavedItemList=resolve);
-      const response=await nativeFetch(input,init);
+      const response=observe(await nativeFetch(input,init).catch(error=>{event('fetch_error');throw error;}));
       if(mode==='hold-comparison' && url.pathname.startsWith('/api/items/') && request.method==='GET') {
         const saved=await response.json();await new Promise(resolve=>window.releaseComparison=resolve);return Response.json(saved);
       }
@@ -1565,8 +1628,34 @@ try {
     await until(`!(${itemInput('hourly_value')}).disabled && !(${itemInput('contingency_pct')}).disabled`);
     for (const [field,value] of Object.entries(values)) await fill(itemInput(field), value);
   }
+  async function assertSavedItemTimeout(mode, method, route) {
+    const { request, deadline } = await evaluate(`(()=>{
+      const request=window.savedItemRequestTimings.findLast(row=>row.mode===${JSON.stringify(mode)}&&row.method===${JSON.stringify(method)}&&row.route===${JSON.stringify(route)});
+      return {request,deadline:window.savedItemDeadlines.find(row=>row.id===request?.deadline_id)};
+    })()`);
+    assert.ok(request && deadline, `${mode} ${method} ${route}: abort must come from its recorded deadline`);
+    assert.equal(deadline.mode,mode);assert.equal(deadline.budget_ms,160);
+    assert.ok(request.deadline_ids.includes(deadline.id),'The deadline must already cover the request when it is sent');
+    assert.ok(deadline.fired_ms-deadline.start_ms>=150,'The short timer must actually elapse');
+    assert.ok(request.abort_ms>=deadline.fired_ms);
+    assert.equal(request.body_ms,undefined,'A hanging body must never complete successfully');
+    if(mode==='headers')assert.equal(request.response_ms,undefined,'A header hang must never produce headers');
+    else {assert.equal(request.status,200);assert.ok(request.body_error_ms>=request.abort_ms,'The stalled response body must reject on abort');}
+  }
+  async function assertNormalSaveDeadline() {
+    const { request, deadlines } = await evaluate(`(()=>{
+      const request=window.savedItemRequestTimings.findLast(row=>row.route==='save');
+      return {request,deadlines:window.savedItemDeadlines.filter(row=>request.deadline_ids.includes(row.id))};
+    })()`);
+    assert.equal(request.mode,'pass');assert.equal(request.status,201);
+    assert.ok(request.body_ms>=request.response_ms);
+    assert.equal(request.abort_ms,undefined);
+    assert.ok(deadlines.length>0);
+    assert.ok(deadlines.every(row=>row.budget_ms===120000&&row.fired_ms===undefined),'Successful saves retain the real deadline');
+  }
   async function saveCurrent(label='Save item') {
     await click('button',label); await until(hasStatus('Saved version #'));
+    await assertNormalSaveDeadline();
     return (await api('/api/items')).items[0];
   }
   for (const width of [390,1440]) {
@@ -1652,13 +1741,17 @@ try {
   await click('button','Save item'); await until(`document.body.textContent.includes('NUL')`);
   assert.equal(await evaluate('window.savedItemRequests.length'),0);
   await fill(itemInput('item_name'),'Valid');
-  // The total Items deadline now includes token retrieval; keep the delayed
-  // duplicate-click probe within this fixture's compressed 160ms deadline.
+  // Delayed-token duplicate clicks still prove the pre-token lock. Successful
+  // requests now retain the real deadline, including their measured token wait.
   await evaluate('window.authFixture={calls:0,delayMs:70}');
   await evaluate(`(()=>{const b=${byText('button','Save item')};b.click();b.click();})()`);
   await until(hasStatus('Saved version #'));
   assert.equal(await evaluate('window.authFixture.calls'),1);
   assert.equal(await evaluate('window.savedItemRequests.filter(r=>r.method==="POST").length'),1);
+  await assertNormalSaveDeadline();
+  const tokenTiming=await evaluate('window.savedItemTokenTimings.at(-1)');
+  assert.ok(Number.isFinite(tokenTiming.start_ms)&&Number.isFinite(tokenTiming.end_ms));
+  assert.ok(tokenTiming.elapsed_ms>=60,'The separate token measurement includes the injected 70ms wait');
   checks.push('Save blocks invalid screen values and NUL before requests, locks before token retrieval, and sends one write on duplicate clicks');
 
   for (const mode of ['headers','body','401','403','409','422','503','500','lost']) {
@@ -1674,6 +1767,11 @@ try {
     if(mode==='401')assert.deepEqual(await evaluate('window.savedItemRequests[1].body'),await evaluate('window.savedItemRequests[0].body'),'Auth retry must reuse the exact captured request');
     const captured=await evaluate('window.savedItemRequests[0].body');
     assert.match(captured.request_id,/^[0-9a-f-]{36}$/);
+    if(['headers','body'].includes(mode)){
+      await assertSavedItemTimeout(mode,'POST','save');
+      assert.equal(await evaluate(hasStatus('Saved version #')),false);
+      assert.ok(await evaluate(hasAlert('may already be saved')));
+    }
     assert.equal(await evaluate(`(${itemInput('purchase_price')}).value`),'0');
     if (definite) {
       assert.ok(await evaluate(`!(${itemInput('purchase_price')}).matches(':disabled') && !document.getElementById('item-notes').matches(':disabled')`));
@@ -1696,6 +1794,10 @@ try {
       const requests=await evaluate('window.savedItemRequests');
       assert.equal(requests.length,committed?3:2);
       assert.ok(requests.every(request=>JSON.stringify(request.body)===JSON.stringify(captured)),'Retries preserve the entire payload and request ID');
+      if(['headers','body'].includes(mode)){
+        assert.equal(requests[1].body.request_id,captured.request_id,'A timed-out save retains its UUID for the explicit retry');
+        await assertNormalSaveDeadline();
+      }
       const saved=(await api('/api/items')).items[0];
       assert.equal(saved.notes,'Captured notes'); assert.equal(saved.listing_url,'https://example.com/captured');
       if(committed) assert.deepEqual(saved,committed);
@@ -1829,6 +1931,7 @@ try {
     await signedItems(); await evaluate(`window.savedItemMode=${JSON.stringify(mode)}`); await click('a','My Flips');
     await until(hasAlert(mode==='403'?'session':'took too long'));
     assert.equal(await evaluate('window.savedItemRequests.length'),1);
+    if(['headers','body'].includes(mode))await assertSavedItemTimeout(mode,'GET','list');
     await evaluate(`window.savedItemMode='pass'`); await click('button','Try loading again');
     await until(`document.querySelectorAll('[data-saved-item]').length>0`);
   }
@@ -1986,6 +2089,7 @@ try {
     await evaluate(`window.savedItemRequests=[];window.savedItemMode=${JSON.stringify(mode)};${comparisonButton}.click()`);
     await until(hasAlert(mode==='404'?'Item not found':'took too long'));
     assert.equal(await evaluate('window.savedItemRequests.length'),1);
+    if(mode==='headers')await assertSavedItemTimeout(mode,'GET','item');
     assert.equal(await evaluate(`Boolean(document.querySelector('${comparisonPanel}'))`),false);
     await evaluate(`window.savedItemMode='pass'`); await click('button','Retry comparison');
     await until(`Boolean(document.querySelector('${comparisonPanel}'))`);
@@ -2034,6 +2138,8 @@ try {
   }
   process.exitCode = 1;
 } finally {
+  writeFileSync(join(artifacts, "saved-item-timings.json"), JSON.stringify(savedItemTimings, null, 2));
+  if (process.exitCode) console.error('ITEM_TEST_TIMINGS', JSON.stringify(savedItemTimings.slice(-40)));
   socket?.close();
   for (const child of children) child.kill("SIGTERM");
   for (const waiter of pending.values()) waiter.reject(new Error("Browser test closed"));
