@@ -146,7 +146,7 @@ export async function runSessionChecks({ cdp, evaluate, until, fill, click, paus
 
   for(const query of [`?find=${saved.id}`,`?saved=${saved.id}`]){
     await navigate('/items'+query,`window.sessionFaults={'GET /api/items/${saved.id}':{remaining:1}}`);
-    await until(`Boolean(document.getElementById(${JSON.stringify(query.includes('find')?'quick-resale_low':'item-resale_low')}))`);
+    await until(query.includes('find') ? `Boolean(document.querySelector('[data-quick-status]'))` : `Boolean(document.getElementById('item-resale_low'))`);
     await checkCount(`/api/items/${saved.id}`,'GET',2); await noRaw();
   }
   checks.push('Single-item GET recovers in both photo and manual reopened editors without saving or reassessing');
@@ -175,7 +175,7 @@ export async function runSessionChecks({ cdp, evaluate, until, fill, click, paus
   checks.push('Second assessment POST 401 clears recovery, spends nothing, retains the in-memory photo and gives plain sign-in guidance');
 
   await navigate();await ready();await photo();await faults('/api/items/assess','POST',1,{mode:'drop-after-write'});
-  await estimate();await until(`document.body.textContent.includes('Check estimate status')`);
+  await estimate();await until(`Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Check estimate status'&&!e.disabled)`);
   const retained=await evaluate(marker);assert.ok(retained);
   const lost=await evaluate(rows('/api/items/assess','POST'));const id=JSON.parse(lost[0].body).request_id;
   await faults('/api/items/assessments/'+id,'GET',2);await click('button','Check estimate status');
