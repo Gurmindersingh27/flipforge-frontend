@@ -14,7 +14,7 @@ const fallbackLabels = [
 // The real API, budget ledger, analysis engine and persistence run locally.
 // Only the paid provider and sign-in are substituted. No real credentials.
 export const photoBackendFixture = `
-import json, httpx
+import base64, hashlib, json, httpx
 from app.services import item_assessment_service as ai
 from app.services import item_ai_budget_service as budget
 from app.db.session import SessionLocal
@@ -51,7 +51,9 @@ def photo_provider(payload):
         response.raise_for_status()
     if mode == 'timeout':
         raise httpx.ReadTimeout('fixture timeout')
-    text = json.loads(payload['messages'][0]['content'][-1]['text'])
+    content = payload['messages'][0]['content']
+    fixture_ai['photo_digests'] = [hashlib.sha256(base64.b64decode(block['source']['data'])).hexdigest()[:12] for block in content if block.get('type') == 'image']
+    text = json.loads(content[-1]['text'])
     fixture_ai['location_hint'] = text.get('location_hint')
     prices = [65, 75] if mode == 'short' else [65, 75, 90]
     if mode.startswith('national'):
@@ -129,7 +131,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   }
   async function upload({ gallery = false, count = 1, expected = 1 } = {}) {
     await until(`Boolean(document.querySelector('input[type=file]'))`);
-    await evaluate(`(async()=>{const c=document.createElement('canvas');c.width=1800;c.height=1200;const x=c.getContext('2d');x.fillStyle='#ded5c4';x.fillRect(0,0,1800,1200);x.strokeStyle='#765536';x.lineWidth=45;x.strokeRect(620,240,560,390);x.beginPath();x.moveTo(620,630);x.lineTo(560,950);x.moveTo(1180,630);x.lineTo(1240,950);x.moveTo(590,760);x.lineTo(1210,760);x.stroke();const blob=await new Promise(resolve=>c.toBlob(resolve,'image/jpeg'));const d=new DataTransfer();for(let i=0;i<${count};i++)d.items.add(new File([blob],'chair-fixture-'+i+'.jpg',{type:'image/jpeg'}));const e=document.querySelector(${JSON.stringify(gallery ? '[aria-label="Choose item photos"]' : '[aria-label="Take item photo"]')});e.files=d.files;e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await evaluate(`(async()=>{window.photoFixtureSequence??=0;const colors=['#ded5c4','#8fb7d4','#d49a8f','#9dc28b','#c5a1d4'];const d=new DataTransfer();for(let i=0;i<${count};i++){const n=window.photoFixtureSequence++;const c=document.createElement('canvas');c.width=1800;c.height=1200;const x=c.getContext('2d');x.fillStyle=colors[n%colors.length];x.fillRect(0,0,1800,1200);x.strokeStyle='#2d241c';x.lineWidth=45;x.strokeRect(620,240,560,390);x.beginPath();x.moveTo(620,630);x.lineTo(560,950);x.moveTo(1180,630);x.lineTo(1240,950);x.moveTo(590,760);x.lineTo(1210,760);x.stroke();x.fillStyle='#111';x.font='bold 180px sans-serif';x.fillText(String(n+1),820,210);const blob=await new Promise(resolve=>c.toBlob(resolve,'image/jpeg'));d.items.add(new File([blob],'chair-fixture-'+n+'.jpg',{type:'image/jpeg'}));}const e=document.querySelector(${JSON.stringify(gallery ? '[aria-label="Choose item photos"]' : '[aria-label="Take item photo"]')});e.files=d.files;e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     await until(`document.querySelectorAll('.quick-photo img').length === ${expected} && !document.body.textContent.includes('Preparing your photos')`);
     await until(`document.querySelector('.quick-photo img')?.naturalWidth === 1568`);
   }
@@ -182,14 +184,42 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.equal(await evaluate(`document.querySelectorAll('.quick-photo-actions input').length`), 0);
     assert.equal(await evaluate(`${input('quick-description')}.value`), 'Keep this description');
     assert.equal(await evaluate(`${input('quick-asking')}.value`), '20');
-    await evaluate(`document.querySelector('[aria-label="Remove photo 3"]').click()`);
+    const orderBeforeMove = await evaluate(`Array.from(document.querySelectorAll('.quick-photo img'),e=>e.src)`);
+    assert.equal(new Set(orderBeforeMove).size, 3, 'Photo fixtures must be visually distinct');
+    assert.ok(await measure(`(()=>{const a=document.querySelector('[aria-label="Make photo 3 the main photo"]').getBoundingClientRect(),r=document.querySelector('[aria-label="Remove photo 3"]').getBoundingClientRect();return a.height>=44&&a.right<=innerWidth&&a.left>=0&&(a.bottom<=r.top||a.top>=r.bottom)})()`), 'Main-photo control has a 44px target without overlapping remove');
+    await evaluate(`document.querySelector('[aria-label="Make photo 3 the main photo"]').click()`);
+    await until(`document.querySelector('.quick-photo img').src===${JSON.stringify(orderBeforeMove[2])} && document.body.textContent.includes('Main photo')`);
+    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.quick-photo img'),e=>e.src)`), [orderBeforeMove[2], orderBeforeMove[0], orderBeforeMove[1]]);
+    assert.ok(await evaluate(`document.activeElement===document.querySelector('.quick-photo') && document.querySelector('[aria-live="polite"]').textContent==='Photo moved to main.'`), 'Reorder lands focus on the new main tile and announces the change');
+    assert.equal(await evaluate(`document.querySelectorAll('.quick-main-photo-label').length`), 1);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Make photo 1 the main photo"]')`), null, 'The first photo has no make-main button');
+    await geometry(); await screenshot(`photo-main-selection-${width}.png`);
+    await evaluate(`document.querySelector('[aria-label="Remove photo 1"]').click()`);
+    await until(`document.querySelectorAll('.quick-photo img').length===2 && document.querySelector('.quick-photo img').src===${JSON.stringify(orderBeforeMove[0])}`);
+    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.quick-photo img'),e=>e.src)`), [orderBeforeMove[0], orderBeforeMove[1]], 'Removing main promotes the next photo without changing remaining order');
     await until(`document.querySelectorAll('.quick-photo-actions input').length===2`);
     const after = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
-    assert.equal(after.posts, before.posts); assert.equal(after.calls, before.calls);
+    assert.equal(after.posts, before.posts); assert.equal(after.reads, before.reads); assert.equal(after.calls, before.calls);
     await geometry();
   }
   checks.push('390/1440 camera and gallery inputs preserve text, support cancel/remove and the three-photo limit, show local preparation timing and send zero assessment POSTs');
   checks.push('Compact 390x844 photo entry shows both camera choices within the initial viewport with touch targets at least 44px high');
+  checks.push('390/1440 main-photo selection uses distinct images, moves photo 3 first, preserves remaining order, promotes after removal, announces focus and sends zero assessment POSTs or status GETs');
+
+  await mode('normal'); await open(); await upload({ gallery: true, count: 3, expected: 3 });
+  const submittedOrder = await evaluate(`(async()=>{const digest=async src=>{const bytes=await (await fetch(src)).arrayBuffer();return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(v=>v.toString(16).padStart(2,'0')).join('').slice(0,12)};const before=Array.from(document.querySelectorAll('.quick-photo img'),e=>e.src);document.querySelector('[aria-label="Make photo 3 the main photo"]').click();await new Promise(requestAnimationFrame);const after=Array.from(document.querySelectorAll('.quick-photo img'),e=>e.src);window.expectedPhotoDigests=await Promise.all(after.map(digest));window.expectedMainPhoto=after[0];return {before,after,digests:window.expectedPhotoDigests}})()`);
+  assert.deepEqual(submittedOrder.after, [submittedOrder.before[2], submittedOrder.before[0], submittedOrder.before[1]]);
+  const callsBeforeOrderSubmit = await calls();
+  await evaluate(`(()=>{const original=window.fetch;window.mainOrderFetch=original;window.fetch=async(input,init)=>{const response=await original(input,init);if(new URL(typeof input==='string'?input:input.url).pathname==='/api/items/assess'&&init?.method==='POST')await new Promise(resolve=>window.releaseMainOrderAssessment=resolve);return response;};document.querySelector('[data-quick-assess]').click()})()`);
+  for (let attempt = 0; attempt < 80 && await calls() === callsBeforeOrderSubmit; attempt++) await pause(50);
+  await until(`typeof window.releaseMainOrderAssessment==='function'`);
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Make photo 2 the main photo"]').matches(':disabled')`), 'Main-photo control is disabled while assessment response is in flight');
+  await evaluate(`window.releaseMainOrderAssessment();window.fetch=window.mainOrderFetch`);
+  await until(`Boolean(document.querySelector('.quick-resale')) || Boolean(document.querySelector('[role=alert]')) || Boolean(document.querySelector('.quick-sources'))`);
+  await until(`!document.querySelector('[aria-label="Confirm estimate"] fieldset')?.disabled`);
+  assert.deepEqual((await api('/browser-fixture/ai')).photo_digests, submittedOrder.digests, 'Provider receives photos in the visible order');
+  assert.equal(await evaluate(`document.querySelector('.quick-find-photo').src===window.expectedMainPhoto`), true, 'Result thumbnail uses the chosen main photo');
+  checks.push('Submitted provider image digests match the visible reordered photos and the result thumbnail uses the chosen main photo');
 
   await mode('normal');
   const timingScript = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
@@ -251,7 +281,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
 
   await mode('normal');
   await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
-  await open(); await upload();
+  await open(); await upload({ gallery: true, count: 2, expected: 2 });
   await fill(input('quick-description'), 'Keep this chair description'); await fill(input('quick-asking'), '20');
   const beforeStall = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
   await evaluate(`(()=>{
@@ -266,11 +296,12 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   try {
     await until(`document.body.textContent.includes('Preparing your photos…')`);
     assert.ok(await evaluate(`${input('quick-description')}.matches(':disabled')`));
+    assert.ok(await evaluate(`document.querySelector('[aria-label="Make photo 2 the main photo"]').matches(':disabled')`), 'Main-photo control is disabled during photo preparation');
     await until(`document.body.textContent.includes('That photo took too long to open. Try another, or enter details below.') && !${input('quick-description')}.matches(':disabled')`);
     assert.equal(await evaluate(`document.body.textContent.includes('Preparing your photos…')`), false);
     assert.equal(await evaluate(`${input('quick-description')}.value`), 'Keep this chair description');
     assert.equal(await evaluate(`${input('quick-asking')}.value`), '20');
-    assert.ok(await evaluate(`document.querySelectorAll('.quick-photo img').length===1 && document.querySelector('.quick-photo img').src===window.photoBeforeStall && !document.querySelector('input[type=file]').matches(':disabled')`));
+    assert.ok(await evaluate(`document.querySelectorAll('.quick-photo img').length===2 && document.querySelector('.quick-photo img').src===window.photoBeforeStall && !document.querySelector('input[type=file]').matches(':disabled')`));
     const afterStall = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
     assert.equal(afterStall.posts, beforeStall.posts); assert.equal(afterStall.calls, beforeStall.calls);
     await geometry(); await screenshot('photo-load-timeout-390.png');
@@ -1038,6 +1069,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   await mode('timeout'); await open(); await upload(); const beforeTimeout = await calls(); await runAI();
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished")`);
   await until(`document.body.textContent.includes('Another estimate is still running.')`);
+  assert.equal(await evaluate(`Boolean(document.querySelector('.quick-make-main'))`), false, 'Main-photo controls are unavailable while an assessment is pending');
   assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Photo estimate"], #quick-location'))`), false, 'Settled unavailable readiness hides the photo form and area while an assessment is pending');
   assert.ok(await evaluate(`Boolean((${speedRows})['Estimate request'])`));
   const uncertainId = await storedId();
@@ -1045,6 +1077,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   await open('', true);
   await until(`document.body.textContent.includes("Your photo estimate hasn't finished") && Array.from(document.querySelectorAll('button')).some(e=>e.textContent==='Check estimate status' && !e.disabled)`);
   await until(`document.body.textContent.includes('Another estimate is still running.')`);
+  assert.equal(await evaluate(`Boolean(document.querySelector('.quick-make-main'))`), false, 'Main-photo controls stay unavailable during recovery');
   assert.ok(await evaluate(`Boolean((${speedRows})['Status check'])`));
   assert.equal(await evaluate(`Boolean((${speedRows})['Estimate request'])`), false);
   assert.equal(await storedId(), uncertainId);
