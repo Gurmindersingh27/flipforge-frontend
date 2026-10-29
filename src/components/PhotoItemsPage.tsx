@@ -80,7 +80,9 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const withSession = useItemSession();
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
-  const [photos, setPhotos] = useState<ItemAssessmentPhoto[]>([]);
+  const [photos, setPhotos] = useState<{ id: string; photo: ItemAssessmentPhoto }[]>([]);
+  const photoTiles = useRef(new Map<string, HTMLDivElement>());
+  const [photoAnnouncement, setPhotoAnnouncement] = useState("");
   const [budget, setBudget] = useState<ItemAIBudget | null>(null);
   const [budgetNote, setBudgetNote] = useState("");
   const [readiness, setReadiness] = useState<"checking" | "available" | "unavailable" | "failed">("checking");
@@ -261,14 +263,28 @@ function QuickEditor({ findId }: { findId: string | null }) {
     const finishTiming = timing.begin("photo");
     try {
       const prepared = await Promise.all(files.map(prepareItemPhoto));
-      if (sequence.current === current) setPhotos(old => [...old, ...prepared]);
+      if (sequence.current === current) setPhotos(old => [...old, ...prepared.map(photo => ({ id: crypto.randomUUID(), photo }))]);
     } catch (failure) { if (sequence.current === current) setError((failure as Error).message); }
     finally { if (sequence.current === current) { finishTiming(); locked.current = false; setBusy(null); } }
+  }
+  function makeMainPhoto(id: string) {
+    if (locked.current) return;
+    setPhotos(old => {
+      const index = old.findIndex(entry => entry.id === id);
+      if (index <= 0) return old;
+      return [old[index], ...old.slice(0, index), ...old.slice(index + 1)];
+    });
+    setPhotoAnnouncement("Photo moved to main.");
+    requestAnimationFrame(() => photoTiles.current.get(id)?.focus());
+  }
+  function removePhoto(id: string) {
+    if (locked.current) return;
+    setPhotos(old => old.filter(entry => entry.id !== id));
   }
   async function estimate(checkOnly = false) {
     if (locked.current || !isSignedIn || (!checkOnly && (preferencesBlocked || pendingId || readiness !== "available" || budgetInFlight.current))) return;
     let payload;
-    try { if (!checkOnly) payload = buildAssessmentRequest(crypto.randomUUID(), description, form.values.purchase_price, photos, location); }
+    try { if (!checkOnly) payload = buildAssessmentRequest(crypto.randomUUID(), description, form.values.purchase_price, photos.map(entry => entry.photo), location); }
     catch (failure) { setError((failure as Error).message); return; }
     const current = ++sequence.current; locked.current = true; setBusy("ai"); setError("");
     let sent = false;
@@ -378,8 +394,16 @@ function QuickEditor({ findId }: { findId: string | null }) {
           <fieldset disabled={blocked || pendingId !== null}>
             <div className="quick-section-title"><span className="quick-step">01</span><h2>What did you find?</h2><span className="quick-muted">Up to 3 photos</span></div>
             <p className="quick-small quick-photo-guide">Start with the whole piece, then visible damage and a maker’s mark if present. Use clear, well-lit photos.</p>
+            <p className="quick-visually-hidden" aria-live="polite">{photoAnnouncement}</p>
             <div className="quick-photos">
-              {photos.map((photo, index) => <div className="quick-photo" key={index}><img src={`data:${photo.media_type};base64,${photo.data}`} alt={`Your item, photo ${index + 1}`} /><button className="quick-remove" type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => setPhotos(old => old.filter((_, i) => i !== index))}>×</button></div>)}
+              {photos.map(({ id, photo }, index) => <div className="quick-photo" key={id} role="group" tabIndex={-1}
+                ref={node => { if (node) photoTiles.current.set(id, node); else photoTiles.current.delete(id); }}
+                aria-label={index === 0 ? "Main photo" : `Photo ${index + 1}`}>
+                <img src={`data:${photo.media_type};base64,${photo.data}`} alt={`Your item, photo ${index + 1}`} />
+                <button className="quick-remove" type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => removePhoto(id)}>×</button>
+                {index === 0 ? <span className="quick-main-photo-label">Main photo</span> :
+                  <button className="quick-make-main" type="button" aria-label={`Make photo ${index + 1} the main photo`} onClick={() => makeMainPhoto(id)}>Make main</button>}
+              </div>)}
               {photos.length < 3 && <div className="quick-photo-actions">
                 <label className="quick-upload"><Camera /><strong>Take photo</strong><span>One photo at a time</span><input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" aria-label="Take item photo" onChange={addPhotos} /></label>
                 <label className="quick-upload quick-gallery"><strong>Choose photos</strong><span>From your gallery</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple aria-label="Choose item photos" onChange={addPhotos} /></label>
@@ -421,7 +445,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
           <fieldset disabled={blocked}>
             <div className="quick-section-title"><span className="quick-step">{evidence ? "02" : "01"}</span><h2>{evidence ? evidence.item_name : "Let's work out an offer."}</h2></div>
             {snapshot && <p className="quick-muted">Saved version #{snapshot.id}. Photos aren't kept. Saving changes creates a new version.</p>}
-            {evidence && <><p className="quick-muted">Photo-based draft. Check the material and condition in person.</p>{photos.length > 0 && <img className="quick-find-photo" src={`data:${photos[0].media_type};base64,${photos[0].data}`} alt="Your find" />}</>}
+            {evidence && <><p className="quick-muted">Photo-based draft. Check the material and condition in person.</p>{photos.length > 0 && <img className="quick-find-photo" src={`data:${photos[0].photo.media_type};base64,${photos[0].photo.data}`} alt="Your find" />}</>}
             {!evidence && <label className="quick-field" htmlFor="quick-item-name">What is it?<input id="quick-item-name" value={form.item_name} maxLength={200} placeholder="e.g. Wood chair" onChange={event => edit(old => ({ ...old, item_name: event.target.value }))} /></label>}
             {evidence?.resale && !ownResale && <div id="quick-resale-reference" tabIndex={-1} className="quick-resale"><p>Similar items are listed for</p><strong>{formatItemMoney(evidence.resale.low)} - {formatItemMoney(evidence.resale.high)}</strong><p className="quick-small">Based on online asking prices, not confirmed sales. Pickup offered; distance isn't verified.</p><button type="button" className="quick-text-button" onClick={() => { touched.current.add("resale_low"); touched.current.add("resale_high"); setResaleSource("user_estimate"); setResaleRange(false); edit(old => ({ ...old, values: { ...old.values, resale_low: "", resale_high: "" } })); }}>Use my own sale estimate</button></div>}
             {nationalRange && <ItemNationalPriceReference range={nationalRange} selected={resaleSource === "national_reference"} disabled={Boolean(blocked || preferencesBlocked)} onApply={() => chooseNational(true)} onOwnEstimate={() => chooseNational(false)} />}
