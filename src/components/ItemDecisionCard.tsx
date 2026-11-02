@@ -1,5 +1,5 @@
 import type { Ref } from "react";
-import { formatItemHeadlineMoney, quickAssumptionsSummary, suggestedRepairTotal, verifiedPriceCount } from "../lib/itemAssessment";
+import { formatItemHeadlineMoney, hasUnconfirmedUsedCondition, quickAssumptionsSummary, suggestedRepairTotal, verifiedPriceCount } from "../lib/itemAssessment";
 import { parseItemNumber } from "../lib/itemAnalysis";
 import type { SavedItemForm } from "../lib/savedItems";
 import type { ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentResult, ItemFinancialInput } from "../lib/types";
@@ -43,7 +43,9 @@ export default function ItemDecisionCard({ cardRef, evidence, result, source, fo
   const confirmUnknowns = Boolean(firstCheck) && repairChoice !== "catalog";
   const needsRepairTotal = confirmUnknowns && materials === 0 && enteredBudget === null;
   const national = evidence.resale == null && evidence.national_resale;
-  const resaleNote = source === "assessment" && evidence.resale ? `${evidence.resale.eligible_count} pickup listings · asking prices`
+  const unconfirmed = evidence.listings.filter(hasUnconfirmedUsedCondition).length;
+  const conditionNote = unconfirmed ? ` · ${unconfirmed} condition${unconfirmed === 1 ? "" : "s"} unconfirmed` : "";
+  const resaleNote = source === "assessment" && evidence.resale ? `${evidence.resale.eligible_count} pickup listings · asking prices${conditionNote}`
     : source === "national_reference" && national ? `${national.eligible_count} shipped used listings · shipping excluded`
     : manual ? "Entered by you" : national ? "Too few pickup listings. A national reference is available." : "Too few qualifying pickup listings.";
   return <section className="quick-decision-card" aria-label="Item decision card">

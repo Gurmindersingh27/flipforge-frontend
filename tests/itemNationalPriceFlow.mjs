@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { runCardChecks } from './itemCardFlow.mjs';
 
 // Real local assessment processing/calculator/saves; only sign-in, paid provider,
-// clipboard and explicitly named legacy/display-only GET variants are simulated.
+// clipboard and explicitly named display-only response variants are simulated.
 export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks }) {
   const owner = 'national-price-fixture';
   const nationalLabel = 'National used asking prices; shipping excluded. Not confirmed sales. Local prices and condition may differ.';
@@ -29,7 +29,20 @@ export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click
       if(url.origin!=='http://127.0.0.1:8000'||!url.pathname.startsWith('/api/'))return originalNationalFetch(input,init);
       window.nationalRequests.push({path:url.pathname,method:init.method??'GET',body:init.body??null});
       const response=await originalNationalFetch(input,init);
-      if(url.pathname==='/api/items/assess'&&response.ok)window.nationalResponses.push(await response.clone().json());
+      if(url.pathname==='/api/items/assess'&&response.ok){
+        const assessment=await response.clone().json();
+        window.nationalResponses.push(assessment);
+        // The pinned backend does not yet emit condition_new for local pickup.
+        if(window.simulateLocalNew){
+          assessment.result.national_resale=null;
+          assessment.result.listings.forEach((row,i)=>{
+            const isNew=i===2;
+            Object.assign(row,{title:isNew?'New wood dining chair':row.title,market:'local_pickup',eligible:!isNew,exclusion_reason:isNew?'condition_new':null,
+              condition:isNew?'New':'Used',condition_type:isNew?'new':'used',national_eligible:false,national_exclusion_reason:'not_shipped'});
+          });
+          return Response.json(assessment);
+        }
+      }
       if(/^\\/api\\/items\\/\\d+$/.test(url.pathname)&&response.ok){
         const flags=new URLSearchParams(location.search);
         if(flags.has('nationalLegacy')||flags.has('nationalFuture')||flags.has('nationalCount')){

@@ -1,6 +1,6 @@
 import { formatItemMoney, formatItemPercent, itemFieldText, ITEM_PREFERENCES, parseItemNumber } from "./itemAnalysis.ts";
 import { restoreItemForm } from "./savedItems.ts";
-import type { ItemAnalyzeResponse, ItemFinancialInput, ItemAssessmentPhoto, ItemAssessmentRequest, ItemAssessmentResult } from "./types.ts";
+import type { ItemAnalyzeResponse, ItemFinancialInput, ItemAssessmentPhoto, ItemAssessmentRequest, ItemAssessmentResult, ItemListingEvidence } from "./types.ts";
 import type { SavedItemForm } from "./savedItems.ts";
 
 export function newQuickItemForm() {
@@ -33,10 +33,13 @@ export function verifiedPriceCount(listings: ItemAssessmentResult["listings"]): 
   let count = 0;
   for (const row of listings) {
     if (row.exclusion_reason === "unsupported_price") continue;
-    if (row.eligible || row.national_eligible || ["not_comparable", "not_local_pickup", "zero_price"].includes(row.exclusion_reason ?? "")) count++;
+    if (row.eligible || row.national_eligible || ["not_comparable", "not_local_pickup", "zero_price", "condition_new"].includes(row.exclusion_reason ?? "")) count++;
     else return null;
   }
   return count;
+}
+export function hasUnconfirmedUsedCondition(row: ItemListingEvidence): boolean {
+  return row.eligible && row.condition_type === "unknown";
 }
 export function formatItemHeadlineMoney(value: number | null): string {
   return formatItemMoney(value, Number.isInteger(value));
