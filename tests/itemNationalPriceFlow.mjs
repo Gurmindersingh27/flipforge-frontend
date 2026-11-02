@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { runCardChecks } from './itemCardFlow.mjs';
 
 // Real local assessment processing/calculator/saves; only sign-in, paid provider,
 // clipboard and explicitly named legacy/display-only GET variants are simulated.
@@ -60,18 +61,20 @@ export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click
   async function ready() {
     await until(`Boolean(document.querySelector('[data-quick-assess]')) && !document.querySelector('[aria-label="Buying preferences"] fieldset')?.disabled && !document.body.textContent.includes('Checking AI availability…')`);
   }
-  async function settled() {
+  async function settled(expand = true) {
     await until(`Boolean(document.querySelector('[aria-label="Confirm estimate"]')) && !document.querySelector('[aria-label="Confirm estimate"] fieldset').disabled && !document.body.textContent.includes('Checking AI availability…')`);
+    if (expand) await evaluate(`document.querySelector('.quick-result-drawer:not([open]) > summary')?.click()`);
   }
-  async function assess(mode) {
+  async function assess(mode, expand = true, beforeSubmit) {
     await setMode(mode); await navigate(); await ready();
     await fill(input('quick-description'), 'My owned wood chair');
-    await fill(input('quick-asking'), '20');
+    if (!mode.startsWith('card_')) await fill(input('quick-asking'), '20');
     await evaluate(`(async()=>{const c=document.createElement('canvas');c.width=20;c.height=20;const blob=await new Promise(r=>c.toBlob(r,'image/jpeg'));const d=new DataTransfer();d.items.add(new File([blob],'national-chair.jpg',{type:'image/jpeg'}));const e=document.querySelector('input[type=file]');e.files=d.files;e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     await until(`document.querySelectorAll('.quick-photo img').length===1 && !document.querySelector('[data-quick-assess]').disabled`);
+    if (beforeSubmit) await beforeSubmit();
     const before = (await api('/browser-fixture/ai')).calls;
     await evaluate(`document.querySelector('[data-quick-assess]').click()`);
-    await settled();
+    await settled(expand);
     assert.equal((await api('/browser-fixture/ai')).calls, before+1);
     const sent = (await requests()).filter(r=>r.path==='/api/items/assess');
     assert.equal(sent.length,1);
@@ -279,6 +282,7 @@ export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click
   assert.equal(history.filter(r=>r.path==='/api/items/save'&&r.method==='POST').length,2);
   assert.equal(history.filter(r=>!['GET','HEAD','OPTIONS'].includes(r.method)&&!['/api/items/assess','/api/items/save','/api/items/analyze'].includes(r.path)).length,0);
   checks.push('National UI fits 1440px; only four explicit simulated assessments and two explicit saves occurred, with no preferences/outcome/Houses writes and original snapshots unchanged');
+  await runCardChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks, assess, navigate, settled, requests, save });
   await setMode('normal');
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:fixture.identifier});
   await pause(50);

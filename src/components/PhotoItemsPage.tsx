@@ -22,6 +22,7 @@ import ItemSavePanel from "./ItemSavePanel";
 import ItemInspectionPanel from "./ItemInspectionPanel";
 import ItemPriceEvidence from "./ItemPriceEvidence";
 import ItemBuyingDecision from "./ItemBuyingDecision";
+import ItemDecisionCard, { type RepairChoice } from "./ItemDecisionCard";
 import ItemNationalPriceReference from "./ItemNationalPriceReference";
 import "./PhotoItemsPage.css";
 
@@ -125,7 +126,8 @@ function QuickEditor({ findId }: { findId: string | null }) {
   }, [findId, userId]);
   const preferencesBlocked = !findId && isSignedIn && !preferencesReady && !(userId && readAssessmentRecovery(userId));
   const [manual, setManual] = useState(false);
-  const [repairEdit, setRepairEdit] = useState(false);
+  const [repairChoice, setRepairChoice] = useState<RepairChoice>("catalog");
+  const repairEdit = repairChoice !== "catalog";
   const [resaleSource, setResaleSource] = useState<ItemAssessmentConfirmation["resale_source"]>("user_estimate");
   const ownResale = resaleSource !== "assessment";
   const [resaleRange, setResaleRange] = useState(false);
@@ -141,6 +143,8 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const sequence = useRef(0);
   const locked = useRef(false);
   const resultRef = useRef<HTMLElement>(null);
+  const cardRef = useRef<HTMLHeadingElement>(null);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
   const costsRef = useRef<HTMLDetailsElement>(null);
   const sourcesRef = useRef<HTMLDetailsElement>(null);
   const [timings, setTimings] = useState<ItemTimings>({});
@@ -160,11 +164,14 @@ function QuickEditor({ findId }: { findId: string | null }) {
     setResult(null);
     setConfirmation(null); setResaleSource(response.result.resale === null || (freshAssessment.current && (touched.current.has("resale_low") || touched.current.has("resale_high"))) ? "user_estimate" : "assessment");
     setResaleRange(false);
-    setRepairEdit(response.result.repair_unknowns.length > 0 || (freshAssessment.current && touched.current.has("repairs"))); setManual(true); setErrors({}); setError("");
+    setRepairChoice(response.result.repair_unknowns.length ? "unreviewed" :
+      freshAssessment.current && touched.current.has("repairs") ? "custom" : "catalog");
+    setManual(true); setErrors({}); setError("");
     setEditVersion(value => value + 1);
   }, []);
   useEffect(() => () => { sequence.current++; locked.current = false; }, []);
-  useEffect(() => { if (result) resultRef.current?.focus(); }, [result]);
+  useEffect(() => { if (evidence) cardRef.current?.focus(); }, [evidence]);
+  useEffect(() => { if (result) (cardRef.current ?? resultRef.current)?.focus(); }, [result]);
 
   const checkAvailability = useCallback(async () => {
     if (!isLoaded || !isSignedIn || budgetInFlight.current) return;
@@ -242,7 +249,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
         const saved = await withSession((token, signal) => getItem(Number(findId), token, signal), () => active);
         if (!active) return;
         setForm(restoreItemForm(saved.inputs)); setInitial(saved); setSnapshot(saved);
-        setResult(saved.analysis_result); setManual(true); setRepairEdit(true);
+        setResult(saved.analysis_result); setManual(true); setRepairChoice("custom");
         setEvidence(saved.assessment?.evidence ?? null);
         setConfirmation(saved.assessment?.confirmation ?? null);
         const savedSource = saved.assessment?.confirmation.resale_source ?? "user_estimate";
@@ -264,7 +271,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     return <label className="quick-field" key={field} htmlFor={`quick-${field}`}>{label}
       <input id={`quick-${field}`} value={itemFieldText(form, field)} type="text" inputMode="decimal" autoComplete="off"
         aria-invalid={Boolean(errors[field])} aria-describedby={errors[field] ? `quick-${field}-error` : undefined}
-        onChange={event => { touched.current.add(field); if (bothResale) touched.current.add("resale_high"); if (field === "resale_low" || field === "resale_high") setResaleSource("user_estimate"); edit(old => ({ ...old, values: { ...old.values, [field]: event.target.value, ...(bothResale ? { resale_high: event.target.value } : {}) },
+        onChange={event => { touched.current.add(field); if (field === "repairs") setRepairChoice("custom"); if (bothResale) touched.current.add("resale_high"); if (field === "resale_low" || field === "resale_high") setResaleSource("user_estimate"); edit(old => ({ ...old, values: { ...old.values, [field]: event.target.value, ...(bothResale ? { resale_high: event.target.value } : {}) },
           useDefault: { ...old.useDefault, ...(field in old.useDefault ? { [field]: false } : {}) } })); }} />
       {(field === "pickup" || field === "fee_fixed") && capturedPreferences && !touched.current.has(field) && <small>My default · editable for this find</small>}
       {errors[field] && <span id={`quick-${field}-error`} className="quick-error">{errors[field]}</span>}
@@ -340,30 +347,37 @@ function QuickEditor({ findId }: { findId: string | null }) {
     if (userId && recoveryId) clearAssessmentRecovery(userId, recoveryId);
     setRecoveryId(null); setPendingId(null); setRecovered(false);
   }
-  async function calculate() {
+  function revealDetails() {
+    if (detailsRef.current) detailsRef.current.open = true;
+  }
+  async function calculate(acceptCatalog = false) {
     if (locked.current || preferencesBlocked) return;
     preferenceSealed.current = true;
     let next = form;
     let repairs: ItemAssessmentConfirmation["repairs"] = [];
-    if (evidence && !repairEdit) {
+    if (evidence && (!repairEdit || acceptCatalog)) {
       next = { ...form, values: { ...form.values, repairs: suggestedRepairTotal(evidence) } };
       repairs = evidence.repair_suggestions.map(({ job_id, materials_cost }) => ({ job_id, materials_cost }));
+      if (acceptCatalog) {
+        touched.current.add("repairs"); setRepairChoice("catalog"); edit(() => next); setConfirmation(null);
+      }
     } else if (evidence) {
       try {
         const amount = parseItemNumber(form.values.repairs, "repairs");
         if (amount === null) throw new Error("Enter a repair budget, or 0 if no work is needed.");
         repairs = [{ job_id: "custom", materials_cost: amount }];
-      } catch (failure) { setErrors({ repairs: (failure as Error).message }); return; }
+      } catch (failure) { revealDetails(); setErrors({ repairs: (failure as Error).message }); return; }
     }
     const built = buildSavedItemInputs(next);
-    if (!built.ok) { setErrors(built.errors); return; }
+    if (!built.ok) { revealDetails(); setErrors(built.errors); return; }
+    if (!acceptCatalog && repairChoice === "unreviewed") setRepairChoice("custom");
     const current = ++sequence.current; locked.current = true; setBusy("calculate"); setError(""); setErrors({}); setResult(null);
     try {
       const response = await analyzeItem(built.payload);
       if (sequence.current !== current) return;
       setForm(next); setResult(response);
       setConfirmation(evidence ? { repairs, resale_source: resaleSource, preset_acknowledged: true } : null);
-    } catch (failure) { if (sequence.current === current) setError((failure as Error).message); }
+    } catch (failure) { if (sequence.current === current) { revealDetails(); setError((failure as Error).message); } }
     finally { if (sequence.current === current) { locked.current = false; setBusy(null); } }
   }
 
@@ -375,21 +389,33 @@ function QuickEditor({ findId }: { findId: string | null }) {
   function focusField(field: string) {
     const target = buyingFieldTarget(field, ownResale, resaleRange);
     if (!target) return;
+    revealDetails();
     if (target.inCosts && costsRef.current) costsRef.current.open = true;
     document.getElementById(target.id)?.focus();
   }
   function openCosts() {
+    revealDetails();
     if (costsRef.current) costsRef.current.open = true;
     document.getElementById("quick-target_profit")?.focus();
   }
   function openSources() {
     if (!sourcesRef.current) return;
+    revealDetails();
     sourcesRef.current.open = true;
     sourcesRef.current.querySelector("summary")?.focus();
   }
   function backToResale() {
     if (ownResale) focusField("resale_low");
     else document.getElementById("quick-resale-reference")?.focus();
+  }
+  function openRepairEditor() {
+    if (locked.current || preferencesBlocked || !evidence) return;
+    revealDetails();
+    if (!repairEdit) {
+      touched.current.add("repairs"); setRepairChoice("custom");
+      edit(old => ({ ...old, values: { ...old.values, repairs: suggestedRepairTotal(evidence) } }));
+    }
+    requestAnimationFrame(() => detailsRef.current?.querySelector<HTMLInputElement>("#quick-repairs")?.focus());
   }
   const nationalRange = evidence?.resale == null ? evidence?.national_resale : null;
   function chooseNational(useReference: boolean) {
@@ -401,7 +427,18 @@ function QuickEditor({ findId }: { findId: string | null }) {
       resale_high: useReference ? String(nationalRange.high) : "" } }));
   }
   return <main className="quick-main">
-    <header className="quick-intro"><p className="quick-eyebrow">A GOOD FIND STARTS HERE</p><h1>{snapshot ? "Back to your find." : <>See potential?<br /><em>Let's work it out.</em></>}</h1><p>{showPhotoForm ? <>Snap a photo. Tell us what you know.<br />Get a starting offer and a plan for the work.</> : <>Enter what you know.<br />We'll help you work out an offer.</>}</p></header>
+    {evidence ? <ItemDecisionCard cardRef={cardRef} evidence={evidence} result={result} source={resaleSource} form={form}
+      repairChoice={repairChoice} disabled={Boolean(blocked || preferencesBlocked)} recovered={recovered}
+      onCalculate={accept => void calculate(accept)} onEditRepairs={openRepairEditor} onReviewSources={openSources}
+      onReviewCosts={openCosts} onReviewChecks={() => { revealDetails(); document.getElementById("quick-inspection")?.focus(); }}
+      onReviewResale={() => {
+        revealDetails();
+        if (nationalRange && resaleSource !== "national_reference") document.querySelector<HTMLButtonElement>("[data-use-national]")?.focus();
+        else backToResale();
+      }} /> :
+    <header className="quick-intro"><p className="quick-eyebrow">A GOOD FIND STARTS HERE</p><h1>{snapshot ? "Back to your find." : <>See potential?<br /><em>Let's work it out.</em></>}</h1><p>{showPhotoForm ? <>Snap a photo. Tell us what you know.<br />Get a starting offer and a plan for the work.</> : <>Enter what you know.<br />We'll help you work out an offer.</>}</p></header>}
+    <details ref={detailsRef} className={evidence ? "quick-result-drawer" : "quick-entry-drawer"} open={!evidence}>
+    <summary hidden={!evidence}>Details</summary>
     <div className="quick-layout">
       <div className="quick-flow">
         {!snapshot && !evidence && showPhotoForm && <section className="quick-card" aria-label="Photo estimate">
@@ -497,8 +534,8 @@ function QuickEditor({ findId }: { findId: string | null }) {
                   <p className="quick-small">Assumes supplies you already own; if buying new, replace the allowance with what you'll spend, including tax.</p>
                 </>}
                 {evidence && !repairEdit ? <>
-                  <button type="button" className="quick-text-button" onClick={() => { touched.current.add("repairs"); setRepairEdit(true); edit(old => ({ ...old, values: { ...old.values, repairs: suggestedRepairTotal(evidence) } })); }}>Change repair budget</button>
-                </> : <>{evidence && <p className="quick-small">The suggestions cover materials only; unknown work has not been priced. Enter one total repair budget, including hired help where needed.</p>}{field("repairs", "What will repairs cost?")}<p className="quick-small">Include materials and hired help. Enter 0 only if no work is needed.</p></>}
+                  <button type="button" className="quick-text-button" onClick={openRepairEditor}>Change repair budget</button>
+                </> : <>{evidence && <p className="quick-small">The suggestions cover materials only; unknown work has not been priced. Enter one total repair budget, including hired help where needed.</p>}{field("repairs", evidence?.repair_unknowns.length ? "Enter a different total" : "What will repairs cost?")}<p className="quick-small">Include materials and hired help. Enter 0 only if no work is needed.</p></>}
               </div>
               <details ref={costsRef} className="quick-details"><summary>Change costs & profit goal</summary>
                 <div className="quick-fields">{field("target_profit", "Profit you'd like to make ($)")}{field("pickup", "Pickup cost ($)")}{field("delivery", "Delivery cost ($)")}{field("storage", "Storage cost ($)")}{field("hours", "Your time (hours)")}{field("hourly_value", "Value of your time ($/hour)")}{field("fee_pct", "Selling fees (%)")}{field("fee_fixed", "Fixed selling fee ($)")}{field("contingency_pct", "Repair buffer (%)")}</div>
@@ -519,7 +556,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
       <aside className="quick-answer-column" aria-labelledby={evidence ? "quick-section-04" : undefined}>
         {evidence && <EstimateHeading step="04" title="Your buying decision" />}
         {result ? <section ref={resultRef} tabIndex={-1} className={`quick-answer tone-${result.status}`} aria-label="Your offer" data-quick-status={result.status}>
-          <ItemBuyingDecision result={result} resaleSource={evidence ? confirmation?.resale_source ?? null : "user_estimate"} ownResale={ownResale} resaleRange={resaleRange} onOpenCosts={openCosts} onFocusField={focusField} />
+          <ItemBuyingDecision result={result} hasDecisionCard={!!evidence} resaleSource={evidence ? confirmation?.resale_source ?? null : "user_estimate"} ownResale={ownResale} resaleRange={resaleRange} onOpenCosts={openCosts} onFocusField={focusField} />
         </section> : evidence ? <section className="quick-explainer quick-next-step"><h2>Finish your buying estimate.</h2><p>Review the sale estimate and repair budget above, then calculate what you should pay.</p><p className="quick-small">Leave anything you don't know blank. Enter 0 only when a cost is none.</p></section> : <section className="quick-explainer"><span className="quick-spark" aria-hidden="true">✳</span><h2>Less guessing.<br />More good finds.</h2><p>We'll help you work out three things:</p><ol><li><span>01</span> What it might sell for</li><li><span>02</span> What needs fixing</li><li><span>03</span> What you should pay</li></ol><p className="quick-small">You have the final say. Check the condition, confirm the repairs and adjust anything that doesn't fit.</p></section>}
         {(manual || evidence) && <ItemSavePanel key={initial?.id ?? "new"} light disabled={!result || blocked} form={form} initial={initial} parentId={snapshot?.id ?? null} editVersion={editVersion}
           assessment={assessment?.status === "completed" && confirmation ? { assessment_id: assessment.id, assessment_confirmation: confirmation } : undefined}
@@ -537,5 +574,6 @@ function QuickEditor({ findId }: { findId: string | null }) {
         }}>Start another find</a>}
       </aside>
     </div>
+    </details>
   </main>;
 }

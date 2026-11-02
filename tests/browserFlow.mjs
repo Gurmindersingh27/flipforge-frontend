@@ -74,7 +74,7 @@ async function measure(expression) {
 }
 async function until(expression) {
   for (let i = 0; i < 80; i++) {
-    try { if (await evaluate(expression)) return; }
+    try { if (await evaluate(`document.body !== null && (${expression})`)) return; }
     catch (error) {
       // A read poll can overlap an intentional reload. Keep the same bounded
       // wait, but never replay actions or suppress application/assertion errors.
@@ -193,13 +193,13 @@ async function enterQuoteDetails(source, date) {
   await fill(inputByAria("Bulk quote date"), date);
   await toggle("Select quote line 1");
 }
-async function screenshot(name) {
+async function screenshot(name, viewport) {
   if (name !== "failure.png") {
     await requireFonts();
     assert.ok(await evaluate('innerWidth !== 390 || document.documentElement.scrollWidth <= innerWidth'), `${name}: page must fit the 390px viewport`);
   }
-  const { cssContentSize } = await cdp("Page.getLayoutMetrics");
-  const { data } = await cdp("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width: cssContentSize.width, height: cssContentSize.height, scale: 1 } });
+  const size = viewport ?? (await cdp("Page.getLayoutMetrics")).cssContentSize;
+  const { data } = await cdp("Page.captureScreenshot", { format: "png", captureBeyondViewport: !viewport, clip: { x: 0, y: 0, width: size.width, height: size.height, scale: 1 } });
   writeFileSync(join(artifacts, name), Buffer.from(data, "base64"));
 }
 

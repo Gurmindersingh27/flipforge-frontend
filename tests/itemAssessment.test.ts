@@ -1,10 +1,22 @@
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../src/lib/itemAssessment.ts";
+import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal, verifiedPriceCount } from "../src/lib/itemAssessment.ts";
 import { buildSavedItemInputs } from "../src/lib/savedItems.ts";
-import type { ItemAnalyzeResponse, ItemAssessmentPhoto, ItemAssessmentResult } from "../src/lib/types.ts";
+import type { ItemAnalyzeResponse, ItemAssessmentPhoto, ItemAssessmentResult, ItemListingEvidence } from "../src/lib/types.ts";
 
 const photos: ItemAssessmentPhoto[] = [{ media_type: "image/jpeg", data: "fixture" }];
+
+test("the card counts verified asks from retained server verdicts and leaves unrecognized counts unknown", () => {
+  const row = (reason: string | null, eligible = false): ItemListingEvidence => ({
+    title: "Chair", url: "https://example.com/item", price: 75, currency: "USD", source: "example.com",
+    condition: "Used", market: "unknown", location: null, retrieved_at: "", price_type: "asking",
+    eligible, exclusion_reason: reason, supporting_quotes: [],
+  });
+  assert.equal(verifiedPriceCount([]), 0);
+  assert.equal(verifiedPriceCount([row("not_local_pickup"), row("unsupported_price")]), 1);
+  assert.equal(verifiedPriceCount([row(null, true), row("not_comparable"), row("zero_price")]), 3);
+  assert.equal(verifiedPriceCount([row("unsupported_price"), row("future_reason")]), null);
+});
 
 function photoEnvironment(t: TestContext) {
   t.mock.timers.enable({ apis: ["setTimeout"] });
