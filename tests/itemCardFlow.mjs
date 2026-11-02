@@ -24,6 +24,24 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
     assert.deepEqual(await requests(), before, 'Reading the card and changing viewport sends no requests');
   }
 
+  const unpriced = await assess('card_unpriced_repairs', false);
+  assert.deepEqual(unpriced.result.repair_suggestions, []);
+  assert.match(await text(), /Still unknown/);
+  assert.doesNotMatch(await text(), /I checked the rest/);
+  assert.equal(await evaluate(primary + '.textContent'), 'Enter a different total');
+  await click('button','Enter a different total');
+  await until(`document.activeElement === ${field('repairs')}`);
+  assert.equal(await evaluate(field('repairs') + '.value'), '');
+  await evaluate("document.querySelector('[data-quick-calculate]').click()");
+  await until(`Boolean(document.getElementById('quick-repairs-error'))`);
+  assert.equal((await requests()).filter(r => r.path === '/api/items/analyze').length, 0);
+  await fill(field('repairs'), '0');
+  await click('button','Confirm costs & calculate');
+  await until(`${card}.querySelector('[data-quick-offer]')?.textContent === '$40'`);
+  const calculations = (await requests()).filter(r => r.path === '/api/items/analyze');
+  assert.deepEqual(calculations.map(r => JSON.parse(r.body).repairs), [0]);
+  checks.push('With repair unknowns and no catalog jobs, the buyer must type a total; blank sends no calculation and explicit zero yields the offer');
+
   await assess('card_chair', false);
   assert.equal(await evaluate(drawer + '.open'), false);
   assert.match(await text(), /No buying limit yet/);

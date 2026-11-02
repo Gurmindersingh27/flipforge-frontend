@@ -88,6 +88,8 @@ def photo_provider(payload):
     if mode == 'card_dresser':
         report.update(item_name='Small wood dresser', repairs=[dict(job_id='scratch_touchup', reason='Light surface marks')],
                       repair_unknowns=['Check drawer travel in person.'])
+    if mode == 'card_unpriced_repairs':
+        report.update(repairs=[], repair_unknowns=['Check the chair joint in person.'])
     if mode == 'national':
         report['repair_unknowns'] = ['Check the chair joints and enter one total repair budget.']
     jobs = {

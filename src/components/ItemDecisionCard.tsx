@@ -41,6 +41,7 @@ export default function ItemDecisionCard({ cardRef, evidence, result, source, fo
   const budget = repairChoice === "unreviewed" ? null : repairChoice === "custom" ? enteredBudget : materials;
   const firstCheck = evidence.repair_unknowns[0];
   const confirmUnknowns = Boolean(firstCheck) && repairChoice !== "catalog";
+  const needsRepairTotal = confirmUnknowns && materials === 0 && enteredBudget === null;
   const national = evidence.resale == null && evidence.national_resale;
   const resaleNote = source === "assessment" && evidence.resale ? `${evidence.resale.eligible_count} pickup listings · asking prices`
     : source === "national_reference" && national ? `${national.eligible_count} shipped used listings · shipping excluded`
@@ -72,12 +73,12 @@ export default function ItemDecisionCard({ cardRef, evidence, result, source, fo
       {evidence.repair_unknowns.length > 1 && <button type="button" className="quick-text-button" onClick={onReviewChecks}>See all checks ({evidence.repair_unknowns.length})</button>}
     </div>}
     <div className="quick-card-actions">
-      {confirmUnknowns && ceiling === undefined && <button type="button" className={budget === null ? "quick-primary" : "quick-text-button"} disabled={disabled}
+      {confirmUnknowns && materials > 0 && ceiling === undefined && <button type="button" className={budget === null ? "quick-primary" : "quick-text-button"} disabled={disabled}
         onClick={() => onCalculate(true)}>Use {formatItemHeadlineMoney(materials)} — I checked the rest</button>}
       {ceiling === undefined && (!confirmUnknowns || enteredBudget !== null) && range && <button type="button" className="quick-primary"
         disabled={disabled} onClick={() => onCalculate()}>Confirm costs &amp; calculate</button>}
       {!range && national && <button type="button" className="quick-text-button" onClick={onReviewResale}>Review national reference</button>}
-      {ceiling === undefined && <button type="button" className="quick-text-button" disabled={disabled} onClick={onEditRepairs}>Enter a different total</button>}
+      {ceiling === undefined && <button type="button" className={needsRepairTotal ? "quick-primary" : "quick-text-button"} disabled={disabled} onClick={onEditRepairs}>Enter a different total</button>}
     </div>
     <p className="quick-card-caption">{quickAssumptionsSummary(form)} · <button type="button" className="quick-text-button" onClick={onReviewCosts}>Review costs</button></p>
     <button type="button" className="quick-card-sources" onClick={onReviewSources}>Review {evidence.listings.length} price {evidence.listings.length === 1 ? "source" : "sources"}</button>
