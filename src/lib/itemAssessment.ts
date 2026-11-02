@@ -26,6 +26,18 @@ export function suggestedRepairTotal(result: ItemAssessmentResult): string {
   const cents = result.repair_suggestions.reduce((sum, repair) => sum + BigInt(repair.materials_cost.toFixed(2).replace(".", "")), 0n);
   return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
 }
+
+export function verifiedPriceCount(listings: ItemAssessmentResult["listings"]): number | null {
+  // The server tests price proof before these exclusion reasons. A saved row
+  // with an unrecognized verdict cannot establish an exact count.
+  let count = 0;
+  for (const row of listings) {
+    if (row.exclusion_reason === "unsupported_price") continue;
+    if (row.eligible || row.national_eligible || ["not_comparable", "not_local_pickup", "zero_price"].includes(row.exclusion_reason ?? "")) count++;
+    else return null;
+  }
+  return count;
+}
 export function formatItemHeadlineMoney(value: number | null): string {
   return formatItemMoney(value, Number.isInteger(value));
 }

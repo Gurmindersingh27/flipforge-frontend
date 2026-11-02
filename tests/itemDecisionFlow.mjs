@@ -71,6 +71,7 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     await evaluate('window.beforeDecisionNav=true');
     await cdp('Page.navigate', { url: `http://127.0.0.1:5173/items?find=${photo.id}${suffix}` });
     await until(`!window.beforeDecisionNav && Boolean(document.querySelector('.quick-inspection')) && Boolean(document.querySelector('[data-quick-status]')) && !document.body.textContent.includes('Checking AI availability…')`);
+    await evaluate(`document.querySelector('.quick-result-drawer > summary').click()`);
   };
   const draftInput = label => `Array.from(document.querySelectorAll('.listing-field')).find(e=>e.firstChild.textContent===${JSON.stringify(label)}).querySelector('input,textarea')`;
   const openDraft = id => evaluate(`document.querySelector('[data-saved-item="${id}"] [aria-controls="listing-${id}"]').click()`);

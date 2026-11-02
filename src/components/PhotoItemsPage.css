@@ -187,3 +187,34 @@ body:has(.items-quick) { background: #faf6ee; color-scheme: light; }
   .quick-answer h2 { font-size: 28px; margin: 8px 0 12px; }
   .quick-answer .quick-offer { margin: 16px 0; padding: 16px 0; }
 }
+
+.quick-entry-drawer > summary { display: none; }
+.quick-decision-card { max-width: 700px; margin: 0 auto; padding: 24px 30px; border: 1px solid var(--line); border-radius: 20px; background: #fffdf8; }
+.quick-decision-card h1 { margin: 0 0 14px; color: var(--ink); font-size: 22px; font-weight: 700; line-height: 1.25; }
+.quick-card-limit { padding: 14px 18px; border-radius: 12px; background: #f3e8d1; }
+.quick-card-limit.ready { background: #e7efe5; }
+.quick-card-limit h2 { margin: 0; font: 400 clamp(25px, 4vw, 36px)/1.15 'DM Serif Display', Georgia, serif; }
+.quick-card-limit h2 strong { font-weight: inherit; }
+.quick-card-limit p { margin: 4px 0; color: var(--muted); font-size: 13px; }
+.quick-card-figures { margin: 6px 0 0; }
+.quick-card-figures > div { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.quick-card-figures dt, .quick-card-check > span, .quick-card-caption { color: var(--muted); font-size: 13px; }
+.quick-card-figures dd { margin: 0; overflow-wrap: anywhere; }
+.quick-card-figures dd:first-of-type { color: var(--ink); font-size: 19px; font-weight: 650; }
+.quick-card-check { padding-top: 10px; }
+.quick-card-check p { margin: 1px 0; }
+.quick-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 10px; }
+.quick-card-actions .quick-primary { width: auto; margin: 0; }
+.quick-decision-card button, .quick-result-drawer > summary { min-height: 44px; }
+.quick-decision-card .quick-text-button { margin: 0; }
+.quick-card-caption { margin: 6px 0; }
+.quick-card-sources { padding: 8px 0; color: var(--green); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
+.quick-result-drawer { margin-top: 12px; }
+.quick-result-drawer > summary { max-width: 700px; margin: 0 auto; padding: 10px 16px; color: var(--green); font-weight: 700; }
+.quick-result-drawer[open] > summary { margin-bottom: 14px; }
+.quick-main:has(> .quick-result-drawer[open]) .quick-card-check { display: none; }
+@media (max-width: 760px) {
+  .quick-decision-card { padding: 18px; border-radius: 16px; }
+  .quick-card-actions .quick-primary { width: 100%; }
+}
+.quick-decision-card h1:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; width: fit-content; }

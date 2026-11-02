@@ -1,5 +1,5 @@
 export default function ItemInspectionPanel({ unknowns }: { unknowns: string[] }) {
-  return <section className="quick-inspection" aria-label="Check before buying">
+  return <section id="quick-inspection" tabIndex={-1} className="quick-inspection" aria-label="Check before buying">
     <h3>Check before buying</h3>
     <h4>From the photo assessment</h4>
     {unknowns.length > 0 ? <ul>{unknowns.map((note, index) => <li data-assessment-unknown key={index}>{note}</li>)}</ul>

@@ -1,10 +1,43 @@
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal } from "../src/lib/itemAssessment.ts";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal, verifiedPriceCount } from "../src/lib/itemAssessment.ts";
 import { buildSavedItemInputs } from "../src/lib/savedItems.ts";
-import type { ItemAnalyzeResponse, ItemAssessmentPhoto, ItemAssessmentResult } from "../src/lib/types.ts";
+import type { ItemAnalyzeResponse, ItemAssessmentPhoto, ItemAssessmentResult, ItemListingEvidence } from "../src/lib/types.ts";
 
 const photos: ItemAssessmentPhoto[] = [{ media_type: "image/jpeg", data: "fixture" }];
+
+test("repair unknowns offer one-tap acceptance only for a positive catalog allowance", async t => {
+  const { createServer } = await import("vite");
+  const vite = await createServer({ configFile: false, optimizeDeps: { noDiscovery: true },
+    server: { middlewareMode: true, hmr: false, watch: null } });
+  t.after(() => vite.close());
+  const { default: Card } = await vite.ssrLoadModule("/src/components/ItemDecisionCard.tsx");
+  const render = (costs: number[]) => renderToStaticMarkup(createElement(Card, {
+    evidence: { item_name: "Chair", listings: [], repair_unknowns: ["Check the seat lift."],
+      repair_suggestions: costs.map(materials_cost => ({ materials_cost })) },
+    form: newQuickItemForm(), repairChoice: "unreviewed", result: null,
+  }));
+  for (const costs of [[], [0]]) {
+    const card = render(costs);
+    assert.doesNotMatch(card, /I checked the rest/);
+    assert.match(card, /Enter a different total/);
+  }
+  assert.match(render([5]), /Use \$5 — I checked the rest/);
+});
+
+test("the card counts verified asks from retained server verdicts and leaves unrecognized counts unknown", () => {
+  const row = (reason: string | null, eligible = false): ItemListingEvidence => ({
+    title: "Chair", url: "https://example.com/item", price: 75, currency: "USD", source: "example.com",
+    condition: "Used", market: "unknown", location: null, retrieved_at: "", price_type: "asking",
+    eligible, exclusion_reason: reason, supporting_quotes: [],
+  });
+  assert.equal(verifiedPriceCount([]), 0);
+  assert.equal(verifiedPriceCount([row("not_local_pickup"), row("unsupported_price")]), 1);
+  assert.equal(verifiedPriceCount([row(null, true), row("not_comparable"), row("zero_price")]), 3);
+  assert.equal(verifiedPriceCount([row("unsupported_price"), row("future_reason")]), null);
+});
 
 function photoEnvironment(t: TestContext) {
   t.mock.timers.enable({ apis: ["setTimeout"] });

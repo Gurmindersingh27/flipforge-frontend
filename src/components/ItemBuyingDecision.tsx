@@ -7,6 +7,7 @@ import type { ItemAnalyzeResponse, ItemFinancialInput } from "../lib/types";
 
 interface Props {
   result: ItemAnalyzeResponse;
+  hasDecisionCard?: boolean;
   resaleSource: BuyingResaleSource;
   ownResale: boolean;
   resaleRange?: boolean;
@@ -14,7 +15,7 @@ interface Props {
   onFocusField: (field: string) => void;
 }
 
-export default function ItemBuyingDecision({ result, resaleSource, ownResale, resaleRange = false, onOpenCosts, onFocusField }: Props) {
+export default function ItemBuyingDecision({ result, hasDecisionCard, resaleSource, ownResale, resaleRange = false, onOpenCosts, onFocusField }: Props) {
   const summaryId = useId();
   const [copyState, setCopyState] = useState<{ result: ItemAnalyzeResponse | null; source: BuyingResaleSource; status: "idle" | "copying" | "copied" | "failed" }>({ result: null, source: null, status: "idle" });
   const copyGeneration = useRef(0);
@@ -46,9 +47,13 @@ export default function ItemBuyingDecision({ result, resaleSource, ownResale, re
   const negative = low.max_offer < 0;
   const noTime = result.assumptions.hours.value === 0;
   return <>
-    <p className="quick-eyebrow">YOUR BUYING LIMIT</p>
-    {negative ? <h2>Even free misses your profit goal.</h2> : <div className="quick-offer"><span>Pay no more than</span><strong data-quick-offer>{formatItemMoney(low.max_offer, true)}</strong><span>Including buyer fees and tax.</span></div>}
-    {negative ? <p className="quick-decision-verdict">{itemDecision(result)}</p> : <h2 className="quick-decision-verdict">{itemDecision(result)}</h2>}
+    {hasDecisionCard ? <h2 className="quick-decision-verdict">{negative ? "Even free misses your profit goal."
+      : result.status === "within_budget" ? itemDecision(result) : result.status === "skip" ? "Pass at their asking price."
+      : result.status === "stretch" ? "Their asking price is a stretch." : "How your offer was calculated"}</h2> : <>
+      <p className="quick-eyebrow">YOUR BUYING LIMIT</p>
+      {negative ? <h2>Even free misses your profit goal.</h2> : <div className="quick-offer"><span>Pay no more than</span><strong data-quick-offer>{formatItemMoney(low.max_offer, true)}</strong><span>Including buyer fees and tax.</span></div>}
+      {negative ? <p className="quick-decision-verdict">{itemDecision(result)}</p> : <h2 className="quick-decision-verdict">{itemDecision(result)}</h2>}
+    </>}
     <button className="quick-text-button" type="button" onClick={onOpenCosts}>Profit goal: {formatItemHeadlineMoney(result.assumptions.target_profit.value)} · Change</button>
     <p>{result.status === "skip" ? `It misses your profit goal even if it sells well. ${low.cash_left !== null && low.cash_left < 0 ? "At their price, you'd likely lose money." : "That doesn't necessarily mean a cash loss."}` : result.status === "stretch" ? "At their price, you'd need a stronger sale to meet your goal." : "Based on these costs and the low end of the sale estimate. Check the item before buying."}</p>
     {negative && <p>This isn't a negative price to offer the seller. The calculated ceiling is in the details below.</p>}

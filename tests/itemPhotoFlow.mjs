@@ -56,6 +56,10 @@ def photo_provider(payload):
     text = json.loads(content[-1]['text'])
     fixture_ai['location_hint'] = text.get('location_hint')
     prices = [65, 75] if mode == 'short' else [65, 75, 90]
+    if mode == 'card_chair':
+        prices = [325, 150, 525]
+    if mode == 'card_dresser':
+        prices = [160, 200, 240]
     if mode.startswith('national'):
         prices = [65, 75, 90, 100, 200, 300] if mode == 'national_local' else [100, 200, 300, 400] if mode == 'national_mixed' else list(range(100, 1300, 100)) if mode == 'national_reasons' else [100, 200, 300]
     listings = [dict(title='Used wood dining chair', url='https://example.com/chair/' + str(i), price=p, currency='USD', condition='Used, good condition', comparable=True, single_item=True, market='local_pickup', location='Atlanta') for i, p in enumerate(prices)]
@@ -75,6 +79,17 @@ def photo_provider(payload):
     if asking is None and 'twenty' in text.get('description', ''):
         asking = 20
     report = dict(item_name='Wood dining chair', category='Chair', asking_price=asking, repairs=[dict(job_id='sand_seat', reason='Visible scratches on the seat')], repair_unknowns=[], listings=listings)
+    if mode == 'card_chair':
+        listings[0]['market'] = 'unknown'
+        listings[1]['url'] = 'https://www.ebay.com/sch/i.html?_nkw=fixture'
+        listings[2]['url'] = 'https://www.ebay.com/b/Test-Chairs/bn_123'
+        report.update(item_name='Mesh office chair', repairs=[dict(job_id='clean', reason='Dust on seat')],
+                      repair_unknowns=['Seat lift operation is unconfirmed.', 'Inspect the tilt adjustment.'])
+    if mode == 'card_dresser':
+        report.update(item_name='Small wood dresser', repairs=[dict(job_id='scratch_touchup', reason='Light surface marks')],
+                      repair_unknowns=['Check drawer travel in person.'])
+    if mode == 'card_unpriced_repairs':
+        report.update(repairs=[], repair_unknowns=['Check the chair joint in person.'])
     if mode == 'national':
         report['repair_unknowns'] = ['Check the chair joints and enter one total repair budget.']
     jobs = {
@@ -89,6 +104,10 @@ def photo_provider(payload):
     if jobs:
         report['repairs'] = [dict(job_id=job, reason='Visible work: ' + job) for job in jobs]
     citations = [dict(type='web_search_result_location', url=row['url'], cited_text='Used chair $' + str(row['price']) + (', plus shipping.' if row['market'] == 'national_shipping' else ', local pickup.')) for row in listings]
+    if mode == 'card_chair':
+        citations[0]['cited_text'] = 'Mesh chair $325 Atlanta.'
+        for citation in citations[1:]:
+            citation['cited_text'] = 'Office chairs: results for multiple items.'
     if mode == 'national_reasons':
         citations[9]['cited_text'] = 'Used chair, no stated price.'
     return dict(stop_reason='end_turn', usage=dict(input_tokens=12000, output_tokens=1000, server_tool_use=dict(web_search_requests=2)), content=[dict(type='text', text=json.dumps(report), citations=citations)])
@@ -183,6 +202,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await until(`Boolean(document.querySelector('.quick-resale')) || Boolean(document.querySelector('[role=alert]')) || Boolean(document.querySelector('.quick-sources'))`);
     await until(`!document.querySelector('[aria-label="Confirm estimate"] fieldset')?.disabled`);
     await until(`!document.body.textContent.includes('Checking AI availability…')`);
+    await evaluate(`document.querySelector('.quick-result-drawer:not([open]) > summary')?.click()`);
   }
   async function calculate(status) {
     await evaluate(`document.querySelector('[data-quick-calculate]').click()`);
