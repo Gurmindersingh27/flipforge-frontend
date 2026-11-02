@@ -15,6 +15,7 @@ import { clearAssessmentRecovery, readAssessmentRecovery, rememberAssessment } f
 import { createItemTiming, ITEM_TIMING_LABELS } from "../lib/itemTiming";
 import type { ItemTimings } from "../lib/itemTiming";
 import ItemPreferencesPanel from "./ItemPreferencesPanel";
+import type { PreferenceLoadStatus } from "./ItemPreferencesPanel";
 import { applyItemPreferences } from "../lib/itemPreferences";
 import ItemsPage from "./ItemsPage";
 import ItemSavePanel from "./ItemSavePanel";
@@ -112,6 +113,8 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const preferenceSealed = useRef(false);
   const freshAssessment = useRef(false);
   const [preferencesReady, setPreferencesReady] = useState(false);
+  const [preferenceLoadStatus, setPreferenceLoadStatus] = useState<PreferenceLoadStatus>("loading");
+  const focusPreferenceRetry = useRef<() => void>(null);
   const [capturedPreferences, setCapturedPreferences] = useState<ItemPreferences | null>(null);
   const resolvePreferences = useCallback((profile: ItemPreferences | null) => {
     if (!findId && !preferenceSealed.current && !(userId && readAssessmentRecovery(userId))) {
@@ -401,7 +404,6 @@ function QuickEditor({ findId }: { findId: string | null }) {
     <header className="quick-intro"><p className="quick-eyebrow">A GOOD FIND STARTS HERE</p><h1>{snapshot ? "Back to your find." : <>See potential?<br /><em>Let's work it out.</em></>}</h1><p>{showPhotoForm ? <>Snap a photo. Tell us what you know.<br />Get a starting offer and a plan for the work.</> : <>Enter what you know.<br />We'll help you work out an offer.</>}</p></header>
     <div className="quick-layout">
       <div className="quick-flow">
-        {!findId && <ItemPreferencesPanel light onResolved={resolvePreferences} disabled={blocked} />}
         {!snapshot && !evidence && showPhotoForm && <section className="quick-card" aria-label="Photo estimate">
           <fieldset disabled={blocked || pendingId !== null}>
             <div className="quick-section-title"><span className="quick-step">01</span><h2>What did you find?</h2><span className="quick-muted">Up to 3 photos</span></div>
@@ -429,6 +431,10 @@ function QuickEditor({ findId }: { findId: string | null }) {
           </fieldset>
           {isLoaded && !isSignedIn ? <SignInButton mode="modal"><button className="quick-primary">Sign in for a photo estimate <span aria-hidden="true">↗</span></button></SignInButton>
             : <button data-quick-assess className="quick-primary" disabled={!isLoaded || blocked || pendingId !== null || !aiAvailable || preferencesBlocked} onClick={() => void estimate()}>{busy === "ai" ? "Looking at your find…" : "What do you think?"}<span aria-hidden="true">↗</span></button>}
+          {preferencesBlocked && <div>
+            <p className="quick-small" role="status">{preferenceLoadStatus === "failed" ? "Your buying preferences didn’t load." : "Loading your buying preferences…"}</p>
+            {preferenceLoadStatus === "failed" && <button type="button" className="quick-text-button" onClick={() => focusPreferenceRetry.current?.()}>Fix preferences</button>}
+          </div>}
           <p className="quick-small">Photos go to Anthropic for one paid estimate with a search for similar listings. FlipForge doesn't save the photos. It may take a minute or longer; if it hangs, check the same estimate’s status below.</p>
         </section>}
         {pendingId && <div className="quick-notice" role="status"><strong>Your photo estimate hasn't finished.</strong><p>Check the same estimate without paying for another. You can enter your own numbers below while you wait.</p><button className="quick-secondary" disabled={blocked} onClick={() => void estimate(true)}>Check estimate status</button></div>}
@@ -445,6 +451,8 @@ function QuickEditor({ findId }: { findId: string | null }) {
         {budget?.warning && <p className="quick-notice" role="status">The pilot is near its $20 monthly AI budget. Manual estimates keep working.</p>}
         {error && <p className="quick-error quick-notice" role="alert">{error}</p>}
         {busy === "photo" && <p role="status">Preparing your photos…</p>}
+        {!findId && <ItemPreferencesPanel light onResolved={resolvePreferences} disabled={blocked}
+          onLoadStatusChange={setPreferenceLoadStatus} focusRetryRef={focusPreferenceRetry} />}
         <details className="quick-speed">
           <summary>Speed</summary>
           <dl>{(Object.keys(ITEM_TIMING_LABELS) as (keyof ItemTimings)[]).map(key => timings[key] === undefined ? null :
