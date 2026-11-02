@@ -81,7 +81,7 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     const expectedReads = [{ path: '/api/items/ai-budget', method: 'GET' }, { path: `/api/items/${photo.id}`, method: 'GET' }].sort((a,b)=>a.path.localeCompare(b.path));
     assert.deepEqual([...initial].sort((a,b)=>a.path.localeCompare(b.path)), expectedReads, 'Reopen keeps only the existing budget and saved-item GETs');
     assert.equal(await evaluate(`document.querySelectorAll('.quick-inspection li').length`), 6);
-    assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.quick-repairs .quick-notice')).map(e=>e.textContent)`), ['Check the rear joint in person.']);
+    assert.equal(await evaluate(`document.body.innerText.split('Check the rear joint in person.').length - 1`), 1, 'Render each assessment instruction once');
     assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.quick-inspection [data-assessment-unknown]')).map(e=>e.textContent)`), ['Check the rear joint in person.']);
     assert.equal(await evaluate(`document.body.textContent.includes('DO NOT RENDER')`), false);
     await evaluate(`document.querySelector('.quick-inspection summary').click();document.querySelector('.quick-sources summary').click();document.querySelector('.quick-result-details summary').click()`);

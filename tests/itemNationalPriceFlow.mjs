@@ -86,6 +86,26 @@ export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click
     const rows = (await api('/api/items?limit=100')).items;
     return rows[0];
   }
+  async function inspectResultLayout(state) {
+    const initialWidth = await evaluate('innerWidth');
+    const expected = ['What you found', 'What it could sell for', 'What it will cost you', 'Your buying decision'];
+    for (const width of [390, 1440]) {
+      await cdp('Emulation.setDeviceMetricsOverride', {width, height: width === 390 ? 844 : 1000, mobile: width === 390, deviceScaleFactor: 1});
+      assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('h2[id^="quick-section-"]'), h => h.textContent)`), expected);
+      assert.ok(await measure(`(() => {
+        const nodes = ['#quick-section-01', '#quick-section-02', '.quick-sources', '#quick-section-03',
+          '#quick-purchase_price', '.quick-inspection', '.quick-repairs', '[data-quick-calculate]',
+          '#quick-section-04', '.quick-next-step, [data-quick-status]', '.quick-save'].map(s => document.querySelector(s));
+        const ordered = nodes.every((n, i) => n && (!i || nodes[i-1].compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING));
+        const rects = nodes.map(n => n.getBoundingClientRect());
+        const placed = innerWidth === 390 ? rects.every((r,i) => !i || r.top >= rects[i-1].top)
+          : rects[8].left >= rects[0].right;
+        return ordered && placed && document.documentElement.scrollWidth <= innerWidth;
+      })()`), state + ': visual and reading order');
+      await screenshot(`photo-organized-${state}-${width}.png`);
+    }
+    await cdp('Emulation.setDeviceMetricsOverride', {width: initialWidth, height: initialWidth === 390 ? 844 : 1000, mobile: initialWidth === 390, deviceScaleFactor: 1});
+  }
   async function noWrites() { assert.deepEqual(await writes(), []); }
   const originalRows = (await api('/api/items?limit=100')).items;
   assert.equal(originalRows.length,0);
@@ -97,11 +117,13 @@ export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click
   assert.equal(await evaluate(`Boolean(${input('quick-resale_high')})`),false);
   assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`),false);
   assert.ok(await evaluate(`document.querySelector('[data-national-reference]').textContent.includes('3 shipped used listings')`));
+  assert.equal(await evaluate("document.querySelector('.quick-sources').open"), false);
+  await inspectResultLayout('national-offered');
   const beforePanels = await requests();
   await evaluate(`document.querySelector('.quick-sources').open=true;document.querySelector('.quick-inspection details').open=true`);
   assert.equal(await evaluate(`document.querySelectorAll('[data-national-reason]').length`),3);
   assert.ok(await evaluate(`Array.from(document.querySelectorAll('[data-national-reason]')).every(e=>e.textContent==='National reference: eligible price evidence.')`));
-  const positions=await measure(`(()=>{const n=document.querySelector('.quick-repairs .quick-notice'),r=${input('quick-repairs')},b=document.querySelector('[data-quick-calculate]');return[n.getBoundingClientRect().top,r.getBoundingClientRect().top,b.getBoundingClientRect().top]})()`);
+  const positions=await measure(`(()=>{const n=document.querySelector('.quick-inspection [data-assessment-unknown]'),r=${input('quick-repairs')},b=document.querySelector('[data-quick-calculate]');return[n.getBoundingClientRect().top,r.getBoundingClientRect().top,b.getBoundingClientRect().top]})()`);
   assert.ok(positions[0]<positions[1]&&positions[1]<positions[2]);
   assert.deepEqual(await requests(),beforePanels);
   checks.push('National reference never fills sale values on arrival; sources/check panels make zero requests and repair unknowns remain above repairs at 390px');
@@ -113,7 +135,9 @@ export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click
   assert.equal(await evaluate(`document.querySelector('[data-sale-input-source]').textContent`),nationalLabel);
   assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`),false);
   assert.deepEqual(await requests(),beforeApply);
+  await inspectResultLayout('national-selected');
   await fill(input('quick-repairs'),'15');await calculate();
+  await inspectResultLayout('positive');
   let sent=await writes();
   assert.equal(sent.filter(r=>r.path==='/api/items/analyze').length,1);
   const calculation=JSON.parse(sent.find(r=>r.path==='/api/items/analyze').body);
@@ -209,6 +233,7 @@ export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click
   checks.push('Legacy absent fields show not recorded, future reason codes have a safe fallback, and the national count comes from the server; GET variants leave saved rows unchanged');
 
   await navigate('/items',assessed.id);await settled();
+  await inspectResultLayout('recovered');
   assert.equal(await evaluate(input('quick-resale_low')+'.value'),'');
   assert.equal(await evaluate(`Boolean(${input('quick-resale_high')})`),false);
   assert.ok(await evaluate(`Boolean(document.querySelector('[data-national-reference]'))`));
@@ -227,6 +252,8 @@ export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-national-reference]'))`),false);
     if(mode==='national_mixed')assert.equal(await evaluate(input('quick-resale_low')+'.value'),'');
     if(mode==='national_local')assert.ok(await evaluate(`document.querySelector('#quick-resale-reference').textContent.includes('$70.00 - $82.50')`));
+    if(mode==='national_local') await inspectResultLayout('local');
+    if(mode==='national_mixed') await inspectResultLayout('no-range');
     if(mode==='national_reasons'){
       await evaluate(`document.querySelector('.quick-sources').open=true`);
       assert.equal(await evaluate(`document.querySelectorAll('[data-national-reason]').length`),12);
@@ -241,6 +268,7 @@ export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click
   await navigate('/items?find='+original.id);await settled();
   assert.ok(await measure('document.documentElement.scrollWidth<=innerWidth'));
   assert.ok(await evaluate(`document.querySelector('[data-sale-input-source]').textContent.includes('National used asking prices')`));
+  await inspectResultLayout('reopened');
   await screenshot('photo-national-reference-1440.png');await noWrites();
   assert.deepEqual(await api('/api/items/'+original.id),original);assert.deepEqual(await api('/api/items/'+child.id),child);
   assert.equal((await api('/api/items?limit=100')).items.length,2);
