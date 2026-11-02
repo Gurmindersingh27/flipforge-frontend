@@ -22,6 +22,10 @@ body:has(.items-quick) { background: #faf6ee; color-scheme: light; }
 .quick-flow, .quick-answer-column { min-width: 0; display: grid; gap: 22px; }
 .quick-card, .quick-save { padding: 26px; border: 1px solid var(--line); border-radius: 20px; background: #fffdf8; box-shadow: 0 3px 0 #e9e9df55; min-width: 0; }
 .quick-card fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.quick-estimate-sections { display: grid; min-width: 0; gap: 22px; }
+.quick-found-name { font-size: 17px; font-weight: 650; }
+.quick-estimate-sections .quick-sources { margin-top: 18px; padding: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; box-shadow: none; }
+.quick-answer-column > .quick-section-title { margin-bottom: 0; }
 .quick-section-title { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 22px; }
 .items-quick h2, .items-quick h3, .items-quick p { overflow-wrap: anywhere; }
 .quick-section-title h2 { font-size: 19px; letter-spacing: -.4px; font-weight: 700; margin: 0; }

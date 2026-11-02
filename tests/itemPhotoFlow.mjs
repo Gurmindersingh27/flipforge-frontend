@@ -428,7 +428,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.ok(await evaluate(`document.querySelector('.quick-repairs').textContent.includes(${JSON.stringify(supplyNote)})`));
   }
   for (const width of [390, 1440]) {
-    await cdp('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    await cdp('Emulation.setDeviceMetricsOverride', { width, height: width === 390 ? 844 : 1000, deviceScaleFactor: 1, mobile: width === 390 });
     for (const [kind, total] of [['paint_chair', 25], ['paint_dresser', 50], ['surfaces', 58]]) {
       await mode(kind); await open(); await upload(); await fill(input('quick-asking'), '20'); await runAI();
       const rows = await repairRows();
@@ -471,7 +471,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     assert.ok(await evaluate(`document.querySelector('.quick-inspection').textContent.includes('enter one total repair budget')`));
     if (width === 390) {
       assert.equal(await evaluate(`Boolean(document.querySelector('[data-quick-status]'))`), false, 'Repair guidance must precede the first result');
-      const placement = await measure(`(()=>{const input=document.getElementById('quick-repairs').getBoundingClientRect(),button=document.querySelector('[data-quick-calculate]').getBoundingClientRect();return {inputTop:input.top,buttonTop:button.top,notices:Array.from(document.querySelectorAll('.quick-repairs .quick-notice')).map(e=>{const r=e.getBoundingClientRect();return {text:e.textContent,bottom:r.bottom,height:r.height,width:r.width}})}})()`);
+      const placement = await measure(`(()=>{const input=document.getElementById('quick-repairs').getBoundingClientRect(),button=document.querySelector('[data-quick-calculate]').getBoundingClientRect();return {inputTop:input.top,buttonTop:button.top,notices:Array.from(document.querySelectorAll('.quick-inspection [data-assessment-unknown]')).map(e=>{const r=e.getBoundingClientRect();return {text:e.textContent,bottom:r.bottom,height:r.height,width:r.width}})}})()`);
       assert.ok(placement.notices.some(note => note.text.includes('enter one total repair budget')), 'Blank repair budget has its inline overlap explanation');
       for (const note of placement.notices) {
         assert.ok(note.height > 0 && note.width > 0, 'Inline repair unknown must be rendered');
@@ -492,6 +492,8 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await repairGeometry(); await screenshot(`photo-overlap-empty-${width}.png`);
     await fill(input('quick-repairs'), '0'); await calculate('within_budget');
     await fill(input('quick-repairs'), '72'); await calculate('skip');
+    assert.ok(await evaluate(`document.querySelector('[data-quick-offer]').textContent.includes('-')`));
+    await screenshot(`photo-organized-negative-${width}.png`);
     await click('button', 'Save item'); await savedConfirmation();
     const mixed = (await api('/api/items')).items[0];
     await repairEvidence(mixed, rows);
@@ -517,9 +519,10 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   checks.push('Mixed-finish save/reopen and notes-only versions preserve evidence, confirmed total and server results without another provider call or changing old records');
 
   for (const width of [390, 1440]) {
-    await cdp('Emulation.setDeviceMetricsOverride', {width, height:1000, deviceScaleFactor:1, mobile:width === 390});
+    await cdp('Emulation.setDeviceMetricsOverride', {width, height:width === 390 ? 844 : 1000, deviceScaleFactor:1, mobile:width === 390});
     await mode('catalog'); await open(); await upload(); await runAI();
     await fill(input('quick-repairs'), '100'); await calculate('offer_only');
+    await screenshot(`photo-organized-offer-only-${width}.png`);
     const rows = await repairRows();
     assert.equal(rows.length, 10);
     await click('button', 'Save item'); await savedConfirmation();
@@ -962,6 +965,16 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
       assert.ok(await evaluate(`!document.querySelector(${JSON.stringify(selector)}) || document.querySelector(${JSON.stringify(selector)}).matches(':disabled')`));
     }
     assert.ok(await evaluate(`document.querySelector('[aria-label="Confirm estimate"] fieldset').disabled`));
+    assert.ok(await evaluate(`Array.from(document.querySelectorAll('[aria-label="Confirm estimate"] fieldset')).every(group => group.disabled)`), 'All estimate control groups inherit the busy lock');
+    assert.ok(await evaluate(`(() => {
+      for (const selector of ['.quick-sources', '.quick-inspection details']) {
+        const panel = document.querySelector(selector);
+        panel.querySelector('summary').click();
+        if (!panel.open) return false;
+        panel.querySelector('summary').click();
+      }
+      return true;
+    })()`), 'Price sources and general inspection checks stay openable while a save is locked');
     await geometry(); await screenshot(`photo-save-retry-${width}.png`);
     await click('button','Retry this save'); await until(saveUncertain);
     assert.deepEqual(await evaluate('window.committedPhotoSave'),committed);
