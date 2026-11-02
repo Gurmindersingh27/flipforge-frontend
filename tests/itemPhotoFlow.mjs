@@ -118,6 +118,45 @@ def ai_state():
     return fixture_ai
 `;
 
+async function checkEntryOrder(evaluate) {
+  assert.ok(await evaluate(`(() => {
+    const flow = document.querySelector('.quick-flow');
+    const summaries = [...flow.querySelectorAll('summary')].filter(el => el.textContent === 'My buying preferences');
+    const panel = summaries[0]?.closest('.quick-flow > *');
+    const photo = flow.querySelector('[aria-label="Photo estimate"]');
+    const notices = [...flow.children].filter(el => el.matches('.quick-notice') ||
+      ['Preparing your photos…', 'Recovering your previous estimate…'].includes(el.textContent));
+    return summaries.length === 1 && panel.nextElementSibling === flow.querySelector('.quick-speed') &&
+      (!photo || flow.firstElementChild === photo) &&
+      notices.every(el => el.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING);
+  })()`), 'One preferences panel follows the photo card and its notices, immediately before Speed in the DOM');
+}
+
+async function checkPhotoEntry(measure, expectedNote = null) {
+  const layout = await measure(`(() => {
+    const card = document.querySelector('[aria-label="Photo estimate"]');
+    const action = card.querySelector('.quick-primary');
+    const note = card.querySelector('[role="status"]');
+    const fixes = [...card.querySelectorAll('button')].filter(el => el.textContent === 'Fix preferences');
+    const cameras = [...card.querySelectorAll('.quick-photo-actions input')];
+    const targets = [...cameras, action, ...fixes];
+    const cameraRects = cameras.map(el => el.getBoundingClientRect());
+    return {
+      note: note?.innerText ?? null,
+      noteVisibleBelowAction: !note || (action.nextElementSibling.contains(note) && note.checkVisibility() &&
+        note.getBoundingClientRect().top >= action.getBoundingClientRect().bottom),
+      fixes: fixes.length,
+      cameraInFirstViewport: cameraRects.length === 2 && cameraRects.every(r =>
+        r.left >= 0 && r.right <= innerWidth && r.top + scrollY >= 0 && r.bottom + scrollY <= innerHeight),
+      touchTargets: targets.every(el => { const r = el.getBoundingClientRect(); return r.width >= 44 && r.height >= 44; }),
+    };
+  })()`);
+  assert.deepEqual(layout, {
+    note: expectedNote, noteVisibleBelowAction: true, fixes: expectedNote === 'Your buying preferences didn’t load.' ? 1 : 0,
+    cameraInFirstViewport: true, touchTargets: true,
+  });
+}
+
 export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api }) {
   const input = id => `document.getElementById(${JSON.stringify(id)})`;
   const mode = async value => (await fetch(`http://127.0.0.1:8000/browser-fixture/ai/${value}`, { method: 'POST' })).json();
@@ -162,6 +201,9 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
     await cdp('Emulation.setDeviceMetricsOverride', { width, height: width === 390 ? 844 : 1000, deviceScaleFactor: 1, mobile: width === 390 });
     await open('?fixtureSignedOut=1');
     await until(`Boolean(document.querySelector('.quick-speed'))`);
+    await checkEntryOrder(evaluate);
+    await checkPhotoEntry(measure);
+    await screenshot(`photo-first-signed-out-${width}.png`);
     assert.equal(await evaluate(`document.querySelector('.quick-speed').open`), false);
     assert.deepEqual(await evaluate(speedRows), {});
     const before = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
@@ -295,9 +337,11 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   })()`);
   try {
     await until(`document.body.textContent.includes('Preparing your photos…')`);
+    await checkEntryOrder(evaluate);
     assert.ok(await evaluate(`${input('quick-description')}.matches(':disabled')`));
     assert.ok(await evaluate(`document.querySelector('[aria-label="Make photo 2 the main photo"]').matches(':disabled')`), 'Main-photo control is disabled during photo preparation');
     await until(`document.body.textContent.includes('That photo took too long to open. Try another, or enter details below.') && !${input('quick-description')}.matches(':disabled')`);
+    await checkEntryOrder(evaluate);
     assert.equal(await evaluate(`document.body.textContent.includes('Preparing your photos…')`), false);
     assert.equal(await evaluate(`${input('quick-description')}.value`), 'Keep this chair description');
     assert.equal(await evaluate(`${input('quick-asking')}.value`), '20');
@@ -827,6 +871,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
       }return response;};` });
   await restoreMarker(recoveryId); await open('', true);
   await until(`document.body.textContent.includes('Recovered your photo estimate.') && Boolean(${budgetRetry}) && !${budgetRetry}.disabled`);
+  await checkEntryOrder(evaluate);
   await fill(input('item-notes'), 'Keep recovered note');
   await calculate('within_budget');
   const beforeRecoveredRetry = await requests();
@@ -1095,6 +1140,7 @@ export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, me
   assert.equal(await evaluate(`Boolean((${speedRows})['Estimate request'])`), false);
   assert.equal(await storedId(), uncertainId);
   assert.equal(await evaluate(`Boolean(document.querySelector('[aria-label="Photo estimate"], #quick-location'))`), false, 'Recovered pending assessment keeps the photo form and area hidden after unavailable readiness settles');
+  await checkEntryOrder(evaluate);
   assert.equal((await requests()).reads, beforePendingRefresh.reads + 1);
   assert.equal((await requests()).posts, beforePendingRefresh.posts);
   await click('button', 'Check estimate status');
@@ -1367,6 +1413,111 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
   checks.push('Outcome tracking makes zero assessment/analyze/estimate-save calls and leaves Houses unchanged; all evidence uses simulated finds');
 }
 
+async function checkPhotoFirstPreferences({ cdp, evaluate, until, fill, click, measure, screenshot, checks, input, button, open, expand, upload, mode }) {
+  const panel = `document.querySelector('[data-preferences-panel]')`;
+  const assess = `document.querySelector('[data-quick-assess]')`;
+  const fix = button('Fix preferences');
+  const retry = button('Retry loading preferences');
+  const proceed = button('Continue without remembered preferences');
+  const prefGets = `window.prefRequests.filter(r => r.path === '/api/items/preferences' && r.method === 'GET').length`;
+  const budgetGets = `window.prefRequests.filter(r => r.path === '/api/items/ai-budget' && r.method === 'GET').length`;
+  const loading = 'Loading your buying preferences…';
+  const failed = 'Your buying preferences didn’t load.';
+  async function safeRequests(expectedGets) {
+    assert.equal(await evaluate(prefGets), expectedGets);
+    assert.deepEqual(await evaluate(`window.prefRequests.filter(r => r.method !== 'GET' ||
+      !['/api/items/preferences', '/api/items/ai-budget'].includes(r.path))`), [], 'Only free preference and availability GETs');
+  }
+  async function press(key, keyCode) {
+    await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key, windowsVirtualKeyCode: keyCode, text: key === 'Enter' ? '\r' : '' });
+    await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key, windowsVirtualKeyCode: keyCode });
+  }
+  for (const width of [390, 1440]) {
+    await cdp('Emulation.setDeviceMetricsOverride', { width, height: width === 390 ? 844 : 1000, deviceScaleFactor: 1, mobile: width === 390 });
+    // Start with the photo card absent, then re-enable it on this same mount.
+    await mode('disabled');
+    await open();
+    await until(`!${assess} && ${button('Check AI availability')} && !${button('Check AI availability')}.disabled`);
+    await checkEntryOrder(evaluate);
+    await expand();
+    await evaluate(`void (window.entryPanel = ${panel})`);
+    await fill(input('preference-pickup'), '73.25');
+    await mode('normal');
+    await click('button', 'Check AI availability');
+    await until(`${assess} && !${assess}.disabled`);
+    await checkEntryOrder(evaluate);
+    await checkPhotoEntry(measure);
+    await upload({ gallery: true, count: 2, expected: 2 });
+    await evaluate(`document.querySelector('[aria-label="Remove photo 2"]').click()`);
+    await until(`document.querySelectorAll('.quick-photo').length === 1`);
+    assert.ok(await evaluate(`${panel} === window.entryPanel && ${panel}.open`));
+    assert.equal(await evaluate(input('preference-pickup') + '.value'), '73.25');
+    assert.equal(await evaluate(budgetGets), 2);
+    await safeRequests(1);
+
+    await open('?prefMode=hold-fail');
+    await until(`typeof window.releasePreference === 'function'`);
+    await checkEntryOrder(evaluate);
+    await checkPhotoEntry(measure, loading);
+    assert.ok(await evaluate(`${assess}.disabled && !document.querySelector('input[type=file]').matches(':disabled')`));
+    await screenshot(`photo-first-loading-${width}.png`);
+    await upload();
+    await fill(input('quick-description'), 'Scratched oak chair');
+    await fill(input('quick-location'), 'Atlanta, GA');
+    await fill(input('quick-asking'), '20');
+    await evaluate(`window.entryPhoto = document.querySelector('.quick-photo img').src; window.releasePreference()`);
+    await until(`Boolean(${fix})`);
+    await checkPhotoEntry(measure, failed);
+    assert.ok(await evaluate(`!${panel}.open && ${assess}.disabled`));
+    await screenshot(`photo-first-failed-${width}.png`);
+
+    // Tab from the last input skips the disabled estimate and lands on Fix.
+    await evaluate(input('quick-asking') + '.focus()');
+    await press('Tab', 9);
+    assert.ok(await evaluate(`document.activeElement === ${fix}`));
+    await press('Enter', 13);
+    assert.ok(await evaluate(`${panel}.open && document.activeElement === ${retry} && ${assess}.disabled`));
+    assert.ok(await measure(`[${retry}, ${proceed}].every(el => {
+      const r = el.getBoundingClientRect(); return r.width >= 44 && r.height >= 44;
+    })`));
+    assert.ok(await measure(`(() => { const r = document.activeElement.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()`));
+    await safeRequests(1);
+    await screenshot(`photo-first-focused-${width}.png`);
+    await evaluate(`window.prefMode = 'hold'`);
+    await press('Enter', 13); // Only pressing the existing Retry starts another GET.
+    await until(`${prefGets} === 2 && !${retry} && document.body.innerText.includes(${JSON.stringify(loading)})`);
+    await until(`typeof window.releasePreference === 'function'`);
+    await evaluate('window.releasePreference()');
+    await until(`!${assess}.disabled`);
+    await checkPhotoEntry(measure);
+    assert.ok(await evaluate(`document.querySelector('.quick-photo img').src === window.entryPhoto`));
+    assert.deepEqual(await evaluate(`['quick-description', 'quick-location', 'quick-asking'].map(id => document.getElementById(id).value)`),
+      ['Scratched oak chair', 'Atlanta, GA', '20']);
+    await safeRequests(2);
+    await screenshot(`photo-first-retried-${width}.png`);
+
+    await open('?prefMode=fail');
+    await until(`Boolean(${fix})`);
+    await upload();
+    await fill(input('quick-description'), 'Keep after Continue');
+    await evaluate(`window.entryPhoto = document.querySelector('.quick-photo img').src`);
+    await click('button', 'Fix preferences');
+    await press('Tab', 9);
+    assert.ok(await evaluate(`document.activeElement === ${proceed} && ${assess}.disabled`));
+    await press('Enter', 13);
+    await until(`!${assess}.disabled && !${proceed}`);
+    await checkPhotoEntry(measure);
+    assert.ok(await evaluate(`${retry} && ${panel}.querySelector('fieldset').disabled &&
+      document.querySelector('.quick-photo img').src === window.entryPhoto`));
+    assert.equal(await evaluate(input('quick-description') + '.value'), 'Keep after Continue');
+    await safeRequests(1);
+    await screenshot(`photo-first-continued-${width}.png`);
+  }
+  checks.push('390×844 and 1440 photo entry keeps camera and gallery in the first viewport, with one preferences panel after its notices and before Speed');
+  checks.push('Photo add/remove and an availability recheck preserve the same editor, unsaved typing, and exactly one preferences GET per mount');
+  checks.push('Loading and failure explain the disabled estimate. Keyboard Fix opens the panel and focuses Retry without fetching; Retry and explicit Continue retain photos and text with zero assessment requests or preference PUTs');
+}
+
 // Real local preference storage, calculator and saved snapshots; synthetic auth,
 // provider and transport delays only. No production writes or real photos.
 async function runPreferenceChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api, upload, runAI, calculate, mode }) {
@@ -1392,12 +1543,19 @@ async function runPreferenceChecks({ cdp, evaluate, until, fill, click, measure,
       if(!path.startsWith('/api/items'))return original(input,init);
       const request={path,method:init.method||'GET',body:init.body?JSON.parse(init.body):null,auth:new Headers(init.headers).get('Authorization')};
       window.prefRequests.push(request);
+      if(path.startsWith('/api/items/assessments/') && new URLSearchParams(location.search).has('holdRecovery')){
+        const response=await original(input,init);
+        await new Promise(resolve=>window.releaseEntryRecovery=resolve);
+        return response;
+      }
       if(path!=='/api/items/preferences')return original(input,init);
       const mode=window.prefMode;
       if(mode==='fail'&&request.method==='GET')throw new TypeError('Simulated preference failure');
       const response=await original(input,init);
-      if((mode==='hold'&&request.method==='GET')||(mode==='hold-put'&&request.method==='PUT')){
+      if((['hold','hold-fail'].includes(mode)&&request.method==='GET')||(mode==='hold-put'&&request.method==='PUT')){
         const body=await response.text(); await new Promise(resolve=>window.releasePreference=resolve);
+        delete window.releasePreference;
+        if(mode==='hold-fail')throw new TypeError('Simulated preference failure');
         return new Response(body,{status:response.status,headers:{'Content-Type':'application/json'}});
       }
       if(mode==='lost'&&request.method==='PUT')throw new TypeError('Simulated lost confirmation');
@@ -1414,10 +1572,15 @@ async function runPreferenceChecks({ cdp, evaluate, until, fill, click, measure,
     await click('button','Save preferences');
     await until(`document.querySelector('[aria-label="Buying preferences"]')?.textContent.includes('Preferences saved for your next find')`);
   }
+  await checkPhotoFirstPreferences({ cdp, evaluate, until, fill, click, measure, screenshot, checks, input, button, open, expand, upload, mode });
   const profile = {hourly_value:25,target_profit:0,contingency_pct:.143,fee_pct:null,pickup:12.5,fee_fixed:0};
   for (const width of [390,1440]) {
-    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:width===390?844:1000,deviceScaleFactor:1,mobile:width===390});
     await open();
+    await until(`document.querySelector('[data-quick-assess]') && !document.querySelector('[data-quick-assess]').disabled`);
+    await checkEntryOrder(evaluate);
+    await checkPhotoEntry(measure);
+    await screenshot(`photo-first-ready-${width}.png`);
     assert.equal(await evaluate(`document.querySelector('[data-preferences-panel]').open`),false);
     assert.equal(await evaluate(`window.prefRequests.filter(r=>r.path==='/api/items/preferences').length`),1,'One initial preference GET');
     await expand();
@@ -1572,9 +1735,18 @@ async function runPreferenceChecks({ cdp, evaluate, until, fill, click, measure,
   const marker = await evaluate(`sessionStorage.getItem('flipforge:item-assessment:browser-fixture')`);
   assert.ok(marker);
   await put({...profile,hourly_value:75,pickup:123});
+  await cdp('Page.navigate',{url:'http://127.0.0.1:5173/items?prefMode=fail&holdRecovery=1'});
+  await until(`typeof window.releaseEntryRecovery === 'function' && Boolean(${button('Retry loading preferences')})`);
+  await checkEntryOrder(evaluate);
+  await checkPhotoEntry(measure);
+  assert.ok(await evaluate(`document.querySelector('[data-quick-assess]').disabled && !${button('Fix preferences')}`));
+  assert.deepEqual(await evaluate(`window.prefRequests.filter(r => r.path.startsWith('/api/items/assess')).map(r => r.method)`), ['GET']);
+  await evaluate('window.releaseEntryRecovery()');
+  await until(`document.body.textContent.includes('Recovered your photo estimate')`);
+  checks.push('A present recovery ID suppresses the photo-card preference note even when loading failed; the existing assessment is read once');
   await evaluate(`window.beforeRecoveredPreferences=true`);
   await cdp('Page.navigate',{url:'http://127.0.0.1:5173/items'});
-  await until(`!window.beforeRecoveredPreferences && document.body.textContent.includes('Recovered your photo estimate')`);
+  await until(`!window.beforeRecoveredPreferences && document.body?.textContent.includes('Recovered your photo estimate')`);
   assert.equal(await evaluate(input('quick-hourly_value')+'.value'),'20');
   assert.equal(await evaluate(input('quick-pickup')+'.value'),'0');
   assert.equal(await evaluate(input('quick-fee_pct')+'.value'),'0');

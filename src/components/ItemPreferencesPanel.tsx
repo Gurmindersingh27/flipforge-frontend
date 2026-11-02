@@ -1,13 +1,21 @@
 import { useItemSession } from "../lib/useItemSession";
 import { ItemSessionChangedError, ItemSignInError } from "../lib/itemSession";
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import type { Ref } from 'react';
 import { useAuth, SignInButton } from '@clerk/clerk-react';
 import { getItemPreferences, putItemPreferences } from '../lib/api';
 import { ITEM_LABELS } from '../lib/itemAnalysis';
 import { buildPreferences, PREFERENCE_FIELDS, preferenceForm } from '../lib/itemPreferences';
 import type { ItemPreferences } from '../lib/types';
 
-type Props = { onResolved: (profile: ItemPreferences | null) => void; light?: boolean; disabled?: boolean };
+export type PreferenceLoadStatus = 'loading' | 'ready' | 'failed' | 'continued';
+type Props = {
+  onResolved: (profile: ItemPreferences | null) => void;
+  onLoadStatusChange?: (status: PreferenceLoadStatus) => void;
+  focusRetryRef?: Ref<() => void>;
+  light?: boolean;
+  disabled?: boolean;
+};
 export default function ItemPreferencesPanel(props: Props) {
   const { isLoaded, isSignedIn, userId, sessionId } = useAuth();
   if (!isLoaded) return <p role="status">Loading buying preferences…</p>;
@@ -17,10 +25,10 @@ export default function ItemPreferencesPanel(props: Props) {
   </details>;
   return <PreferencesEditor key={`${userId}:${sessionId}`} {...props} />;
 }
-function PreferencesEditor({ onResolved, light, disabled }: Props) {
+function PreferencesEditor({ onResolved, onLoadStatusChange, focusRetryRef, light, disabled }: Props) {
   const withSession = useItemSession();
   const [form, setForm] = useState(() => preferenceForm(null));
-  const [status, setStatus] = useState<'loading' | 'ready' | 'failed' | 'continued'>('loading');
+  const [status, setStatus] = useState<PreferenceLoadStatus>('loading');
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -29,6 +37,15 @@ function PreferencesEditor({ onResolved, light, disabled }: Props) {
   const resolved = useRef(false);
   const generation = useRef(0);
   const savingRef = useRef(false);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { onLoadStatusChange?.(status); }, [onLoadStatusChange, status]);
+  useImperativeHandle(focusRetryRef, () => () => {
+    if (!retryRef.current) return;
+    if (detailsRef.current) detailsRef.current.open = true;
+    retryRef.current.focus({ preventScroll: true });
+    retryRef.current.scrollIntoView({ block: 'center', inline: 'nearest' });
+  }, []);
   useEffect(() => {
     let active = true;
     const current = ++generation.current;
@@ -61,10 +78,10 @@ function PreferencesEditor({ onResolved, light, disabled }: Props) {
   return <section aria-label="Buying preferences" className={light ? 'quick-card' : 'min-w-0 rounded-xl border border-white/15 bg-white/5 p-4 sm:p-6'}>
     {status === 'loading' && <p role="status">Loading buying preferences… You can choose photos while you wait.</p>}
     {(status === 'failed' || status === 'continued') && <div role="alert"><p>{status === 'continued' ? 'Retry loading to change your preferences.' : message || "Couldn't load your buying preferences."}</p>
-      <button type="button" className={light ? 'quick-secondary' : 'min-h-11 px-3 underline'} onClick={() => { request.current = null; setStatus('loading'); setAttempt(n => n + 1); }}>Retry loading preferences</button>
+      <button ref={retryRef} type="button" className={light ? 'quick-secondary' : 'min-h-11 px-3 underline'} onClick={() => { request.current = null; setStatus('loading'); setAttempt(n => n + 1); }}>Retry loading preferences</button>
       {status === 'failed' && <button type="button" className={light ? 'quick-text-button' : 'min-h-11 px-3 underline'} onClick={() => { resolved.current = true; onResolved(null); setStatus('continued'); }}>Continue without remembered preferences</button>}
     </div>}
-    <details data-preferences-panel>
+    <details ref={detailsRef} data-preferences-panel>
       <summary className="min-h-11 cursor-pointer py-2 font-semibold">My buying preferences</summary>
       <p className={light ? 'quick-small' : 'mt-2 text-sm text-white/70'}>Optional starting values for new finds. Blank stays unknown; 0 means none. Saving changes your next find, not this one or any saved estimate. The last save replaces the whole set across devices.</p>
       <fieldset disabled={status !== 'ready' || saving || disabled} className="min-w-0">
