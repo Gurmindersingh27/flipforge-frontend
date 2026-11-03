@@ -31,6 +31,9 @@ function amount(form: SavedItemForm, field: ItemFinancialInput) {
 export default function ItemDecisionCard({ cardRef, evidence, result, source, form, repairChoice, disabled,
   recovered, onCalculate, onEditRepairs, onReviewSources, onReviewCosts, onReviewChecks, onReviewResale }: Props) {
   const verified = verifiedPriceCount(evidence.listings);
+  const qualifying = evidence.listings.filter(row => row.eligible).length;
+  const qualifyingNote = verified !== null && verified >= 3 && qualifying < 3
+    ? ` · ${qualifying} ${qualifying === 1 ? "qualifies" : "qualify"}` : "";
   const low = amount(form, "resale_low"), high = amount(form, "resale_high");
   const range = low === null || high === null || high < low ? null : low === high ? formatItemHeadlineMoney(low)
     : `${formatItemHeadlineMoney(low)}–${formatItemHeadlineMoney(high)}`;
@@ -60,7 +63,7 @@ export default function ItemDecisionCard({ cardRef, evidence, result, source, fo
     </div>
     <dl className="quick-card-figures">
       <div><dt>{manual ? "Your resale estimate" : "Estimated resale"}</dt>
-        <dd>{range ?? (verified === null ? "Verified count unavailable · 3 needed" : `${verified} verified ${verified === 1 ? "price" : "prices"} · 3 needed`)}</dd>
+        <dd>{range ?? (verified === null ? "Verified count unavailable · 3 needed" : `${verified} verified ${verified === 1 ? "price" : "prices"}${qualifyingNote} · 3 needed`)}</dd>
         <dd className="quick-card-caption">{resaleNote}</dd>
       </div>
       <div><dt>{result && budget !== null ? "Confirmed rehab" : repairChoice === "custom" && budget !== null ? "Your repair budget" : "Estimated rehab"}</dt>

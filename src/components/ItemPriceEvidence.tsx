@@ -23,9 +23,8 @@ const nationalReasons: Record<string, string> = {
   not_recorded: "National eligibility was not recorded for this assessment.",
 };
 
-export default function ItemPriceEvidence({ evidence, showConditionHints, panelRef, onBackToEstimate }: {
+export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate }: {
   evidence: ItemAssessmentResult;
-  showConditionHints: boolean;
   panelRef?: Ref<HTMLDetailsElement>;
   onBackToEstimate?: () => void;
 }) {
@@ -47,7 +46,7 @@ export default function ItemPriceEvidence({ evidence, showConditionHints, panelR
         {link ? <a href={link} target="_blank" rel="noopener noreferrer">{listing.title} ↗</a> : <strong>{listing.title}</strong>}
         <p>{formatItemMoney(listing.price)} · {listing.condition}</p>
         <p className="quick-small">{listing.eligible ? "Eligible price evidence" : "Reference only"}
-          {showConditionHints && hasUnconfirmedUsedCondition(listing) && " · Used condition unconfirmed"}</p>
+          {hasUnconfirmedUsedCondition(listing) && " · Used condition unconfirmed"}</p>
         {!listing.eligible && <p className="quick-small">Main reason: {listing.exclusion_reason && Object.hasOwn(reasons, listing.exclusion_reason) ? reasons[listing.exclusion_reason] : "This listing was excluded from the range; a recognized reason is unavailable."}</p>}
         <p className="quick-small" data-national-reason>{listing.national_eligible === true
           ? "National reference: eligible price evidence."
