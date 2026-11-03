@@ -112,7 +112,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const [form, setForm] = useState(newQuickItemForm);
   const touched = useRef(new Set<ItemFinancialInput>());
   const preferenceSealed = useRef(false);
-  const freshAssessment = useRef(false);
+  const [freshAssessment, setFreshAssessment] = useState(false);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [preferenceLoadStatus, setPreferenceLoadStatus] = useState<PreferenceLoadStatus>("loading");
   const focusPreferenceRetry = useRef<() => void>(null);
@@ -150,7 +150,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
   const [timings, setTimings] = useState<ItemTimings>({});
   const [timing] = useState(() => createItemTiming(setTimings));
   useEffect(() => { timing.activate(); return () => timing.dispose(); }, [timing]);
-  const acceptAssessment = useCallback((response: ItemAssessmentResponse) => {
+  const acceptAssessment = useCallback((response: ItemAssessmentResponse, fresh = false) => {
     if (response.schema_version !== 1 || !["processing", "uncertain", "failed", "completed"].includes(response.status) || (response.status === "completed" && !response.result)) throw new Error("The estimate wasn't confirmed. Check its status before trying again.");
     setAssessment(response);
     if (response.status === "processing" || response.status === "uncertain") {
@@ -160,12 +160,12 @@ function QuickEditor({ findId }: { findId: string | null }) {
     if (!response.result) { setError(response.message ?? "AI couldn't finish. Enter your own estimate below."); setManual(true); return; }
     setEvidence(response.result);
     const inputs = response.result.inputs;
-    setForm(old => freshAssessment.current ? acceptFreshItemInputs(inputs, old, touched.current) : restoreItemForm(inputs));
+    setForm(old => fresh ? acceptFreshItemInputs(inputs, old, touched.current) : restoreItemForm(inputs));
     setResult(null);
-    setConfirmation(null); setResaleSource(response.result.resale === null || (freshAssessment.current && (touched.current.has("resale_low") || touched.current.has("resale_high"))) ? "user_estimate" : "assessment");
+    setConfirmation(null); setResaleSource(response.result.resale === null || (fresh && (touched.current.has("resale_low") || touched.current.has("resale_high"))) ? "user_estimate" : "assessment");
     setResaleRange(false);
     setRepairChoice(response.result.repair_unknowns.length ? "unreviewed" :
-      freshAssessment.current && touched.current.has("repairs") ? "custom" : "catalog");
+      fresh && touched.current.has("repairs") ? "custom" : "catalog");
     setManual(true); setErrors({}); setError("");
     setEditVersion(value => value + 1);
   }, []);
@@ -312,7 +312,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
     let sent = false;
     try {
       if (payload) {
-        preferenceSealed.current = true; freshAssessment.current = true;
+        preferenceSealed.current = true; setFreshAssessment(true);
         setPendingId(payload.request_id);
         setRecoveryId(userId && rememberAssessment(userId, payload.request_id) ? payload.request_id : null);
         setRecovered(false); sent = true;
@@ -328,7 +328,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
       }
       finally { if (current === sequence.current) finishTiming(); }
       if (current !== sequence.current) return;
-      acceptAssessment(response);
+      acceptAssessment(response, Boolean(payload) || freshAssessment);
       void checkAvailability();
     } catch (failure) { if (failure instanceof ItemSessionChangedError) return;
       if (current !== sequence.current) return;
@@ -519,7 +519,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
               {ownResale && (resaleRange ? <div className="quick-fields">{field("resale_low", "Low sale estimate ($)")}{field("resale_high", "High sale estimate ($)")}</div> : field("resale_low", "What do you think it'll sell for?", true))}
               {ownResale && <p className="quick-small" data-sale-input-source>{resaleSource === "national_reference" ? buyingResaleLabel(resaleSource) : "Your sale estimate. You can change it later."}</p>}
             </fieldset>
-            {evidence && <ItemPriceEvidence evidence={evidence} panelRef={sourcesRef} onBackToEstimate={backToResale} />}
+            {evidence && <ItemPriceEvidence evidence={evidence} showConditionHints={freshAssessment} panelRef={sourcesRef} onBackToEstimate={backToResale} />}
           </EstimateSection>
           <EstimateSection photo={!!evidence} step="03" title="What it will cost you">
             <fieldset disabled={blocked}>

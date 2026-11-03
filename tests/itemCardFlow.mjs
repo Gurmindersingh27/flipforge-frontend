@@ -24,6 +24,21 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
     assert.deepEqual(await requests(), before, 'Reading the card and changing viewport sends no requests');
   }
 
+  const mixed = await assess('national', false, () => evaluate('window.simulateLocalNew = true'));
+  assert.deepEqual(mixed.result.listings.map(row => row.condition_type), ['used', 'used', 'new']);
+  assert.match(await text(), /3 verified prices · 3 needed/);
+  assert.match(await text(), /No buying limit yet/);
+  assert.doesNotMatch(await text(), /conditions? unconfirmed/i);
+  await capture('local-new');
+  await click('button','Review 3 price sources');
+  const mixedRows = await evaluate("Array.from(document.querySelectorAll('.quick-sources article'), row => row.innerText)");
+  assert.ok(mixedRows.slice(0, 2).every(row => row.includes('Eligible price evidence')));
+  assert.ok(mixedRows.every(row => !row.includes('Used condition unconfirmed')));
+  assert.match(mixedRows[2], /Reference only/);
+  assert.match(mixedRows[2], /Main reason: Identified as new, not used\./);
+  assert.equal((await requests()).filter(r => r.path === '/api/items/analyze').length, 0);
+  checks.push('A simulated two-used, one-new local response shows three verified asks, the new-item reason and no buying limit');
+
   const unpriced = await assess('card_unpriced_repairs', false);
   assert.deepEqual(unpriced.result.repair_suggestions, []);
   assert.match(await text(), /Still unknown/);
@@ -82,6 +97,7 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
   const dresser = await assess('card_dresser', false);
   assert.match(await text(), /Still unknown/);
   assert.match(await text(), /\$180–\$220/);
+  assert.match(await text(), /3 pickup listings · asking prices · 3 conditions unconfirmed/);
   await click('button','Review costs');
   await fill(field('pickup'),'10');
   await closeDetails();
@@ -104,6 +120,7 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
   await click('button','Review 3 price sources');
   assert.ok(await evaluate(`${drawer}.open && document.querySelector('.quick-sources').open &&
     document.activeElement === document.querySelector('.quick-sources summary')`), 'Sources remain reachable during Calculate');
+  assert.ok(await evaluate("Array.from(document.querySelectorAll('.quick-sources article'), row => row.innerText).every(row => row.includes('Used condition unconfirmed'))"));
   await evaluate('window.releaseCardCalculation()');
   await until(`${card}.querySelector('[data-quick-offer]')?.textContent==='$130'`);
   const sent=(await requests()).slice(beforeAccept.length);
@@ -118,14 +135,21 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
   assert.equal(saved.assessment.confirmation.resale_source,'assessment');
   await navigate('/items?find='+saved.id);await settled(false);
   assert.match(await text(), /Offer up to \$130/);
+  assert.match(await text(), /3 conditions unconfirmed/);
+  assert.doesNotMatch(await evaluate("document.querySelector('.quick-sources').textContent"), /Used condition unconfirmed/);
   assert.equal(await evaluate(field('repairs')+'.value'),'8');
   await navigate('/items', dresser.id);await settled(false);
   assert.match(await text(), /Recovered estimate/);
+  assert.match(await text(), /3 conditions unconfirmed/);
+  assert.doesNotMatch(await evaluate("document.querySelector('.quick-sources').textContent"), /Used condition unconfirmed/);
   assert.match(await text(), /Still unknown/);
   assert.equal(await evaluate(field('repairs')+'.value'),'');
   assert.equal(await evaluate(card+".querySelector('[data-quick-offer]')"),null);
   assert.equal((await requests()).filter(r=>r.method==='POST').length,0);
   await capture('recovered');
+  await click('summary','Details');
+  await click('button','Dismiss estimate recovery');
+  assert.doesNotMatch(await evaluate("document.querySelector('.quick-sources').textContent"), /Used condition unconfirmed/);
 
   await assess('national', false);
   assert.match(await text(), /No buying limit yet/);

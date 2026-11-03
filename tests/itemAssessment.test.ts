@@ -4,16 +4,20 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildAssessmentRequest, formatItemHeadlineMoney, itemDecision, newQuickItemForm, prepareItemPhoto, quickAssumptionsSummary, suggestedRepairTotal, verifiedPriceCount } from "../src/lib/itemAssessment.ts";
 import { buildSavedItemInputs } from "../src/lib/savedItems.ts";
-import type { ItemAnalyzeResponse, ItemAssessmentPhoto, ItemAssessmentResult, ItemListingEvidence } from "../src/lib/types.ts";
+import type { ItemAnalyzeResponse, ItemAssessmentConfirmation, ItemAssessmentPhoto, ItemAssessmentResult, ItemListingEvidence } from "../src/lib/types.ts";
 
 const photos: ItemAssessmentPhoto[] = [{ media_type: "image/jpeg", data: "fixture" }];
 
-test("repair unknowns offer one-tap acceptance only for a positive catalog allowance", async t => {
+async function loadDecisionCard(t: TestContext) {
   const { createServer } = await import("vite");
   const vite = await createServer({ configFile: false, optimizeDeps: { noDiscovery: true },
     server: { middlewareMode: true, hmr: false, watch: null } });
   t.after(() => vite.close());
-  const { default: Card } = await vite.ssrLoadModule("/src/components/ItemDecisionCard.tsx");
+  return (await vite.ssrLoadModule("/src/components/ItemDecisionCard.tsx")).default;
+}
+
+test("repair unknowns offer one-tap acceptance only for a positive catalog allowance", async t => {
+  const Card = await loadDecisionCard(t);
   const render = (costs: number[]) => renderToStaticMarkup(createElement(Card, {
     evidence: { item_name: "Chair", listings: [], repair_unknowns: ["Check the seat lift."],
       repair_suggestions: costs.map(materials_cost => ({ materials_cost })) },
@@ -36,7 +40,34 @@ test("the card counts verified asks from retained server verdicts and leaves unr
   assert.equal(verifiedPriceCount([]), 0);
   assert.equal(verifiedPriceCount([row("not_local_pickup"), row("unsupported_price")]), 1);
   assert.equal(verifiedPriceCount([row(null, true), row("not_comparable"), row("zero_price")]), 3);
+  assert.equal(verifiedPriceCount([row(null, true), row(null, true), row("condition_new")]), 3);
+  assert.equal(verifiedPriceCount([row("condition_new"), row("future_reason")]), null);
   assert.equal(verifiedPriceCount([row("unsupported_price"), row("future_reason")]), null);
+});
+
+test("only an active local range discloses eligible rows explicitly recorded with unknown condition", async t => {
+  const Card = await loadDecisionCard(t);
+  const listings = [
+    { eligible: true, condition_type: "used" },
+    { eligible: true }, // No condition classification in the stored row.
+    { eligible: true, condition_type: "unknown" },
+    { eligible: false, condition_type: "unknown", exclusion_reason: "not_local_pickup" },
+  ];
+  const render = (source: ItemAssessmentConfirmation["resale_source"], local: boolean, rows = listings) => {
+    const form = newQuickItemForm();
+    if (local || source === "national_reference") Object.assign(form.values, { resale_low: "180", resale_high: "220" });
+    return renderToStaticMarkup(createElement(Card, {
+      evidence: { item_name: "Chair", listings: rows, repair_unknowns: [], repair_suggestions: [],
+        resale: local ? { eligible_count: 3 } : null, national_resale: local ? null : { eligible_count: 3 } },
+      form, source, repairChoice: "unreviewed", result: null,
+    }));
+  };
+  assert.match(render("assessment", true), /3 pickup listings · asking prices · 1 condition unconfirmed/);
+  const knownOrLegacy = listings.map(row => row.eligible && row.condition_type === "unknown" ? { ...row, condition_type: "used" } : row);
+  assert.doesNotMatch(render("assessment", true, knownOrLegacy), /conditions? unconfirmed/i);
+  assert.doesNotMatch(render("user_estimate", true), /conditions? unconfirmed/i);
+  assert.doesNotMatch(render("national_reference", false), /conditions? unconfirmed/i);
+  assert.doesNotMatch(render("assessment", false), /conditions? unconfirmed/i);
 });
 
 function photoEnvironment(t: TestContext) {

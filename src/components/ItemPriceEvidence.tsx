@@ -1,5 +1,6 @@
 import type { Ref } from "react";
 import { formatItemMoney } from "../lib/itemAnalysis";
+import { hasUnconfirmedUsedCondition } from "../lib/itemAssessment";
 import { safeItemLink } from "../lib/savedItems";
 import type { ItemAssessmentResult } from "../lib/types";
 
@@ -8,21 +9,23 @@ const reasons: Record<string, string> = {
   not_comparable: "Not a comparable single item.",
   not_local_pickup: "Not identified as a local-pickup listing.",
   zero_price: "The listed price is zero.",
+  condition_new: "Identified as new, not used.",
 };
 const nationalReasons: Record<string, string> = {
   unsupported_price: "No supporting search quote verifies this price.",
   zero_price: "The listed price is zero.",
   not_comparable: "Not a comparable single item.",
   not_shipped: "Not identified as a shipped listing.",
-  condition_new: "Identified as new, not used.",
+  condition_new: reasons.condition_new,
   condition_unknown: "Used condition was not established from the source.",
   shipping_included: "The price includes shipping; an item-only price was not established.",
   price_basis_unknown: "It is unclear whether this price excludes shipping.",
   not_recorded: "National eligibility was not recorded for this assessment.",
 };
 
-export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate }: {
+export default function ItemPriceEvidence({ evidence, showConditionHints, panelRef, onBackToEstimate }: {
   evidence: ItemAssessmentResult;
+  showConditionHints: boolean;
   panelRef?: Ref<HTMLDetailsElement>;
   onBackToEstimate?: () => void;
 }) {
@@ -43,7 +46,8 @@ export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate
         <p className="quick-source-label">{listing.source} · {listing.market === "national_shipping" ? "National / shipping" : listing.market === "local_pickup" ? "Pickup offered" : "Location unknown"}</p>
         {link ? <a href={link} target="_blank" rel="noopener noreferrer">{listing.title} ↗</a> : <strong>{listing.title}</strong>}
         <p>{formatItemMoney(listing.price)} · {listing.condition}</p>
-        <p className="quick-small">{listing.eligible ? "Eligible price evidence" : "Reference only"}</p>
+        <p className="quick-small">{listing.eligible ? "Eligible price evidence" : "Reference only"}
+          {showConditionHints && hasUnconfirmedUsedCondition(listing) && " · Used condition unconfirmed"}</p>
         {!listing.eligible && <p className="quick-small">Main reason: {listing.exclusion_reason && Object.hasOwn(reasons, listing.exclusion_reason) ? reasons[listing.exclusion_reason] : "This listing was excluded from the range; a recognized reason is unavailable."}</p>}
         <p className="quick-small" data-national-reason>{listing.national_eligible === true
           ? "National reference: eligible price evidence."
