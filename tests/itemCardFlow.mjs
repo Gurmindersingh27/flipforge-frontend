@@ -6,6 +6,7 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
   const primary = "document.querySelector('.quick-decision-card .quick-primary')";
   const field = id => `document.getElementById('quick-${id}')`;
   const text = () => evaluate(card + '.innerText');
+  const conditionHints = () => evaluate("Array.from(document.querySelectorAll('.quick-sources article'), row => row.textContent.includes('Used condition unconfirmed'))");
   async function closeDetails() {
     await evaluate(`${drawer}.open && ${drawer}.querySelector('summary').click()`);
     await until(`!${drawer}.open`);
@@ -24,9 +25,11 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
     assert.deepEqual(await requests(), before, 'Reading the card and changing viewport sends no requests');
   }
 
-  const mixed = await assess('national', false, () => evaluate('window.simulateLocalNew = true'));
+  const mixed = await assess('card_local_new', false);
   assert.deepEqual(mixed.result.listings.map(row => row.condition_type), ['used', 'used', 'new']);
-  assert.match(await text(), /3 verified prices · 3 needed/);
+  assert.deepEqual(mixed.result.listings.map(row => row.exclusion_reason), [null, null, 'condition_new']);
+  assert.equal(mixed.result.resale, null);
+  assert.match(await text(), /3 verified prices · 2 qualify · 3 needed/);
   assert.match(await text(), /No buying limit yet/);
   assert.doesNotMatch(await text(), /conditions? unconfirmed/i);
   await capture('local-new');
@@ -37,7 +40,7 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
   assert.match(mixedRows[2], /Reference only/);
   assert.match(mixedRows[2], /Main reason: Identified as new, not used\./);
   assert.equal((await requests()).filter(r => r.path === '/api/items/analyze').length, 0);
-  checks.push('A simulated two-used, one-new local response shows three verified asks, the new-item reason and no buying limit');
+  checks.push('Two used and one new pickup listing produce three verified asks, two qualifying listings, the new-item reason and no buying limit');
 
   const unpriced = await assess('card_unpriced_repairs', false);
   assert.deepEqual(unpriced.result.repair_suggestions, []);
@@ -120,7 +123,7 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
   await click('button','Review 3 price sources');
   assert.ok(await evaluate(`${drawer}.open && document.querySelector('.quick-sources').open &&
     document.activeElement === document.querySelector('.quick-sources summary')`), 'Sources remain reachable during Calculate');
-  assert.ok(await evaluate("Array.from(document.querySelectorAll('.quick-sources article'), row => row.innerText).every(row => row.includes('Used condition unconfirmed'))"));
+  assert.deepEqual(await conditionHints(), [true, true, true]);
   await evaluate('window.releaseCardCalculation()');
   await until(`${card}.querySelector('[data-quick-offer]')?.textContent==='$130'`);
   const sent=(await requests()).slice(beforeAccept.length);
@@ -136,12 +139,15 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
   await navigate('/items?find='+saved.id);await settled(false);
   assert.match(await text(), /Offer up to \$130/);
   assert.match(await text(), /3 conditions unconfirmed/);
-  assert.doesNotMatch(await evaluate("document.querySelector('.quick-sources').textContent"), /Used condition unconfirmed/);
+  assert.deepEqual(await conditionHints(), [true, true, true]);
   assert.equal(await evaluate(field('repairs')+'.value'),'8');
+  await navigate('/items?find='+saved.id+'&nationalLegacy');await settled(false);
+  assert.deepEqual(await conditionHints(), [false, false, false], 'Older rows without a condition classification keep their original wording');
+  assert.match(await text(), /Offer up to \$130/);
   await navigate('/items', dresser.id);await settled(false);
   assert.match(await text(), /Recovered estimate/);
   assert.match(await text(), /3 conditions unconfirmed/);
-  assert.doesNotMatch(await evaluate("document.querySelector('.quick-sources').textContent"), /Used condition unconfirmed/);
+  assert.deepEqual(await conditionHints(), [true, true, true]);
   assert.match(await text(), /Still unknown/);
   assert.equal(await evaluate(field('repairs')+'.value'),'');
   assert.equal(await evaluate(card+".querySelector('[data-quick-offer]')"),null);
@@ -149,10 +155,11 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
   await capture('recovered');
   await click('summary','Details');
   await click('button','Dismiss estimate recovery');
-  assert.doesNotMatch(await evaluate("document.querySelector('.quick-sources').textContent"), /Used condition unconfirmed/);
+  assert.deepEqual(await conditionHints(), [true, true, true]);
 
   await assess('national', false);
   assert.match(await text(), /No buying limit yet/);
+  assert.match(await text(), /3 verified prices · 0 qualify · 3 needed/);
   assert.match(await text(), /national reference is available/);
   assert.equal(await evaluate(field('resale_low')+'.value'),'');
   await capture('national-offered');

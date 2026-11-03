@@ -63,6 +63,10 @@ def photo_provider(payload):
     if mode.startswith('national'):
         prices = [65, 75, 90, 100, 200, 300] if mode == 'national_local' else [100, 200, 300, 400] if mode == 'national_mixed' else list(range(100, 1300, 100)) if mode == 'national_reasons' else [100, 200, 300]
     listings = [dict(title='Used wood dining chair', url='https://example.com/chair/' + str(i), price=p, currency='USD', condition='Used, good condition', comparable=True, single_item=True, market='local_pickup', location='Atlanta') for i, p in enumerate(prices)]
+    if mode == 'card_local_new':
+        for row in listings:
+            row['condition_type'] = 'used'
+        listings[-1].update(title='New wood dining chair', condition='New', condition_type='new')
     if mode.startswith('national'):
         for row in listings:
             row.update(market='national_shipping', condition_type='used', price_basis='item_only')
@@ -104,6 +108,8 @@ def photo_provider(payload):
     if jobs:
         report['repairs'] = [dict(job_id=job, reason='Visible work: ' + job) for job in jobs]
     citations = [dict(type='web_search_result_location', url=row['url'], cited_text='Used chair $' + str(row['price']) + (', plus shipping.' if row['market'] == 'national_shipping' else ', local pickup.')) for row in listings]
+    if mode == 'card_local_new':
+        citations[-1]['cited_text'] = 'New chair $90, local pickup.'
     if mode == 'card_chair':
         citations[0]['cited_text'] = 'Mesh chair $325 Atlanta.'
         for citation in citations[1:]:

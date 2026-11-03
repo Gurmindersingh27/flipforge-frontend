@@ -519,7 +519,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
               {ownResale && (resaleRange ? <div className="quick-fields">{field("resale_low", "Low sale estimate ($)")}{field("resale_high", "High sale estimate ($)")}</div> : field("resale_low", "What do you think it'll sell for?", true))}
               {ownResale && <p className="quick-small" data-sale-input-source>{resaleSource === "national_reference" ? buyingResaleLabel(resaleSource) : "Your sale estimate. You can change it later."}</p>}
             </fieldset>
-            {evidence && <ItemPriceEvidence evidence={evidence} showConditionHints={freshAssessment} panelRef={sourcesRef} onBackToEstimate={backToResale} />}
+            {evidence && <ItemPriceEvidence evidence={evidence} panelRef={sourcesRef} onBackToEstimate={backToResale} />}
           </EstimateSection>
           <EstimateSection photo={!!evidence} step="03" title="What it will cost you">
             <fieldset disabled={blocked}>
