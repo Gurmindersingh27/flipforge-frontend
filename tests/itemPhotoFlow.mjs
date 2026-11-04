@@ -110,6 +110,9 @@ def photo_provider(payload):
     citations = [dict(type='web_search_result_location', url=row['url'], cited_text='Used chair $' + str(row['price']) + (', plus shipping.' if row['market'] == 'national_shipping' else ', local pickup.')) for row in listings]
     if mode == 'card_local_new':
         citations[-1]['cited_text'] = 'New chair $90, local pickup.'
+        citations[0]['cited_text'] = ('Finish shows normal wear. ' * 11) + 'Asking $65 for the chair.'
+        citations.append(dict(type='web_search_result_location', url=listings[0]['url'],
+                              cited_text='Collect from Decatur after 5 pm.'))
     if mode == 'card_chair':
         citations[0]['cited_text'] = 'Mesh chair $325 Atlanta.'
         for citation in citations[1:]:
