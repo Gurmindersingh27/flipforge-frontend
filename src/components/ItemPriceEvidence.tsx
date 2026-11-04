@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import { useState, type Ref } from "react";
 import { formatItemMoney } from "../lib/itemAnalysis";
 import { hasUnconfirmedUsedCondition } from "../lib/itemAssessment";
 import { safeItemLink } from "../lib/savedItems";
@@ -28,7 +28,11 @@ export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate
   panelRef?: Ref<HTMLDetailsElement>;
   onBackToEstimate?: () => void;
 }) {
+  const [showFullExcerpts, setShowFullExcerpts] = useState(false);
   const date = new Date(evidence.assessed_at);
+  const excerpts = evidence.listings.map(row => row.supporting_quotes?.filter(text => text.trim()) ?? []);
+  const previewLength = 240;
+  const canExpand = excerpts.some(quotes => quotes.length > 1 || (quotes[0]?.length ?? 0) > previewLength);
   return <details ref={panelRef} id="quick-price-sources" className="quick-card quick-sources">
     <summary>See the price sources ({evidence.listings.length})</summary>
     <p className="quick-small">{evidence.resale
@@ -38,9 +42,13 @@ export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate
     {onBackToEstimate && <button type="button" className="quick-text-button" onClick={onBackToEstimate}>Back to sale estimate</button>}
     <p className="quick-small">Asking prices only, not confirmed sales. Pickup offered does not verify distance. A qualifying national reference is optional and uses shipped item prices excluding shipping. Condition and price basis are extracted from the source, not independently verified.</p>
     <p className="quick-small">{Number.isNaN(date.getTime()) ? "Assessment date unavailable." : `Found during the assessment on ${date.toLocaleDateString("en-US")}.`} This is when FlipForge processed the answer, not a listing’s posting date or a check that it is still available.</p>
+    {canExpand && <button type="button" className="quick-secondary" aria-expanded={showFullExcerpts}
+      onClick={() => setShowFullExcerpts(open => !open)}>
+      {showFullExcerpts ? "Show short previews" : "Show full excerpts"}
+    </button>}
     {evidence.listings.map((listing, index) => {
       const link = safeItemLink(listing.url);
-      const quote = listing.supporting_quotes?.find(text => text.trim());
+      const quotes = excerpts[index];
       return <article key={`${listing.url}-${index}`}>
         <p className="quick-source-label">{listing.source} · {listing.market === "national_shipping" ? "National / shipping" : listing.market === "local_pickup" ? "Pickup offered" : "Location unknown"}</p>
         {link ? <a href={link} target="_blank" rel="noopener noreferrer">{listing.title} ↗</a> : <strong>{listing.title}</strong>}
@@ -54,7 +62,12 @@ export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate
             ? nationalReasons[listing.national_exclusion_reason]
             : listing.national_eligible === undefined || listing.national_exclusion_reason === undefined
               ? nationalReasons.not_recorded : "This listing does not qualify; a recognized reason is unavailable."}`}</p>
-        {quote && <blockquote><span>Search excerpt</span>{quote.length > 240 ? `${quote.slice(0, 240)}…` : quote}</blockquote>}
+        {quotes.length === 0 && <p className="quick-small">No search excerpt recorded.</p>}
+        {(showFullExcerpts ? quotes : quotes.slice(0, 1)).map((quote, i) =>
+          <blockquote key={i}><span>Search excerpt{quotes.length > 1 && ` ${i + 1} of ${quotes.length}`}</span>
+            {showFullExcerpts || quote.length <= previewLength ? quote : `${quote.slice(0, previewLength)}…`}
+          </blockquote>
+        )}
       </article>;
     })}
   </details>;

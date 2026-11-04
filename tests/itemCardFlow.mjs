@@ -39,6 +39,18 @@ export async function runCardChecks({ cdp, evaluate, until, fill, click, measure
   assert.ok(mixedRows.every(row => !row.includes('Used condition unconfirmed')));
   assert.match(mixedRows[2], /Reference only/);
   assert.match(mixedRows[2], /Main reason: Identified as new, not used\./);
+  const rowExcerpts = () => evaluate("Array.from(document.querySelectorAll('.quick-sources article'), row => Array.from(row.querySelectorAll('blockquote'), quote => quote.lastChild.textContent))");
+  const quotes = mixed.result.listings.map(row => row.supporting_quotes);
+  assert.ok(quotes[0][0].indexOf('Asking $65') > 240);
+  assert.equal(quotes[0][1], 'Collect from Decatur after 5 pm.');
+  const preview = await rowExcerpts();
+  assert.deepEqual(preview[0], [quotes[0][0].slice(0, 240) + '…']);
+  const beforeReading = await requests();
+  await click('button', 'Show full excerpts');
+  assert.deepEqual(await rowExcerpts(), quotes);
+  await click('button', 'Show short previews');
+  assert.deepEqual(await rowExcerpts(), preview);
+  assert.deepEqual(await requests(), beforeReading, 'Reading all excerpts makes no API requests');
   assert.equal((await requests()).filter(r => r.path === '/api/items/analyze').length, 0);
   checks.push('Two used and one new pickup listing produce three verified asks, two qualifying listings, the new-item reason and no buying limit');
 
