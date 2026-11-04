@@ -1,8 +1,10 @@
-import { useState, type Ref } from "react";
+import { useMemo, useState, type Ref } from "react";
 import { formatItemMoney } from "../lib/itemAnalysis";
 import { hasUnconfirmedUsedCondition } from "../lib/itemAssessment";
+import { buildItemEvidenceCopy } from "../lib/itemEvidenceCopy";
+import type { BuyingResaleSource } from "../lib/itemBuyingDecision";
 import { safeItemLink } from "../lib/savedItems";
-import type { ItemAssessmentResult } from "../lib/types";
+import type { ItemAnalyzeResponse, ItemAssessmentResult } from "../lib/types";
 
 const reasons: Record<string, string> = {
   unsupported_price: "No supporting search quote verifies this price.",
@@ -23,12 +25,38 @@ const nationalReasons: Record<string, string> = {
   not_recorded: "National eligibility was not recorded for this assessment.",
 };
 
-export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate }: {
+function CopyEvidence({ text }: { text: string }) {
+  const [status, setStatus] = useState<"idle" | "copying" | "copied" | "manual">("idle");
+  async function copy() {
+    setStatus("copying");
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus("copied");
+    } catch {
+      setStatus("manual");
+    }
+  }
+  return <div>
+    <button type="button" className="quick-secondary" disabled={status === "copying"} onClick={copy}>
+      {status === "copying" ? "Copying…" : "Copy price evidence"}
+    </button>
+    {status === "copied" && <p role="status" className="quick-small">Price evidence copied.</p>}
+    {status === "manual" && <>
+      <p role="status" className="quick-small">Select the text below to copy it manually.</p>
+      <label className="quick-field">Price evidence<textarea readOnly rows={6} value={text} onFocus={event => event.currentTarget.select()} /></label>
+    </>}
+  </div>;
+}
+
+export default function ItemPriceEvidence({ evidence, result, source, panelRef, onBackToEstimate }: {
+  result: ItemAnalyzeResponse | null;
+  source: BuyingResaleSource;
   evidence: ItemAssessmentResult;
   panelRef?: Ref<HTMLDetailsElement>;
   onBackToEstimate?: () => void;
 }) {
   const [showFullExcerpts, setShowFullExcerpts] = useState(false);
+  const copyText = useMemo(() => buildItemEvidenceCopy(evidence, result, source), [evidence, result, source]);
   const date = new Date(evidence.assessed_at);
   const excerpts = evidence.listings.map(row => row.supporting_quotes?.filter(text => text.trim()) ?? []);
   const previewLength = 240;
@@ -42,6 +70,8 @@ export default function ItemPriceEvidence({ evidence, panelRef, onBackToEstimate
     {onBackToEstimate && <button type="button" className="quick-text-button" onClick={onBackToEstimate}>Back to sale estimate</button>}
     <p className="quick-small">Asking prices only, not confirmed sales. Pickup offered does not verify distance. A qualifying national reference is optional and uses shipped item prices excluding shipping. Condition and price basis are extracted from the source, not independently verified.</p>
     <p className="quick-small">{Number.isNaN(date.getTime()) ? "Assessment date unavailable." : `Found during the assessment on ${date.toLocaleDateString("en-US")}.`} This is when FlipForge processed the answer, not a listing’s posting date or a check that it is still available.</p>
+    <p className="quick-small">Copy all listing excerpts and any current buying limit with its costs.</p>
+    <CopyEvidence key={copyText} text={copyText} />
     {canExpand && <button type="button" className="quick-secondary" aria-expanded={showFullExcerpts}
       onClick={() => setShowFullExcerpts(open => !open)}>
       {showFullExcerpts ? "Show short previews" : "Show full excerpts"}

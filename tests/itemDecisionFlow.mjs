@@ -115,6 +115,13 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     await until(`Boolean(document.querySelector('.quick-buying-summary [role=status]'))`);
     assert.equal(await evaluate('window.copiedListing'), buyingSummary);
     assert.deepEqual(await requests(), initial, 'Buying summary preview/copy sends zero requests');
+    await click('button','Copy price evidence');
+    await until(`document.querySelector('.quick-sources [role=status]')?.textContent === 'Price evidence copied.'`);
+    const packet = await evaluate('window.copiedListing');
+    assert.ok(packet.includes(buyingSummary), 'Evidence uses the same current result and costs as the buying summary');
+    assert.ok(packet.includes('https://example.com/evidence/0') && packet.includes('x'.repeat(300)), 'Evidence includes the full listing excerpt');
+    assert.ok(!packet.includes('PRIVATE_NEGOTIATION_987') && !packet.includes('https://private.example/secret-source'));
+    assert.deepEqual(await requests(), initial, 'Copying the listing evidence sends zero requests');
     await evaluate(`document.querySelector('.quick-buying-summary').scrollIntoView({block:'start',behavior:'instant'})`);
     await screenshot(`photo-buying-summary-${width}.png`);
     if (width === 390) {
@@ -132,6 +139,11 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
       assert.ok(Math.abs(after.top - before) <= 8, `First edit must not move the focused field: ${before}px -> ${after.top}px`);
       assert.deepEqual(await requests(), initial, 'Editing a cost sends no request');
       await screenshot('photo-decision-edit-stable-390.png');
+      await click('button','Copy price evidence');
+      await until(`document.querySelector('.quick-sources [role=status]')?.textContent === 'Price evidence copied.'`);
+      const afterEdit = await evaluate('window.copiedListing');
+      assert.ok(afterEdit.endsWith('No buying limit is shown.') && !afterEdit.includes('Pay no more than'));
+      assert.deepEqual(await requests(), initial, 'Copying after a cost edit does not calculate again');
       checks.push('390x844 first cost-field keystroke after a reopened result retains focus and screen position within 8px without requests');
     }
     await openPhoto('&noRange=1');
