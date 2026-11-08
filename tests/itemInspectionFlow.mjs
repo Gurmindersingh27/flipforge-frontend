@@ -37,7 +37,7 @@ export async function runInspectionChecks({cdp,evaluate,until,fill,click,measure
   const ready=`document.querySelector('.inspection-editor fieldset') && !document.querySelector('.inspection-editor fieldset').disabled`;
   const message=text=>`document.querySelector('.inspection-editor')?.textContent.includes(${JSON.stringify(text)})`;
   const rows=()=>evaluate(`window.inspectionRows.filter(r=>r.method==='POST')`);
-  const fault=(value,get=false)=>evaluate(`${get?'window.inspectionGetFault':'window.inspectionFault'}=${JSON.stringify({remaining:1,...value})}`);
+  const fault=(value,get=false)=>evaluate(`${value.mode==='hold'?'window.releaseInspection=undefined;':''}${get?'window.inspectionGetFault':'window.inspectionFault'}=${JSON.stringify({remaining:1,...value})}`);
   const saved=async()=>{await click('button','Save inspection');await until(message('Inspection saved. Latest revision confirmed.')+' && '+ready);};
   await cdp('Page.navigate',{url:'http://127.0.0.1:5173/my-flips'});
   await until(`Boolean(document.querySelector('[aria-label="Open project ${root.id}"]'))`);
@@ -78,6 +78,20 @@ export async function runInspectionChecks({cdp,evaluate,until,fill,click,measure
     await screenshot(`photo-inspection-editor-${width}.png`);
   }
   checks.push('Inspection editor renders at 390/1440 without overflow, with labeled controls and 44px targets');
+  // A cancelled Back restoration may complete after the pending save and after
+  // another edit. Keep that new draft across busy -> clean -> dirty guards.
+  await fill(field('notes'),'Save while Back is pending');await fault({mode:'hold'});await click('button','Save inspection');
+  await until(`typeof window.releaseInspection==='function'`);
+  await evaluate(`window.inspectionGo=history.go.bind(history);history.go=delta=>{window.inspectionRestoreDelta=delta;};history.back()`);
+  await until(`typeof window.inspectionRestoreDelta==='number'`);
+  await evaluate('window.releaseInspection()');await until(message('Latest revision confirmed.'));
+  await fill(field('notes'),'New draft before Back restoration');
+  await evaluate('history.go=window.inspectionGo;history.go(window.inspectionRestoreDelta)');
+  await until(`location.pathname==='/my-flips/${root.id}'`);await pause(150);
+  assert.equal(await evaluate(field('notes')+'.value'),'New draft before Back restoration');
+  await fill(field('notes'),notes);await saved();
+  checks.push('Cancelled Back restoration survives a completed save and new unsaved draft without remounting or losing observations');
+
   await fill(field('label_text'),'x'.repeat(501));const beforeValidation=(await rows()).length;
   await click('button','Save inspection');await until(message('Check the highlighted'));
   assert.equal((await rows()).length,beforeValidation);assert.equal(await evaluate(field('label_text')+'.value.length'),501);

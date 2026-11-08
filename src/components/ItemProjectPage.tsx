@@ -22,7 +22,15 @@ import "./ItemProjectPage.css";
 // popstate listeners can otherwise notify the router before a mounted guard.
 // Only the mounted project supplies a handler; cleanup removes its closure.
 let projectPopGuard: ((event: PopStateEvent) => void) | null = null;
-if (typeof window !== "undefined") window.addEventListener("popstate", event => projectPopGuard?.(event), true);
+let projectPopRestoreIndex: number | null = null;
+if (typeof window !== "undefined") window.addEventListener("popstate", event => {
+  // Restoration outlives guard changes (for example a save finishing). Do not
+  // let that synthetic return navigation remount a newly edited draft.
+  if (projectPopRestoreIndex !== null && event.state?.idx === projectPopRestoreIndex) {
+    projectPopRestoreIndex = null; event.stopImmediatePropagation(); return;
+  }
+  projectPopGuard?.(event);
+}, true);
 
 function Project({ rootId }: { rootId: number }) {
   const withSession = useItemSession();
@@ -79,12 +87,10 @@ function Project({ rootId }: { rootId: number }) {
     };
     // Restore cancelled Back/Forward before BrowserRouter unmounts this draft.
     const index = window.history.state?.idx;
-    let restoring = false;
     const backOrForward = (event: PopStateEvent) => {
-      if (restoring) { restoring = false; event.stopImmediatePropagation(); return; }
       const target = event.state?.idx;
       if (typeof index !== "number" || typeof target !== "number" || target === index || allowLeaving()) return;
-      event.stopImmediatePropagation(); restoring = true; window.history.go(index - target);
+      event.stopImmediatePropagation(); projectPopRestoreIndex = index; window.history.go(index - target);
     };
     window.addEventListener("beforeunload", beforeUnload); document.addEventListener("click", leaving, true);
     projectPopGuard = backOrForward;
