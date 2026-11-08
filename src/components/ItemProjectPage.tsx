@@ -18,6 +18,12 @@ import ItemOutcomeComparison, { ActualFigures } from "./ItemOutcomeComparison";
 import "./MyFlipsPage.css";
 import "./ItemProjectPage.css";
 
+// Register before BrowserRouter installs its history listener. Window-targeted
+// popstate listeners can otherwise notify the router before a mounted guard.
+// Only the mounted project supplies a handler; cleanup removes its closure.
+let projectPopGuard: ((event: PopStateEvent) => void) | null = null;
+if (typeof window !== "undefined") window.addEventListener("popstate", event => projectPopGuard?.(event), true);
+
 function Project({ rootId }: { rootId: number }) {
   const withSession = useItemSession();
   const [project, setProject] = useState<ItemProjectResponse | null>(null);
@@ -81,8 +87,11 @@ function Project({ rootId }: { rootId: number }) {
       event.stopImmediatePropagation(); restoring = true; window.history.go(index - target);
     };
     window.addEventListener("beforeunload", beforeUnload); document.addEventListener("click", leaving, true);
-    window.addEventListener("popstate", backOrForward, true);
-    return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leaving, true); window.removeEventListener("popstate", backOrForward, true); };
+    projectPopGuard = backOrForward;
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leaving, true);
+      if (projectPopGuard === backOrForward) projectPopGuard = null;
+    };
   }, [navigationGuard]);
   function track(itemId: number | null, toggle = true, preserveBasis = true) {
     // Reopening the same editor is navigation, not a discard/remount.
