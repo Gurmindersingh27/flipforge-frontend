@@ -43,6 +43,8 @@ export async function runProjectChecks({ cdp, evaluate, until, fill, click, meas
   await evaluate(`document.querySelectorAll('.item-outcome details').forEach(e=>e.open=true)`);
   for(const [key,value] of Object.entries({materials:38,hired_labor:0,pickup:12,delivery:0,storage:0,selling_fees:0,other_expenses:5,hours:6,hourly_value:20,purchased_on:'2026-10-01',listed_on:'2026-10-04',sold_on:'2026-10-09'}))await fill(field(key),String(value));
   await save('sold');
+  assert.equal(await evaluate(`document.querySelector('[data-project-result="cash_profit"]').textContent`),'$60.00');
+  assert.equal(await evaluate(`document.querySelector('[data-project-result="profit_after_time"]').textContent`),'-$60.00');
   assert.equal(await evaluate(actual('cash_invested')),'$100.00');
   assert.equal(await evaluate(actual('cash_profit')),'$60.00');
   assert.equal(await evaluate(actual('profit_after_time')),'-$60.00');
@@ -57,17 +59,27 @@ export async function runProjectChecks({ cdp, evaluate, until, fill, click, meas
   checks.push('Project flow groups three versions, records Bought → Listed → Sold, and shows the dresser original/adjusted/actual figures plus every cent of cash/time differences against the explicitly linked older estimate');
   await click('button','Close tracking');
   for(const width of [390,1440]){
-    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:width===390?844:1000,deviceScaleFactor:1,mobile:width===390});
+    await evaluate('window.scrollTo(0,0)');
     assert.ok(await measure('document.documentElement.scrollWidth<=innerWidth'));
     assert.ok(await measure(`Array.from(document.querySelectorAll('.item-project button,.item-project a,.item-project summary')).filter(e=>e.getBoundingClientRect().height).every(e=>e.getBoundingClientRect().height>=44)`));
+    if(width===390)assert.ok(await measure(`document.querySelector('[data-project-result="cash_profit"]').getBoundingClientRect().top>=0 && document.querySelector('[data-project-result="cash_profit"]').getBoundingClientRect().bottom<innerHeight`),'Sold profit appears in the first phone viewport');
+    assert.equal(await evaluate(`document.querySelector('.project-cost-details').open`),false);
     await screenshot(`photo-project-comparison-${width}.png`);
+    await click('summary','Compare each cost and the sale price');
+    assert.equal(await evaluate(`document.querySelector('.project-cost-details').open`),true);
+    assert.ok(await measure('document.documentElement.scrollWidth<=innerWidth'));
+    await screenshot(`photo-project-costs-${width}.png`);
+    await click('summary','Compare each cost and the sale price');
   }
+  checks.push('Sold cash/time profit appears immediately on the phone; all detailed cost rows remain accessible in a labeled disclosure at 390/1440 without overflow');
   await click('button','Track this find');await until(ready);
   await evaluate(`document.querySelectorAll('.item-outcome details').forEach(e=>e.open=true)`);
   await fill(field('materials'),'');await save('sold');
   assert.equal(await evaluate(actual('cash_profit')),'Not complete');
   assert.ok(await evaluate(`document.querySelector('[data-project-incomplete]').textContent.toLowerCase().includes('materials not recorded')`));
   assert.equal(await evaluate(`document.querySelectorAll('.project-explanation,.project-headline').length`),0);
+  assert.equal(await evaluate(`document.body.textContent.includes('Most of the gap came from')`),false);
   assert.ok(await evaluate(`document.querySelector('[data-project-line="repairs"]').textContent.includes('Not recorded')`));
   assert.equal(await evaluate(`document.querySelector('[data-project-line="pickup"] .project-line-change').textContent.includes('-$2.00')`),true);
   checks.push('Missing materials withholds total profit and both explanations; known line differences remain visible and zero expenses remain explicit');

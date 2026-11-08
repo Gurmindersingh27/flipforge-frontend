@@ -49,15 +49,15 @@ export default function ItemOutcomeComparison({ comparison, outcome }: { compari
     <details className="flips-notes"><summary>Original saved assumptions</summary><dl className="project-figures">
       {ITEM_FIELDS.map(key => { const field = original.analysis_result.assumptions[key]; return <div key={key}><dt>{ITEM_LABELS[key]}</dt><dd>{field.value === null ? "Not entered" : key.endsWith("_pct") ? formatItemPercent(field.value) : key === "hours" ? `${field.value} hours` : formatItemMoney(field.value)}</dd></div>; })}
     </dl></details>
-    <h3>Where the numbers changed</h3>
+    <details className="project-cost-details flips-notes"><summary>Compare each cost and the sale price</summary>
     <p className="project-help">Purchase is the common basis. Repairs include the planned contingency; other expenses had no estimate allowance. Dates are actuals only.</p>
     <dl className="project-lines">{comparison.lines.map(line => <div className="project-line" key={line.key} data-project-line={line.key}>
       <dt>{line.label}</dt>
       <dd><span>Expected at your purchase price</span>{projectRange(line.expected_low, line.expected_high)}</dd>
       <dd><span>Actual</span>{line.actual === null ? "Not recorded" : formatItemMoney(line.actual)}{line.missing_fields.length > 0 && <small>{line.missing_fields.map(key => OUTCOME_LABELS[key]).join(", ")} not recorded.</small>}</dd>
-      {line.difference_low !== null && line.difference_high !== null && <dd className="project-line-change"><span>Change to profit versus the low / high estimate</span>{projectRange(line.difference_low, line.difference_high)}</dd>}
-    </div>)}</dl>
-    {comparison.cash_explanation ? <Explanation value={comparison.cash_explanation} title="Cash profit difference" /> : <p className="project-help" data-project-incomplete>Cash profit is not complete: {projectMissing(comparison.actual.missing_fields.cash_profit)}. The recorded line differences above do not establish a total.</p>}
+      {line.difference_low !== null && line.difference_high !== null && <dd className="project-line-change"><span>Change to profit versus the low / high estimate</span>{line.difference_low === line.difference_high ? formatItemMoney(line.difference_low) : `Low: ${formatItemMoney(line.difference_low)} · High: ${formatItemMoney(line.difference_high)}`}</dd>}
+    </div>)}</dl></details>
+    {comparison.cash_explanation ? <Explanation value={comparison.cash_explanation} title="Cash profit difference" /> : <p className="project-help" data-project-incomplete>Cash profit is not complete: {projectMissing(comparison.actual.missing_fields.cash_profit)}. The recorded line differences do not establish a total.</p>}
     {comparison.after_time_explanation ? <Explanation value={comparison.after_time_explanation} title="Difference after your time" /> : <p className="project-help">Profit after your time is not complete: {projectMissing(comparison.actual.missing_fields.profit_after_time)}.</p>}
   </section>;
 }

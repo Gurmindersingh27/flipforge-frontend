@@ -5,7 +5,7 @@ import { getItemProject } from "../lib/api";
 import { formatItemMoney, ITEM_STATUS_TEXT } from "../lib/itemAnalysis";
 import { ItemSessionChangedError } from "../lib/itemSession";
 import { useItemSession } from "../lib/useItemSession";
-import { PROJECT_STAGES, PROJECT_STAGE_LABELS } from "../lib/itemProjects";
+import { PROJECT_STAGES, PROJECT_STAGE_LABELS, projectHeadline, projectMissing } from "../lib/itemProjects";
 import { OUTCOME_DATES, OUTCOME_LABELS, OUTCOME_NUMBERS } from "../lib/itemOutcomes";
 import { safeItemLink } from "../lib/savedItems";
 import type { ItemOutcomeResponse, ItemProjectResponse } from "../lib/types";
@@ -98,7 +98,14 @@ function Project({ rootId }: { rootId: number }) {
       {valid && <>
         <ol className="project-stages" aria-label="Saved project stage">{PROJECT_STAGES.map(value => <li key={value} aria-current={stage === value ? "step" : undefined} data-stage={value}>{PROJECT_STAGE_LABELS[value]}</li>)}</ol>
         <section className="project-next" aria-label="Next step"><h2>{stage === "sold" ? "Your results" : "Keep this flip moving"}</h2>
-          {stage === "sold" && <p>Review what you earned and the costs behind it. You can correct the saved tracking below.</p>}
+          {stage === "sold" && project.latest_outcome && <>
+            <dl className="project-result-preview">{(["cash_profit", "profit_after_time"] as const).map(key => {
+              const figures = project.latest_outcome!.calculated;
+              return <div key={key}><dt>{key === "cash_profit" ? "Cash profit" : "Profit after your time"}</dt><dd data-project-result={key}>{figures[key] === null ? "Not complete" : formatItemMoney(figures[key])}</dd>{figures[key] === null && <dd className="project-help">{projectMissing(figures.missing_fields[key])}.</dd>}</div>;
+            })}</dl>
+            {project.comparison?.cash_explanation && projectHeadline(project.comparison.cash_explanation) && <p className="project-help"><strong>Cash:</strong> {projectHeadline(project.comparison.cash_explanation)}</p>}
+            {project.comparison?.after_time_explanation && projectHeadline(project.comparison.after_time_explanation) && <p className="project-help"><strong>After time:</strong> {projectHeadline(project.comparison.after_time_explanation)}</p>}
+          </>}
           {stage !== "sold" && <button className="flips-primary" disabled={guard === "busy"} onClick={() => track(basis, false)}>{stage === "considering" ? "Bought it? Record what you paid" : stage === "bought" ? "Track costs as you go" : "Sold it? Record the sale"}</button>}
           {stage === "bought" && <p>Ready to list? <button className="flips-link" onClick={() => draft(project.summary.latest_version.id)}>Prepare listing text</button></p>}
         </section>

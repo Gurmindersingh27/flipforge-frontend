@@ -45,3 +45,9 @@
   .project-effects > div { font-size: 13px; gap: 12px; }
   .project-stages li { font-size: 12px; }
 }
+
+.project-result-preview { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; margin: 20px 0; }
+.project-result-preview dt { font-size: 13px; color: var(--flips-muted); }
+.project-result-preview dd { margin: 6px 0 0; font-size: clamp(23px,3vw,32px); font-weight: 750; overflow-wrap: anywhere; }
+.project-result-preview dd.project-help { font-size: 12px; font-weight: 400; }
+.project-cost-details { margin-top: 24px; }
