@@ -21,10 +21,13 @@ import type {
   ItemAIBudget,
   ItemOutcomeResponse,
   SaveItemOutcomeRequest,
+  ItemProjectListResponse,
+  ItemProjectResponse,
 } from "./types";
 import { isItemPreferences } from "./itemPreferences";
 import { ITEM_LABELS } from "./itemAnalysis";
 import { isItemOutcome } from "./itemOutcomes";
+import { isItemProject, isItemProjectList } from "./itemProjects";
 
 import { ITEM_SIGN_IN_MESSAGE } from "./itemSession";
 
@@ -78,6 +81,17 @@ export function getItems(token: string, offset = 0, signal?: AbortSignal): Promi
 }
 export function getItem(id: number, token: string, signal?: AbortSignal): Promise<SavedItem> {
   return readItem(`/api/items/${id}`, token, signal);
+}
+
+export async function listItemProjects(token: string, limit = 20, offset = 0, signal?: AbortSignal): Promise<ItemProjectListResponse> {
+  const value = await readItem<unknown>(`/api/items/projects?limit=${limit}&offset=${offset}`, token, signal);
+  if (!isItemProjectList(value, limit, offset)) throw new Error("Your projects could not be confirmed. Try loading again.");
+  return value;
+}
+export async function getItemProject(rootId: number, token: string, signal?: AbortSignal): Promise<ItemProjectResponse> {
+  const value = await readItem<unknown>(`/api/items/${rootId}/project`, token, signal);
+  if (!isItemProject(value, rootId)) throw new Error("This project could not be confirmed. Try loading again.");
+  return value;
 }
 
 export async function getItemOutcome(rootId: number, token: string, signal?: AbortSignal): Promise<ItemOutcomeResponse | null> {

@@ -59,10 +59,12 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
         if(variant){row.inputs={...row.inputs,...variant.inputs};row.analysis_result=variant.analysis;row.assessment.confirmation.resale_source='user_estimate';evidence.resale=null;}
         return Response.json(row);
       }
-      if(path==='/api/items'&&response.ok){
-        const page=await response.json();
-        page.items=page.items.map(row=>({...row,notes:'PRIVATE_NEGOTIATION_987',listing_url:'https://private.example/secret-source',inputs:{...row.inputs,item_name:'UNCONFIRMED_ANTIQUE_TEAK_987'}}));
-        return Response.json(page);
+      if(path==='/api/items/${photo.root_item_id}/project'&&response.ok){
+        const project=await response.json();
+        const privateVersion=row=>({...row,notes:'PRIVATE_NEGOTIATION_987',listing_url:'https://private.example/secret-source',inputs:{...row.inputs,item_name:'UNCONFIRMED_ANTIQUE_TEAK_987'}});
+        project.summary.latest_version=privateVersion(project.summary.latest_version);
+        project.versions=project.versions.map(privateVersion);
+        return Response.json(project);
       }
       return response;
     };` });
@@ -74,7 +76,7 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     await evaluate(`document.querySelector('.quick-result-drawer > summary').click()`);
   };
   const draftInput = label => `Array.from(document.querySelectorAll('.listing-field')).find(e=>e.firstChild.textContent===${JSON.stringify(label)}).querySelector('input,textarea')`;
-  const openDraft = id => evaluate(`document.querySelector('[data-saved-item="${id}"] [aria-controls="listing-${id}"]').click()`);
+  const openDraft = id => evaluate(`document.querySelector('[aria-controls="listing-${id}"]').click()`);
   for (const width of [390, 1440]) {
     await cdp('Emulation.setDeviceMetricsOverride', { width, height: width === 390 ? 844 : 1000, deviceScaleFactor: 1, mobile: width === 390 });
     await openPhoto('');
@@ -222,9 +224,10 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
       assert.ok((await requests()).every(request=>request.method==='GET'&&['/api/items/ai-budget',`/api/items/${photo.id}`].includes(request.path)), 'Account remount retains only existing owner-scoped reads');
     }
 
-    await cdp('Page.navigate', { url: 'http://127.0.0.1:5173/my-flips' });
-    await until(`Boolean(document.querySelector('[data-saved-item="${photo.id}"]')) && !document.body.textContent.includes('Loading saved items.')`);
+    await cdp('Page.navigate', { url: `http://127.0.0.1:5173/my-flips/${photo.root_item_id}` });
+    await until(`Boolean(document.querySelector('[data-saved-item="${photo.id}"]')) && !document.body.textContent.includes('Loading your project…')`);
     const listRequests = await requests();
+    assert.ok(await evaluate(`document.body.textContent.includes('PRIVATE_NEGOTIATION_987') && document.body.textContent.includes('UNCONFIRMED_ANTIQUE_TEAK_987')`),'The project must actually contain private source text before testing that drafts exclude it');
     await openDraft(photo.id); await until(`Boolean(document.querySelector('[data-listing-text]'))`);
     assert.equal(await evaluate(`document.querySelector('[data-listing-text]').value`), '');
     assert.ok(await evaluate(`Array.from(document.querySelectorAll('.item-listing-draft input,.item-listing-draft textarea')).every(e=>e.value==='')`));
@@ -250,18 +253,18 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     assert.ok(await evaluate(`document.querySelector('[data-listing-text]').value.includes('Asking price: $55')`));
     await evaluate(`window.draftConfirm=false`);
     await click('button','Close listing draft');
-    await openDraft(other.id);
+    await evaluate(`document.querySelector('.flips-nav a[href="/my-flips"]').click()`);
     assert.equal(await evaluate(`document.querySelectorAll('.item-listing-draft').length`), 1);
     assert.ok(await evaluate(`Boolean(document.querySelector('#listing-${photo.id} .item-listing-draft'))`));
     await evaluate(`document.querySelector('.flips-nav a[href="/items"]').click()`);
-    assert.equal(await evaluate('location.pathname'), '/my-flips');
+    assert.equal(await evaluate('location.pathname'), `/my-flips/${photo.root_item_id}`);
     assert.ok(await evaluate('window.draftPrompts.length >= 4'));
     assert.ok(await measure('document.documentElement.scrollWidth <= innerWidth'));
     assert.ok(await evaluate(`Array.from(document.querySelectorAll('.item-listing-draft input,.item-listing-draft textarea')).every(e=>e.labels.length>0)`));
     await screenshot(`photo-listing-draft-${width}.png`);
     assert.deepEqual(await requests(), listRequests, 'Listing open/edit/copy/discard prompts send zero requests');
-    await evaluate(`window.draftConfirm=true`); await openDraft(other.id);
-    await until(`Boolean(document.querySelector('#listing-${other.id} .item-listing-draft'))`);
+    await evaluate(`window.draftConfirm=true`); await click('button','Close listing draft'); await openDraft(photo.id);
+    await until(`Boolean(document.querySelector('#listing-${photo.id} .item-listing-draft'))`);
     assert.equal(await evaluate(`document.querySelector('[data-listing-text]').value`), '');
     await click('button','Close listing draft');
     assert.equal(await evaluate(`document.querySelectorAll('.item-listing-draft').length`), 0);
@@ -271,7 +274,7 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     await evaluate(`window.clipboardMode='hold'`); await click('button','Copy listing text');
     await until(`typeof window.releaseClipboard==='function'`);
     await evaluate(`window.switchFixtureUser('other-user');window.releaseClipboard()`);
-    await until(`!document.querySelector('.item-listing-draft') && !document.body.textContent.includes('Loading saved items.')`);
+    await until(`!document.querySelector('.item-listing-draft') && !document.body.textContent.includes('Loading your project…')`);
     assert.equal(await evaluate(`document.body.textContent.includes('Account-private draft')`), false);
     await evaluate(`window.switchFixtureUser('browser-fixture')`);
     await until(`Boolean(document.querySelector('[data-saved-item="${photo.id}"]'))`);

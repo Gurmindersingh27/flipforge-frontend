@@ -134,8 +134,10 @@ export async function runSessionChecks({ cdp, evaluate, until, fill, click, paus
   const saved=(await api('/api/items')).items[0];
   checks.push('Estimate save retries the identical UUID, inputs and private notes only after 401, producing exactly one saved version');
 
-  await navigate('/my-flips',`window.sessionFaults={'GET /api/items':{remaining:1}}`);
-  await until(`Boolean(document.querySelector('[data-saved-item="${saved.id}"]'))`);await checkCount('/api/items','GET',2);
+  await navigate('/my-flips',`window.sessionFaults={'GET /api/items/projects':{remaining:1}}`);
+  await until(`Boolean(document.querySelector('[data-saved-item="${saved.id}"]'))`);await checkCount('/api/items/projects','GET',2);
+  await faults(`/api/items/${saved.root_item_id}/project`); await click('a','Open project');
+  await until(`Boolean(document.querySelector('.project-stages'))`);await checkCount(`/api/items/${saved.root_item_id}/project`,'GET',2);
   await faults(`/api/items/${saved.root_item_id}/outcomes`);await click('button','Track this find');
   await until(`Boolean(document.getElementById('outcome-purchase_price')) && !document.querySelector('.item-outcome fieldset')?.disabled`);
   await checkCount(`/api/items/${saved.root_item_id}/outcomes`,'GET',2);

@@ -101,6 +101,43 @@ export interface ItemOutcomeResponse {
   };
 }
 
+// Read-only project views from backend #47. All financial results are server-owned.
+export type ItemProjectStage = "considering" | ItemOutcomeStatus;
+export type OutcomeLineKey = "purchase_price" | "sale_price" | "repairs" | "pickup" | "delivery"
+  | "storage" | "selling_fees" | "other_expenses" | "time";
+export type OutcomeEffectKey = Exclude<OutcomeLineKey, "purchase_price"> | "rounding";
+export interface OutcomeLine {
+  key: OutcomeLineKey; label: string;
+  expected_low: number | null; expected_high: number | null; actual: number | null;
+  difference_low: number | null; difference_high: number | null;
+  missing_fields: ItemOutcomeField[];
+}
+export interface OutcomeEffect { key: OutcomeEffectKey; label: string; amount: number }
+export interface OutcomeExplanation {
+  baseline_sale_price: number; baseline_profit: number; actual_profit: number; total_effect: number;
+  effects: OutcomeEffect[]; dominant_effect: OutcomeEffectKey | null; headline: string | null;
+}
+export interface OutcomeComparison {
+  original_estimate: SavedItem;
+  resale_source: "assessment" | "national_reference" | "user_estimate" | "unknown";
+  expected_at_purchase_price: ItemAnalyzeResponse | null;
+  expected_missing_fields: ItemOutcomeField[];
+  lines: OutcomeLine[]; actual: ItemOutcomeResponse["calculated"];
+  cash_explanation: OutcomeExplanation | null; after_time_explanation: OutcomeExplanation | null;
+}
+export interface ItemProjectSummary {
+  root_item_id: number; latest_version: SavedItem; version_count: number; stage: ItemProjectStage;
+  calculated: ItemOutcomeResponse["calculated"] | null; updated_at: string;
+}
+export interface ItemProjectListResponse {
+  items: ItemProjectSummary[]; limit: number; offset: number; next_offset: number | null;
+}
+export interface ItemProjectResponse {
+  summary: ItemProjectSummary; versions: SavedItem[]; latest_outcome: ItemOutcomeResponse | null;
+  comparison: OutcomeComparison | null;
+  comparison_unavailable_reason: "No outcome recorded" | "No estimate linked" | "The estimate was incomplete" | null;
+}
+
 // Release A: app/item_assessment_models.py. Photos exist only in request memory.
 export interface ItemAssessmentPhoto {
   media_type: "image/jpeg" | "image/png" | "image/webp";
