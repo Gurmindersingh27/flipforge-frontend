@@ -25,7 +25,7 @@ function Project({ rootId }: { rootId: number }) {
   const [error, setError] = useState("");
   const sequence = useRef(0);
   const refreshingOutcome = useRef<string | null | undefined>(undefined);
-  const [tracking, setTracking] = useState<{ itemId: number | null } | null>(null);
+  const [tracking, setTracking] = useState<{ itemId: number | null; preserveBasis: boolean } | null>(null);
   const [guard, setGuard] = useState<OutcomeGuard>(null);
   const [listingItem, setListingItem] = useState<number | null>(null);
   const [listingDirty, setListingDirty] = useState(false);
@@ -68,11 +68,11 @@ function Project({ rootId }: { rootId: number }) {
     window.addEventListener("beforeunload", beforeUnload); document.addEventListener("click", leaving, true);
     return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leaving, true); };
   }, [guard]);
-  function track(itemId: number | null, toggle = true) {
+  function track(itemId: number | null, toggle = true, preserveBasis = true) {
     if (guard === "busy") return;
     if (guard === "draft" && !window.confirm("Close tracking and discard your unsaved entries? A save already sent may still have succeeded.")) return;
     setGuard(null); setNotice("");
-    setTracking(old => toggle && old?.itemId === itemId ? null : { itemId });
+    setTracking(old => toggle && old?.itemId === itemId ? null : { itemId, preserveBasis });
     requestAnimationFrame(() => document.getElementById("project-tracking")?.scrollIntoView({ block: "start" }));
   }
   function draft(itemId: number) {
@@ -112,7 +112,7 @@ function Project({ rootId }: { rootId: number }) {
       <section id="project-tracking" className="project-workspace" aria-label="Project tracking">
         <h2>Tracking</h2><p className="project-help">{basis === null ? "No estimate is linked." : `Uses estimate #${basis}.`} Choose another saved estimate below only if you want future tracking linked to it.</p>
         <button className="flips-link" disabled={guard === "busy"} aria-expanded={tracking !== null} aria-controls="project-tracking-editor" onClick={() => tracking ? track(tracking.itemId) : track(basis)}>{tracking ? "Close tracking" : "Track this find"}</button>
-        <div id="project-tracking-editor">{tracking && <ItemOutcomePanel key={tracking.itemId ?? "unlinked"} rootId={rootId} itemId={tracking.itemId} onGuard={setGuard} onOutcomeChange={outcomeChanged} />}</div>
+        <div id="project-tracking-editor">{tracking && <ItemOutcomePanel key={`${tracking.itemId ?? "unlinked"}:${tracking.preserveBasis}`} preserveBasis={tracking.preserveBasis} rootId={rootId} itemId={tracking.itemId} onGuard={setGuard} onOutcomeChange={outcomeChanged} />}</div>
       </section>
       <section id="project-listing" className="project-workspace" aria-label="Project sale listing"><h2>Selling</h2>
         <button className="flips-link" aria-expanded={listingItem !== null} aria-controls={`listing-${project.summary.latest_version.id}`} onClick={() => draft(listingItem ?? project.summary.latest_version.id)}>{listingItem === null ? "Prepare sale listing" : "Close listing draft"}</button>
@@ -131,9 +131,8 @@ function Project({ rootId }: { rootId: number }) {
               <Link className="flips-link" aria-label={`Reopen saved item ${item.id}`} to={`/items?${item.assessment ? "find" : "saved"}=${item.id}`}>Reopen estimate</Link>
               {link && <a className="flips-link" href={link} target="_blank" rel="noopener noreferrer">Listing</a>}
               {previous && <button className="flips-link" aria-expanded={open} aria-controls={`comparison-${item.id}`} onClick={() => setComparisons(old => open ? old.filter(id => id !== item.id) : [...old, item.id])}>{open ? "Hide comparison" : `Compare with #${previous.id}`}</button>}
-              <button className="flips-link" disabled={guard === "busy"} aria-controls={`tracking-${item.id}`} onClick={() => track(item.id, false)}>Track against this estimate</button>
+              <button className="flips-link" disabled={guard === "busy"} data-track-estimate={item.id} aria-controls="project-tracking-editor" aria-expanded={tracking?.itemId === item.id && !tracking.preserveBasis} onClick={() => track(item.id, false, false)}>Track against this estimate</button>
             </div>
-            <div id={`tracking-${item.id}`} />
             {previous && <div id={`comparison-${item.id}`}>{open && <ItemVersionComparison previous={previous} current={item} />}</div>}
           </article>;
         })}</div>

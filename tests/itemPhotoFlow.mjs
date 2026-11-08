@@ -1227,7 +1227,7 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
     await cdp('Page.navigate', { url: `http://127.0.0.1:5173/my-flips/${item.root_item_id}` });
     await until(`!window.beforeOutcomeNavigation && Boolean(document.querySelector('[data-saved-item="${item.id}"]'))`);
     assert.equal(await evaluate('window.outcomeReads.length'), 0, 'No outcomes loaded per card');
-    await evaluate(`document.querySelector('[aria-controls="tracking-${item.id}"]').click()`);
+    await evaluate(`document.querySelector('[data-track-estimate="${item.id}"]').click()`);
     await until(ready);
     assert.equal(await evaluate('window.outcomeReads.length'), 1, 'One GET when opened');
   }
@@ -1279,7 +1279,7 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
     assert.equal(outcome.inputs.materials, 10); assert.equal(outcome.inputs.hours, 2); assert.equal(outcome.inputs.listed_on, '2026-10-02');
     assert.equal(outcome.calculated.cash_profit, -20);
     await geometry(); await screenshot(`photo-outcome-sold-${width}.png`);
-    await evaluate(`document.querySelector('[aria-controls="tracking-${root.id}"]').click()`);
+    await evaluate(`document.querySelector('[data-track-estimate="${root.id}"]').click()`);
     await until(ready);
     assert.equal(await evaluate('document.querySelectorAll(".item-outcome").length'), 1);
     assert.equal(await evaluate(revision), outcome.id);
@@ -1287,7 +1287,7 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
     assert.equal(await evaluate(field('purchase_price') + '.value'), '30');
     await fill(field('purchase_price'), '0'); await save(); outcome = await api(`/api/items/${root.id}/outcomes`);
     assert.equal(outcome.based_on_item_id, root.id); assert.equal(outcome.inputs.purchase_price, 0);
-    await evaluate(`document.querySelector('[aria-controls="tracking-${item.id}"]').click()`); await until(ready);
+    await evaluate(`document.querySelector('[data-track-estimate="${item.id}"]').click()`); await until(ready);
     assert.equal(await evaluate(revision), outcome.id); assert.equal(await evaluate(field('purchase_price') + '.value'), '0');
     assert.ok(await evaluate(`document.querySelector('.outcome-shared').textContent.includes('based on estimate #${root.id}')`));
     await evaluate(`window.confirm=()=>false`); await click('button', 'Bought');
@@ -1383,7 +1383,7 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
     await click('button', 'Save tracking'); await until(uncertain);
     await evaluate(`window.outcomeMode='pass';window.authFixture={calls:0,delayMs:70}`);
     await evaluate(`(()=>{const b=${button('Retry this save')};b.click();b.click()})()`); await until(saved);
-    assert.equal(await evaluate('window.authFixture.calls'), 3, 'One POST token and one refresh token');
+    assert.equal(await evaluate('window.authFixture.calls'), 3, 'One POST token plus outcome and project refresh tokens');
     assert.equal(await evaluate('window.outcomePosts.length'), 2);
   }
   for (const [index, status] of ['404', '422'].entries()) {
@@ -1401,7 +1401,7 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
   // Timeout and outage on initial loading, with no write or inferred default save.
   for (const mode of ['timeout', '503']) {
     await open(item); await click('button', 'Close tracking');
-    await evaluate(`window.outcomeReadMode=${JSON.stringify(mode)};document.querySelector('[aria-controls="tracking-${item.id}"]').click()`);
+    await evaluate(`window.outcomeReadMode=${JSON.stringify(mode)};document.querySelector('[data-track-estimate="${item.id}"]').click()`);
     await until(`Boolean(${button('Reload tracking')})`);
     assert.equal(await evaluate('window.outcomePosts.length'), 0);
     await evaluate(`window.outcomeReadMode='pass'`); await click('button', 'Reload tracking'); await until(ready);
@@ -1410,7 +1410,7 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
 
   for (const nextUser of [null, 'outcome-other-user']) {
     await open(item); await click('button', 'Close tracking');
-    await evaluate(`window.outcomeReadMode='held';document.querySelector('[aria-controls="tracking-${item.id}"]').click()`);
+    await evaluate(`window.outcomeReadMode='held';document.querySelector('[data-track-estimate="${item.id}"]').click()`);
     await until(`typeof window.releaseOutcomeRead==='function'`);
     await evaluate(`window.switchFixtureUser(${JSON.stringify(nextUser)});window.releaseOutcomeRead()`);
     await until(`!document.querySelector('.item-outcome') && !document.querySelector('[data-saved-item]')`);

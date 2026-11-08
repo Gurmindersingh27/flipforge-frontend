@@ -15,11 +15,12 @@ type ReloadReason = "initial" | "saved" | "conflict" | "discarded";
 export type OutcomeGuard = "busy" | "draft" | null;
 interface Props {
   rootId: number; itemId: number | null; onGuard: (guard: OutcomeGuard) => void;
+  preserveBasis?: boolean;
   onOutcomeChange?: (outcome: ItemOutcomeResponse | null) => void;
 }
 interface Attempt { owner: string; payload: SaveItemOutcomeRequest }
 
-export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeChange }: Props) {
+export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeChange, preserveBasis = false }: Props) {
   const { userId } = useAuth();
   const withSession = useItemSession();
   const [phase, setPhase] = useState<Phase>("loading");
@@ -74,12 +75,13 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeCha
     try { await readLatest(reason, generation); }
     finally { if (generation === sequence.current) locked.current = false; }
   }
+  const saveBasis = preserveBasis && latest !== null ? latest.based_on_item_id : itemId;
   async function save() {
     if (locked.current || !userId || !["editing", "conflict"].includes(phase)) return;
     const built = buildOutcomeFacts(form);
     if (!built.ok) { setErrors(built.errors); return; }
     try {
-      const attempt: Attempt = { owner: userId, payload: { ...built.facts, based_on_item_id: itemId,
+      const attempt: Attempt = { owner: userId, payload: { ...built.facts, based_on_item_id: saveBasis,
         expected_previous_id: latest?.id ?? null, request_id: crypto.randomUUID() } };
       pending.current = attempt;
       await submit(attempt);
@@ -124,7 +126,7 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeCha
   }
   const frozen = phase !== "editing";
   const draftBasis = dirty || latest === null;
-  const basis = draftBasis ? itemId : latest.based_on_item_id;
+  const basis = draftBasis ? saveBasis : latest.based_on_item_id;
   const field = (key: ItemOutcomeNumber | ItemOutcomeDate) => <div className="outcome-field" key={key}>
     <label htmlFor={`outcome-${key}`}>{OUTCOME_LABELS[key]}</label>
     <input id={`outcome-${key}`} type={OUTCOME_DATES.includes(key as ItemOutcomeDate) ? "date" : "text"}
@@ -136,7 +138,7 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeCha
   return <section className="item-outcome" aria-label="Track this find" aria-busy={phase === "loading" || phase === "saving"}>
     <h3>Track this find</h3>
     <p className="outcome-shared">Tracking applies to all versions of this find · {basis === null ? "no estimate linked" : `based on estimate #${basis}`}</p>
-    {latest?.based_on_item_id !== itemId && latest !== null && <p className="outcome-help">{itemId === null ? "Your next save will have no estimate linked." : `Your next save will be based on estimate #${itemId}, the version you opened.`}</p>}
+    {latest?.based_on_item_id !== saveBasis && latest !== null && <p className="outcome-help">{saveBasis === null ? "Your next save will have no estimate linked." : `Your next save will be based on estimate #${saveBasis}, the version you opened.`}</p>}
     <p className="outcome-help">Actual amounts in USD. Leave blanks for unknowns; enter 0 when there was no cost.</p>
     {phase === "loading" && <p role="status">Loading latest tracking…</p>}
     <form onSubmit={event => { event.preventDefault(); void save(); }}>

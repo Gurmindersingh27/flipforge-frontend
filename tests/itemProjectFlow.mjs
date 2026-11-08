@@ -35,7 +35,7 @@ export async function runProjectChecks({ cdp, evaluate, until, fill, click, meas
   await evaluate(`document.querySelector('[aria-label="Open project ${root.id}"]').click()`);
   await until(stage('considering'));
   assert.equal(await evaluate(`document.querySelectorAll('[data-saved-item]').length`),3);
-  await evaluate(`document.querySelector('[aria-controls="tracking-${root.id}"]').click()`);await until(ready);
+  await evaluate(`document.querySelector('[data-track-estimate="${root.id}"]').click()`);await until(ready);
   await fill(field('purchase_price'),'45');await save('bought');
   assert.equal(await evaluate(actual('cash_profit')),'Not complete');
   await click('button','Listed');await save('listed');
@@ -92,6 +92,13 @@ export async function runProjectChecks({ cdp, evaluate, until, fill, click, meas
   assert.equal(await evaluate(actual('cash_profit')),'$60.00');
   await click('button','Track this find');await until(ready);await fill(field('pickup'),'13');await save('sold');
   assert.equal((await api(`/api/items/${root.id}/outcomes`)).based_on_item_id,null,'Generic tracking preserves an explicit unlinked basis');
+  await click('button','Close tracking');
+  const beforeExternal=await api(`/api/items/${root.id}/outcomes`);
+  await post(`/api/items/${root.id}/outcomes`,{...beforeExternal.inputs,based_on_item_id:child.id,expected_previous_id:beforeExternal.id,request_id:crypto.randomUUID()});
+  // The page still holds the earlier unlinked snapshot when its editor opens.
+  await click('button','Track this find');await until(ready);await fill(field('pickup'),'14');await save('sold');
+  assert.equal((await api(`/api/items/${root.id}/outcomes`)).based_on_item_id,child.id,'A fresh outcome read preserves the newer session estimate link');
+  checks.push('Generic tracking preserves the freshest saved estimate link when another session changes it after the project was loaded');
   const incomplete=await post('/api/items/save',{inputs:{item_name:'Incomplete original'}});
   await post(`/api/items/${incomplete.id}/outcomes`,{...latestOutcome.inputs,based_on_item_id:incomplete.id,expected_previous_id:null,request_id:crypto.randomUUID()});
   await cdp('Page.navigate',{url:`http://127.0.0.1:5173/my-flips/${incomplete.id}`});await until(stage('sold'));
