@@ -2113,7 +2113,10 @@ try {
     assert.equal(await evaluate(`Boolean(document.querySelector('${comparisonPanel}'))`),false);
     await evaluate(`window.savedItemMode='pass'`); await click('button','Retry project');
     await until(`Boolean(${comparisonButton})`);
-    assert.equal(await evaluate('window.savedItemRequests.length'),2);
+    assert.equal(await evaluate("window.savedItemRequests.filter(r=>r.path.endsWith('/project')).length"),2);
+    await until("window.savedItemRequests.some(r=>r.path.endsWith('/inspections'))");
+    assert.equal(await evaluate("window.savedItemRequests.filter(r=>r.path.endsWith('/inspections')).length"),1);
+    assert.equal(await evaluate('window.savedItemRequests.length'),3);
     assert.ok(await evaluate('window.savedItemRequests.every(r=>r.method==="GET")'));
   }
   checks.push('Project 404 and timeout show no comparison and recover only on explicit retry');
