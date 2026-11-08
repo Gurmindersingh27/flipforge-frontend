@@ -69,6 +69,11 @@ function Project({ rootId }: { rootId: number }) {
     return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leaving, true); };
   }, [guard]);
   function track(itemId: number | null, toggle = true, preserveBasis = true) {
+    // Reopening the same editor is navigation, not a discard/remount.
+    if (!toggle && tracking?.itemId === itemId && tracking.preserveBasis === preserveBasis) {
+      document.getElementById("project-tracking")?.scrollIntoView({ block: "start" });
+      return;
+    }
     if (guard === "busy") return;
     if (guard === "draft" && !window.confirm("Close tracking and discard your unsaved entries? A save already sent may still have succeeded.")) return;
     setGuard(null); setNotice("");

@@ -36,7 +36,16 @@ export async function runProjectChecks({ cdp, evaluate, until, fill, click, meas
   await until(stage('considering'));
   assert.equal(await evaluate(`document.querySelectorAll('[data-saved-item]').length`),3);
   await evaluate(`document.querySelector('[data-track-estimate="${root.id}"]').click()`);await until(ready);
-  await fill(field('purchase_price'),'45');await save('bought');
+  await fill(field('purchase_price'),'45');
+  await evaluate(`window.projectConfirm=window.confirm;window.projectConfirmCalls=0;window.confirm=()=>{window.projectConfirmCalls++;return false;};document.querySelector('[data-track-estimate="${root.id}"]').click()`);
+  assert.equal(await evaluate(field('purchase_price')+'.value'),'45');
+  assert.equal(await evaluate('window.projectConfirmCalls'),0,'Opening the same editor does not offer a fake discard');
+  await click('a','My Flips');
+  assert.equal(await evaluate('location.pathname'),`/my-flips/${root.id}`);
+  assert.equal(await evaluate('window.projectConfirmCalls'),1,'The dirty-entry navigation guard remains active');
+  await evaluate('window.confirm=window.projectConfirm');
+  checks.push('Reopening the active estimate editor preserves entered costs and the unsaved-navigation guard');
+  await save('bought');
   assert.equal(await evaluate(actual('cash_profit')),'Not complete');
   await click('button','Listed');await save('listed');
   await click('button','Sold');await fill(field('sale_price'),'160');
