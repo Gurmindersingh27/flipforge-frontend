@@ -12,9 +12,9 @@ Verified release anchors before implementation:
 - Backend main `0469e96fc40f67071d143695f5d767622ca3bb80` (#48), tree `36b70a343bd39906ec0208e63bed9a51cdc8c173`.
 - Both are already deployed per the approved handoff; no repeat deployment performed in this session.
 
-### Inspection editor — implementation/review in progress
+### Inspection editor — PR #116, awaiting exact-head review
 
-Branch: `codex/project-inspection-editor`. Built against released `ITEM_INSPECTION_API.md`; CI backend pin updated to the full #48 merge SHA. The PR's current head/CI are the exact review target; no code approval is recorded yet.
+[Frontend PR #116](https://github.com/Gurmindersingh27/flipforge-frontend/pull/116), branch `codex/project-inspection-editor`. Built against released `ITEM_INSPECTION_API.md`; CI backend pin updated to the full #48 merge SHA. The PR's current head/CI are the exact review target; no code approval is recorded yet. Implementation head `69f7cac50f40a53a30a840a22dc1e72dfb80eb0f` includes the tested Back-navigation fix; subsequent status-only commits do not change its application/test files. [CI #138](https://github.com/Gurmindersingh27/flipforge-frontend/actions/runs/42524411796) supplies that head's browser evidence; check the final PR head separately before merge.
 
 - Project inspection loads without writing; empty checks remain unchecked. No facts inferred from old descriptions, labels or photos.
 - Explicit complete-snapshot saves only. Detached, frozen request ID/payload retained on uncertain errors; fields stay frozen until exact retry confirms the save. 401 refresh also reuses the same request.
@@ -24,14 +24,14 @@ Branch: `codex/project-inspection-editor`. Built against released `ITEM_INSPECTI
 - Label text (500) and notes (5,000) remain independent of the paid description limit; exact text is rendered plainly. Inspection date is user-entered, never save time.
 - No paid-assessment autosave, pricing/comparable changes, stage/outcome updates, new dependencies or backend edits.
 
-Validation by Codex so far: **202 unit tests pass**, production build passes, changed-file lint passes. Local Chromium cannot start because the workspace blocks its process socket. Browser integration/phone-desktop renders are being checked by GitHub CI with the real backend and disposable database; results pending. Synthetic browser fixtures are not signed-in production or physical-iPhone evidence.
+Validation: Codex ran **202 unit tests**, the production build, changed-file lint and the released backend’s **15 inspection contract tests** successfully. GitHub CI passes the **11 focused inspection checks**, including 390/1440 layout assertions and failure/session/navigation cases. Full regression results are tracked on the PR; required checks must be green on the review head. Local Chromium is blocked by a workspace process-socket restriction, so browser evidence comes from GitHub CI with the real released backend and a disposable database. CI captures phone/desktop/conflict screenshots in `browser-flow-evidence`; those image files have not been manually inspected in this environment because artifact download requires a browser sign-in. Synthetic fixtures and automated layout checks are not signed-in production, physical-iPhone or independent Claude evidence.
 
 ### Open gates and owner actions
 
 | Item | Status |
 | --- | --- |
 | Editor exact-head Claude review | Pending; a changed head needs review |
-| Editor required CI | Pending; must be green before merge |
+| Editor required CI | See current PR checks; must be green on the reviewed head before merge |
 | Owner free signed-in iPhone baseline | OPEN, required before merge (R2 Section 7) |
 | Native iPhone Copy price evidence / fallback | OPEN, separate from Add notes to description |
 | Anthropic key | Recorded expiry November 13, 2026; renewal unconfirmed. Owner renews directly in dedicated workspace/Render; never paste secrets |
