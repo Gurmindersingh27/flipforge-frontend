@@ -5,6 +5,7 @@ import AnalysisResult from "./AnalysisResult";
 import DealsPage from "./components/DealsPage";
 import PhotoItemsPage from "./components/PhotoItemsPage";
 import MyFlipsPage from "./components/MyFlipsPage";
+import ItemProjectPage from "./components/ItemProjectPage";
 import DealPage from "./components/DealPage";
 import RehabScopeEditor from "./components/RehabScopeEditor";
 import RevisionComparison from "./components/RevisionComparison";
@@ -1584,6 +1585,7 @@ export default function App() {
       <Route path="/" element={<AnalyzerPage />} />
       <Route path="/items" element={<PhotoItemsPage />} />
       <Route path="/my-flips" element={<MyFlipsPage />} />
+      <Route path="/my-flips/:rootId" element={<ItemProjectPage />} />
       <Route path="/deals" element={<DealsPage />} />
       <Route path="/deal/:id" element={<DealPage />} />
     </Routes>

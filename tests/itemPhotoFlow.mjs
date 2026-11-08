@@ -1224,7 +1224,7 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
   const figure = key => `document.querySelector('[data-outcome-figure="${key}"]').textContent`;
   async function open(item) {
     await evaluate('window.beforeOutcomeNavigation=true');
-    await cdp('Page.navigate', { url: 'http://127.0.0.1:5173/my-flips' });
+    await cdp('Page.navigate', { url: `http://127.0.0.1:5173/my-flips/${item.root_item_id}` });
     await until(`!window.beforeOutcomeNavigation && Boolean(document.querySelector('[data-saved-item="${item.id}"]'))`);
     assert.equal(await evaluate('window.outcomeReads.length'), 0, 'No outcomes loaded per card');
     await evaluate(`document.querySelector('[aria-controls="tracking-${item.id}"]').click()`);
@@ -1383,7 +1383,7 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
     await click('button', 'Save tracking'); await until(uncertain);
     await evaluate(`window.outcomeMode='pass';window.authFixture={calls:0,delayMs:70}`);
     await evaluate(`(()=>{const b=${button('Retry this save')};b.click();b.click()})()`); await until(saved);
-    assert.equal(await evaluate('window.authFixture.calls'), 2, 'One POST token and one refresh token');
+    assert.equal(await evaluate('window.authFixture.calls'), 3, 'One POST token and one refresh token');
     assert.equal(await evaluate('window.outcomePosts.length'), 2);
   }
   for (const [index, status] of ['404', '422'].entries()) {

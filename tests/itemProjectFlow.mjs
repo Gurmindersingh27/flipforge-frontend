@@ -1,0 +1,105 @@
+import assert from 'node:assert/strict';
+
+// Real released project/outcome routes, isolated test database, no paid provider.
+export async function runProjectChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks, api }) {
+  const post = async (path, body) => {
+    const response = await fetch('http://127.0.0.1:8000'+path, {method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer browser-fixture'},body:JSON.stringify(body)});
+    assert.equal(response.status,201,await response.clone().text());return response.json();
+  };
+  const inputs = {item_name:'Project dresser',purchase_price:60,resale_low:180,resale_high:240,repairs:30,pickup:10,delivery:0,storage:0,fee_pct:0,fee_fixed:0,hours:4,hourly_value:20,target_profit:50};
+  const root = await post('/api/items/save',{inputs});
+  const child = await post('/api/items/save',{inputs:{...inputs,resale_low:300,resale_high:400},parent_item_id:root.id});
+  const latest = await post('/api/items/save',{inputs:{...inputs,resale_low:400,resale_high:500},parent_item_id:child.id});
+  const beforeAI=await api('/browser-fixture/ai');
+  const fixture=await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`
+    window.projectRequests=[];window.projectReadFails=false;
+    const fetchProject=window.fetch;
+    window.fetch=(input,init={})=>{
+      const path=new URL(typeof input==='string'?input:input.url,location.href).pathname;
+      if(path.startsWith('/api/items'))window.projectRequests.push({path,method:init.method??'GET'});
+      if(window.projectReadFails&&path.endsWith('/project'))return Promise.resolve(Response.json({detail:'Fixture outage'},{status:503}));
+      return fetchProject(input,init);
+    };
+  `});
+  const field=key=>`document.getElementById('outcome-${key}')`;
+  const ready=`document.querySelector('.item-outcome fieldset') && !document.querySelector('.item-outcome fieldset').disabled`;
+  const stage=value=>`document.querySelector('.project-stages [aria-current=step]')?.dataset.stage===${JSON.stringify(value)}`;
+  const actual=key=>`document.querySelector('[data-project-actual="${key}"]').textContent`;
+  const effect=(title,key)=>`document.querySelector('[aria-label="${title}"] [data-project-effect="${key}"] dd').textContent`;
+  const save=async value=>{await click('button','Save tracking');await until(`document.body.textContent.includes('Tracking saved. Showing the latest outcome.') && ${ready} && ${stage(value)}`);};
+  await cdp('Page.navigate',{url:'http://127.0.0.1:5173/my-flips'});
+  await until(`Boolean(document.querySelector('[data-project-id="${root.id}"]'))`);
+  assert.equal(await evaluate(`document.querySelectorAll('[data-project-id="${root.id}"]').length`),1);
+  assert.ok(await evaluate(`document.querySelector('[data-project-id="${root.id}"]').textContent.includes('3 saved estimates')`));
+  assert.equal(await evaluate(`Boolean(document.querySelector('[data-saved-item="${child.id}"]'))`),false);
+  await evaluate(`document.querySelector('[aria-label="Open project ${root.id}"]').click()`);
+  await until(stage('considering'));
+  assert.equal(await evaluate(`document.querySelectorAll('[data-saved-item]').length`),3);
+  await evaluate(`document.querySelector('[aria-controls="tracking-${root.id}"]').click()`);await until(ready);
+  await fill(field('purchase_price'),'45');await save('bought');
+  assert.equal(await evaluate(actual('cash_profit')),'Not complete');
+  await click('button','Listed');await save('listed');
+  await click('button','Sold');await fill(field('sale_price'),'160');
+  await evaluate(`document.querySelectorAll('.item-outcome details').forEach(e=>e.open=true)`);
+  for(const [key,value] of Object.entries({materials:38,hired_labor:0,pickup:12,delivery:0,storage:0,selling_fees:0,other_expenses:5,hours:6,hourly_value:20,purchased_on:'2026-10-01',listed_on:'2026-10-04',sold_on:'2026-10-09'}))await fill(field(key),String(value));
+  await save('sold');
+  assert.equal(await evaluate(actual('cash_invested')),'$100.00');
+  assert.equal(await evaluate(actual('cash_profit')),'$60.00');
+  assert.equal(await evaluate(actual('profit_after_time')),'-$60.00');
+  assert.equal(await evaluate(actual('days_held')),'8 days');
+  assert.equal(await evaluate(actual('days_to_sell')),'5 days');
+  const text=await evaluate(`document.querySelector('[aria-label="Estimate versus actual"]').textContent`);
+  for(const part of [`Based on saved estimate #${root.id}`,'Entered by you','$75.50 to $135.50','$90.50 to $150.50','$10.50 to $70.50','-$30.50','-$70.50','Most of the gap came from selling $20.00 under the low estimate.','Most of the gap came from the value of your time.'])assert.ok(text.includes(part),part);
+  for(const [key,value] of Object.entries({sale_price:'-$20.00',repairs:'-$3.50',pickup:'-$2.00',other_expenses:'-$5.00'}))assert.equal(await evaluate(effect('Cash profit difference',key)),value);
+  assert.equal(await evaluate(effect('Difference after your time','time')),'-$40.00');
+  assert.equal(await evaluate(`document.querySelector('[data-project-line="purchase_price"] .project-line-change')`),null);
+  assert.equal((await api(`/api/items/${root.id}/outcomes`)).based_on_item_id,root.id);
+  checks.push('Project flow groups three versions, records Bought → Listed → Sold, and shows the dresser original/adjusted/actual figures plus every cent of cash/time differences against the explicitly linked older estimate');
+  await click('button','Close tracking');
+  for(const width of [390,1440]){
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+    assert.ok(await measure('document.documentElement.scrollWidth<=innerWidth'));
+    assert.ok(await measure(`Array.from(document.querySelectorAll('.item-project button,.item-project a,.item-project summary')).filter(e=>e.getBoundingClientRect().height).every(e=>e.getBoundingClientRect().height>=44)`));
+    await screenshot(`photo-project-comparison-${width}.png`);
+  }
+  await click('button','Track this find');await until(ready);
+  await evaluate(`document.querySelectorAll('.item-outcome details').forEach(e=>e.open=true)`);
+  await fill(field('materials'),'');await save('sold');
+  assert.equal(await evaluate(actual('cash_profit')),'Not complete');
+  assert.ok(await evaluate(`document.querySelector('[data-project-incomplete]').textContent.toLowerCase().includes('materials not recorded')`));
+  assert.equal(await evaluate(`document.querySelectorAll('.project-explanation,.project-headline').length`),0);
+  assert.ok(await evaluate(`document.querySelector('[data-project-line="repairs"]').textContent.includes('Not recorded')`));
+  assert.equal(await evaluate(`document.querySelector('[data-project-line="pickup"] .project-line-change').textContent.includes('-$2.00')`),true);
+  checks.push('Missing materials withholds total profit and both explanations; known line differences remain visible and zero expenses remain explicit');
+  await fill(field('materials'),'38');await fill(field('sale_price'),'200');await save('sold');
+  assert.equal(await evaluate(effect('Cash profit difference','sale_price')),'$0.00');
+  assert.ok(await evaluate(`document.querySelector('[aria-label="Cash profit difference"]').textContent.includes('$110.50')`));
+  await evaluate('window.projectReadFails=true');await fill(field('sale_price'),'160');await click('button','Save tracking');
+  await until(`document.body.textContent.includes('The comparison is hidden until') && ${ready}`);
+  assert.equal(await evaluate(`document.querySelectorAll('.project-comparison,.project-stages').length`),0);
+  assert.equal(await evaluate(field('sale_price')+'.value'),'160');
+  await evaluate('window.projectReadFails=false');await click('button','Retry project');await until(stage('sold'));
+  assert.equal(await evaluate(actual('cash_profit')),'$60.00');
+  await click('button','Close tracking');await click('a','My Flips');
+  await until(`Boolean(document.querySelector('[data-project-id="${root.id}"] .flips-actual-profit'))`);
+  assert.equal(await evaluate(`document.querySelector('[data-project-id="${root.id}"] .project-stage-chip').textContent`),'Sold');
+  assert.equal(await evaluate(`document.querySelector('[data-project-id="${root.id}"] .flips-actual-profit strong').textContent`),'$60.00');
+  checks.push('In-range sales have zero sale effect; a failed post-save project refresh hides old results without losing tracking, and retry plus My Flips show the new sold profit');
+  const latestOutcome=await api(`/api/items/${root.id}/outcomes`);
+  await post(`/api/items/${root.id}/outcomes`,{...latestOutcome.inputs,based_on_item_id:null,expected_previous_id:latestOutcome.id,request_id:crypto.randomUUID()});
+  await cdp('Page.navigate',{url:`http://127.0.0.1:5173/my-flips/${root.id}`});await until(stage('sold'));
+  assert.ok(await evaluate(`document.querySelector('.project-comparison').textContent.includes('No estimate linked')`));
+  assert.equal(await evaluate(actual('cash_profit')),'$60.00');
+  await click('button','Track this find');await until(ready);await fill(field('pickup'),'13');await save('sold');
+  assert.equal((await api(`/api/items/${root.id}/outcomes`)).based_on_item_id,null,'Generic tracking preserves an explicit unlinked basis');
+  const incomplete=await post('/api/items/save',{inputs:{item_name:'Incomplete original'}});
+  await post(`/api/items/${incomplete.id}/outcomes`,{...latestOutcome.inputs,based_on_item_id:incomplete.id,expected_previous_id:null,request_id:crypto.randomUUID()});
+  await cdp('Page.navigate',{url:`http://127.0.0.1:5173/my-flips/${incomplete.id}`});await until(stage('sold'));
+  assert.ok(await evaluate(`document.querySelector('.project-comparison').textContent.includes('The estimate was incomplete')`));
+  assert.equal(await evaluate(actual('cash_profit')),'$60.00');
+  checks.push('Unlinked and incomplete estimates show actuals with the reason; editing an unlinked project never silently links it to the latest estimate');
+  const afterAI=await api('/browser-fixture/ai');assert.equal(afterAI.calls,beforeAI.calls);assert.equal(afterAI.posts,beforeAI.posts);
+  for(const saved of [root,child,latest])assert.deepEqual(await api('/api/items/'+saved.id),saved);
+  checks.push('Project viewing and outcome updates leave every original estimate immutable and make zero assessment/provider calls');
+  await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:fixture.identifier});
+}

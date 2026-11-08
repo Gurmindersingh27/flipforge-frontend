@@ -11,6 +11,7 @@ import { formatItemMoney, ITEM_STATUS_TEXT } from "../src/lib/itemAnalysis.ts";
 import { roundTripCases } from "./savedItems.test.ts";
 import { photoBackendFixture, runPhotoItemChecks } from "./itemPhotoFlow.mjs";
 import { sessionClerkFixture, runSessionChecks } from "./itemSessionFlow.mjs";
+import { runProjectChecks } from "./itemProjectFlow.mjs";
 import { runNationalPriceChecks } from "./itemNationalPriceFlow.mjs";
 
 const root = process.cwd();
@@ -1598,7 +1599,7 @@ try {
       // Preferences have their own transport/counter coverage in itemPhotoFlow.
       if(!url.pathname.startsWith('/api/items') || ['/api/items/analyze','/api/items/preferences'].includes(url.pathname))return nativeFetch(input,init);
       const request={path:url.pathname,method:init.method??'GET',auth:new Headers(init.headers).get('Authorization'),body:init.body?JSON.parse(init.body):null};window.savedItemRequests.push(request);
-      const mode=window.savedItemMode, timing={id:++serial,mode,method:request.method,route:url.pathname==='/api/items/save'?'save':url.pathname==='/api/items'?'list':'item',send_ms:now(),deadline_ids:[...timers.values()].map(row=>row.id)};
+      const mode=window.savedItemMode, timing={id:++serial,mode,method:request.method,route:url.pathname==='/api/items/save'?'save':url.pathname==='/api/items/projects'?'list':'item',send_ms:now(),deadline_ids:[...timers.values()].map(row=>row.id)};
       window.savedItemRequestTimings.push(timing);
       const event=(kind,extra={})=>record(kind,{id:timing.id,mode,method:timing.method,route:timing.route,elapsed_ms:now()-timing.send_ms,...extra});
       event('send');
@@ -1616,7 +1617,7 @@ try {
       if(mode==='body')return observe(new Response(new ReadableStream({start(controller){init.signal.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')));}}),{status:200}));
       if(['401','403','404','409','422','429','500','503'].includes(mode))return observe(Response.json({detail:mode==='422'?[{loc:['body','notes'],msg:'Invalid notes fixture'}]:'Rejected fixture'},{status:Number(mode)}));
       if(mode==='slow')await new Promise(resolve=>nativeTimeout(resolve,70));
-      if(mode==='hold-list' && url.pathname==='/api/items')await new Promise(resolve=>window.releaseSavedItemList=resolve);
+      if(mode==='hold-list' && url.pathname==='/api/items/projects')await new Promise(resolve=>window.releaseSavedItemList=resolve);
       const response=observe(await nativeFetch(input,init).catch(error=>{event('fetch_error');throw error;}));
       if(mode==='hold-comparison' && url.pathname.startsWith('/api/items/') && request.method==='GET') {
         const saved=await response.json();await new Promise(resolve=>window.releaseComparison=resolve);return Response.json(saved);
@@ -1624,7 +1625,7 @@ try {
       if(mode==='lost' && init.method==='POST'){window.lastCommittedItem=await response.json();throw new TypeError('Confirmation lost');}
       if(mode==='held-save' && init.method==='POST'){const saved=await response.json();await new Promise(resolve=>window.releaseItemSave=resolve);return Response.json(saved,{status:201});}
       if(mode==='delayed-read' && request.method==='GET' && request.auth==='Bearer browser-fixture')await new Promise(resolve=>nativeTimeout(resolve,600));
-      if(mode==='hostile-link' && url.pathname==='/api/items'){const data=await response.json();data.items=data.items.map(item=>({...item,listing_url:'javascript:alert(1)',notes:'<img src=x onerror=alert(1)>'}));return Response.json(data);}
+      if(mode==='hostile-link' && url.pathname==='/api/items/projects'){const data=await response.json();data.items=data.items.map(item=>({...item,latest_version:{...item.latest_version,listing_url:'javascript:alert(1)',notes:'<img src=x onerror=alert(1)>'}}));return Response.json(data);}
       return response;
     };
   ` });
@@ -1965,7 +1966,7 @@ try {
     assert.equal(await evaluate('getComputedStyle(document.body).backgroundColor'),'rgb(250, 246, 238)');
     assert.ok(await measure(`Array.from(document.querySelectorAll('.my-flips a,.my-flips button,.my-flips summary')).filter(e=>e.getBoundingClientRect().height).every(e=>e.getBoundingClientRect().height>=44)`),'Visible actions must retain 44px targets');
     assert.ok(await measure(`Array.from(document.querySelectorAll('[data-saved-item]')).every(e=>e.scrollWidth<=e.clientWidth)`),'No card may need sideways scrolling');
-    assert.ok(await evaluate(`document.body.textContent.includes('Saved items can’t be deleted yet.')`));
+    
   }
   for (const width of [390,1440]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
@@ -1980,15 +1981,15 @@ try {
     await until(`document.querySelectorAll('[data-saved-item]').length===20`);
     for (const item of visualCases) {
       const selector = `[data-saved-item="${item.id}"]`;
-      assert.equal(await evaluate(`document.querySelector('${selector} .flips-status').textContent`),ITEM_STATUS_TEXT[item.analysis_result.status].title);
-      assert.ok(await evaluate(`document.querySelector('${selector} .flips-meta').textContent.includes('Version #${item.id}')`));
+      assert.equal(await evaluate(`document.querySelector('${selector} .flips-status').textContent`),`Latest estimate: ${ITEM_STATUS_TEXT[item.analysis_result.status].title}`);
+      assert.ok(await evaluate(`document.querySelector('${selector} .flips-meta').textContent.includes('saved estimate')`));
       assert.equal(await evaluate(`document.querySelector('${selector} time').textContent`),await evaluate(`new Date(${JSON.stringify(item.created_at)}).toLocaleString('en-US')`));
       assert.equal(await evaluate(`document.querySelector('${selector} [aria-label="Reopen saved item ${item.id}"]').getAttribute('href')`),`/items?saved=${item.id}`);
       if(item.analysis_result.low) assert.equal(await evaluate(`document.querySelector('${selector} .flips-offer strong').textContent`),formatItemMoney(item.analysis_result.low.max_offer,true));
     }
     const childSelector = `[data-saved-item="${visualChild.id}"]`;
     assert.equal(await evaluate(`document.querySelector('${childSelector} h2').textContent`),longTitle);
-    assert.equal(await evaluate(`document.querySelector('${childSelector} .flips-parent').textContent`),`New version of #${visualParent.id}`);
+    assert.equal(await evaluate(`document.querySelector('${childSelector} .flips-meta').textContent.includes('2 saved estimates')`),true);
     assert.equal(await evaluate(`document.querySelector('${childSelector} .flips-offer strong').textContent`),'-$50');
     assert.equal(await measure(`getComputedStyle(document.querySelector('${childSelector} .flips-offer strong')).fontVariantNumeric`),'normal', 'Negative headline uses natural glyph spacing, not padded tabular figures');
     assert.ok(await evaluate(`document.querySelector('${childSelector} .flips-caution').textContent.includes('Even a free item misses')`));
@@ -2052,12 +2053,11 @@ try {
     await signedItems(); await click('a','My Flips');
     await until(`Boolean(document.querySelector('${comparisonCard}'))`);
     assert.equal(await evaluate(`Boolean(document.querySelector('[data-saved-item="${visualParent.id}"]'))`),false);
+    await evaluate(`document.querySelector('[aria-label="Open project ${visualParent.root_item_id}"]').click()`);
+    await until(`Boolean(document.querySelector('[data-saved-item="${visualParent.id}"]'))`);
     assert.equal(await evaluate(`${comparisonButton}.textContent`),`Compare with #${visualParent.id}`);
     const requestsBefore = browserApiRequests.length, writesBefore = browserApiWrites.length;
-    await evaluate(`window.savedItemRequests=[];window.savedItemMode='hold-comparison';${comparisonButton}.click();${comparisonButton}.click()`);
-    await until(`typeof window.releaseComparison==='function' && ${comparisonButton}.disabled`);
-    assert.equal(await evaluate('window.savedItemRequests.length'),1);
-    await evaluate(`window.savedItemMode='pass';window.releaseComparison()`);
+    await evaluate(`window.savedItemRequests=[];${comparisonButton}.click()`);
     await until(`Boolean(document.querySelector('${comparisonPanel}'))`);
     assert.ok(await evaluate(`document.querySelector('${comparisonPanel}').textContent.includes('Only notes or the link changed.')`));
     assert.equal(await evaluate(`document.querySelector('${comparisonPanel} summary').textContent`),'Compare saved assumptions (0 changed)');
@@ -2074,7 +2074,7 @@ try {
     await screenshot(`my-flips-comparison-${width}.png`);
     await evaluate(`${comparisonButton}.click()`); await until(`!document.querySelector('${comparisonPanel}')`);
     await evaluate(`${comparisonButton}.click()`); await until(`Boolean(document.querySelector('${comparisonPanel}'))`);
-    assert.deepEqual(await evaluate('window.savedItemRequests.map(r=>[r.method,r.path])'),[['GET',`/api/items/${visualParent.id}`]]);
+    assert.deepEqual(await evaluate('window.savedItemRequests.map(r=>[r.method,r.path])'),[]);
     assert.equal(browserApiWrites.length,writesBefore,'Comparisons must not POST');
     assert.ok(browserApiRequests.slice(requestsBefore).every(url=>new URL(url).pathname===`/api/items/${visualParent.id}`),'No analyze or provider request');
     await evaluate(`${comparisonButton}.click()`);
@@ -2084,33 +2084,33 @@ try {
     assert.equal(await evaluate(`document.querySelector('${changedPanel} summary').textContent`),'Compare saved assumptions (2 changed)');
     assert.equal(await evaluate(`document.querySelector('${changedPanel} details').open`),false);
     assert.ok(await measure(`(()=>{const s=document.querySelector('${changedPanel} summary');return s.getBoundingClientRect().height>0;})()`),'Changed count must be visible without expanding assumptions');
-    assert.equal(await evaluate('window.savedItemRequests.length'),2,'One parent GET for each comparison pair');
+    assert.equal(await evaluate('window.savedItemRequests.length'),0,'All versions are already part of the project');
     assert.equal(browserApiWrites.length,writesBefore,'Changed-assumption comparison must remain read-only');
     assert.ok(browserApiRequests.slice(requestsBefore).every(url=>new URL(url).pathname===`/api/items/${visualParent.id}`));
     await flipsGeometry();
     await evaluate(`document.querySelector('${changedPanel}').scrollIntoView()`);
     await screenshot(`my-flips-comparison-changed-${width}.png`);
   }
-  checks.push('Compare estimates at 390/1440 fetches an off-page direct parent once per pair, caches reopening, shows 0/2 changed-assumption counts without expanding, labels blank text None, and performs no writes or analysis');
+  checks.push('Compare estimates at 390/1440 loads every version together, reopens comparisons without requests, shows 0/2 changed-assumption counts without expanding, labels blank text None, and performs no writes or analysis');
   for(const mode of ['404','headers']) {
-    await signedItems(); await click('a','My Flips'); await until(`Boolean(${comparisonButton})`);
-    await evaluate(`window.savedItemRequests=[];window.savedItemMode=${JSON.stringify(mode)};${comparisonButton}.click()`);
+    await signedItems(); await click('a','My Flips'); await until(`Boolean(document.querySelector('${comparisonCard}'))`);
+    await evaluate(`window.savedItemRequests=[];window.savedItemMode=${JSON.stringify(mode)};document.querySelector('[aria-label="Open project ${visualParent.root_item_id}"]').click()`);
     await until(hasAlert(mode==='404'?'Item not found':'took too long'));
     assert.equal(await evaluate('window.savedItemRequests.length'),1);
     if(mode==='headers')await assertSavedItemTimeout(mode,'GET','item');
     assert.equal(await evaluate(`Boolean(document.querySelector('${comparisonPanel}'))`),false);
-    await evaluate(`window.savedItemMode='pass'`); await click('button','Retry comparison');
-    await until(`Boolean(document.querySelector('${comparisonPanel}'))`);
+    await evaluate(`window.savedItemMode='pass'`); await click('button','Retry project');
+    await until(`Boolean(${comparisonButton})`);
     assert.equal(await evaluate('window.savedItemRequests.length'),2);
     assert.ok(await evaluate('window.savedItemRequests.every(r=>r.method==="GET")'));
   }
-  checks.push('Comparison 404 and timeout keep saved cards intact and retry only on a click');
+  checks.push('Project 404 and timeout show no comparison and recover only on explicit retry');
   for(const nextUser of ['comparison-empty-user',null]) {
-    await signedItems(); await click('a','My Flips'); await until(`Boolean(${comparisonButton})`);
-    await evaluate(`window.savedItemMode='hold-comparison';${comparisonButton}.click()`);
+    await signedItems(); await click('a','My Flips'); await until(`Boolean(document.querySelector('${comparisonCard}'))`);
+    await evaluate(`window.savedItemMode='hold-comparison';document.querySelector('[aria-label="Open project ${visualParent.root_item_id}"]').click()`);
     await until(`typeof window.releaseComparison==='function'`);
     await evaluate(`window.savedItemMode='pass';window.switchFixtureUser(${JSON.stringify(nextUser)})`);
-    await until(nextUser===null?`document.body.textContent.includes('Sign in to view My Flips')`:`document.body.textContent.includes('No saved items yet.')`);
+    await until(nextUser===null?`document.body.textContent.includes('Sign in to view this project')`:`document.body.textContent.includes('Item not found')`);
     await evaluate('window.releaseComparison()'); await pause(200);
     assert.equal(await evaluate(`document.querySelectorAll('.flips-comparison,[data-saved-item]').length`),0);
     assert.equal(await evaluate(`document.body.textContent.includes('Only these notes changed.')`),false);
@@ -2119,10 +2119,11 @@ try {
   assert.deepEqual(await itemApi(`/api/items/${visualParent.id}`),visualParent);
   checks.push('Account switch and sign-out clear comparison state and suppress a held old-account parent response; snapshots remain unchanged');
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:savedItemsFixture});
+  await runProjectChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks, api });
   await runPhotoItemChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
   const photoFind = (await itemApi('/api/items')).items.find(item=>item.assessment && item.parent_item_id!==null);
   assert.ok(photoFind);
-  await cdp('Page.navigate',{url:'http://127.0.0.1:5173/my-flips'});
+  await cdp('Page.navigate',{url:`http://127.0.0.1:5173/my-flips/${photoFind.root_item_id}`});
   await until(`Boolean(document.querySelector('[aria-label="Reopen saved item ${photoFind.id}"]'))`);
   assert.equal(await evaluate(`document.querySelector('[aria-label="Reopen saved item ${photoFind.id}"]').getAttribute('href')`),`/items?find=${photoFind.id}`);
   await evaluate(`document.querySelector('[data-saved-item="${photoFind.id}"] button[aria-controls]').click()`);

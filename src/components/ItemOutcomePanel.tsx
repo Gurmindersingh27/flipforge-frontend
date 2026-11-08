@@ -13,10 +13,13 @@ import "./ItemOutcomePanel.css";
 type Phase = "loading" | "editing" | "saving" | "uncertain" | "reload" | "conflict";
 type ReloadReason = "initial" | "saved" | "conflict" | "discarded";
 export type OutcomeGuard = "busy" | "draft" | null;
-interface Props { rootId: number; itemId: number; onGuard: (guard: OutcomeGuard) => void }
+interface Props {
+  rootId: number; itemId: number | null; onGuard: (guard: OutcomeGuard) => void;
+  onOutcomeChange?: (outcome: ItemOutcomeResponse | null) => void;
+}
 interface Attempt { owner: string; payload: SaveItemOutcomeRequest }
 
-export default function ItemOutcomePanel({ rootId, itemId, onGuard }: Props) {
+export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeChange }: Props) {
   const { userId } = useAuth();
   const withSession = useItemSession();
   const [phase, setPhase] = useState<Phase>("loading");
@@ -48,6 +51,7 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard }: Props) {
       const saved = await withSession((token, signal) => getItemOutcome(rootId, token, signal), () => generation === sequence.current);
       if (generation !== sequence.current) return;
       setLatest(saved); setErrors({});
+      onOutcomeChange?.(saved);
       if (reason === "initial" || reason === "saved") {
         setForm(outcomeForm(saved?.inputs)); setDirty(false); setPhase("editing");
         setMessage(reason === "saved" ? "Tracking saved. Showing the latest outcome." : "");
@@ -92,6 +96,7 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard }: Props) {
       const saved = await withSession((token, signal) => saveItemOutcome(rootId, attempt.payload, token, signal), () => generation === sequence.current);
       if (generation !== sequence.current) return;
       pending.current = null; setLatest(saved);
+      onOutcomeChange?.(saved);
       // A successful replay may be an older snapshot. Refresh before the next edit.
       await readLatest("saved", generation);
     } catch (error) { if (error instanceof ItemSessionChangedError) return;
@@ -131,7 +136,7 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard }: Props) {
   return <section className="item-outcome" aria-label="Track this find" aria-busy={phase === "loading" || phase === "saving"}>
     <h3>Track this find</h3>
     <p className="outcome-shared">Tracking applies to all versions of this find · {basis === null ? "no estimate linked" : `based on estimate #${basis}`}</p>
-    {latest?.based_on_item_id !== itemId && latest !== null && <p className="outcome-help">Your next save will be based on estimate #{itemId}, the version you opened.</p>}
+    {latest?.based_on_item_id !== itemId && latest !== null && <p className="outcome-help">{itemId === null ? "Your next save will have no estimate linked." : `Your next save will be based on estimate #${itemId}, the version you opened.`}</p>}
     <p className="outcome-help">Actual amounts in USD. Leave blanks for unknowns; enter 0 when there was no cost.</p>
     {phase === "loading" && <p role="status">Loading latest tracking…</p>}
     <form onSubmit={event => { event.preventDefault(); void save(); }}>

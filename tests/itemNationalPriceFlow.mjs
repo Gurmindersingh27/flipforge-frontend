@@ -197,7 +197,7 @@ export async function runNationalPriceChecks({ cdp, evaluate, until, fill, click
   assert.equal(child.assessment.confirmation.resale_source,'user_estimate');
   assert.deepEqual(child.analysis_result,original.analysis_result);
   assert.deepEqual(await api('/api/items/'+original.id),original);
-  await navigate('/my-flips');await until(`Boolean(document.querySelector('[data-saved-item="${child.id}"]'))`);
+  await navigate('/my-flips/'+child.root_item_id);await until(`Boolean(document.querySelector('[data-saved-item="${child.id}"]'))`);
   await evaluate(`document.querySelector('[data-saved-item="${child.id}"] [aria-controls="comparison-${child.id}"]').click()`);
   await until(`Boolean(document.querySelector('[data-comparison-row="resale_source"]'))`);
   assert.equal(await evaluate(`document.querySelector('[data-comparison-row="resale_source"]').dataset.changed`),'true');
