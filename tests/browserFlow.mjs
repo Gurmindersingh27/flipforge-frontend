@@ -1966,7 +1966,7 @@ try {
     assert.equal(await evaluate('getComputedStyle(document.body).backgroundColor'),'rgb(250, 246, 238)');
     assert.ok(await measure(`Array.from(document.querySelectorAll('.my-flips a,.my-flips button,.my-flips summary')).filter(e=>e.getBoundingClientRect().height).every(e=>e.getBoundingClientRect().height>=44)`),'Visible actions must retain 44px targets');
     assert.ok(await measure(`Array.from(document.querySelectorAll('[data-saved-item]')).every(e=>e.scrollWidth<=e.clientWidth)`),'No card may need sideways scrolling');
-    
+
   }
   for (const width of [390,1440]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
