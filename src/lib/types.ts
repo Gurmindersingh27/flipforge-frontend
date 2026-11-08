@@ -505,3 +505,29 @@ export interface PhotoRehabAnalysisResponse {
   disclaimer: string;
   provider_status: PhotoRehabProviderStatus;
 }
+// Mirrors backend ITEM_INSPECTION_API.md (inspection schema v1).
+export type ItemInspectionKind = "chair" | "storage" | "general";
+export type ItemInspectionAnswer = "unchecked" | "okay" | "issue";
+export interface ItemInspectionFacts {
+  guide_version: "furniture-v1";
+  kind: ItemInspectionKind;
+  brand_hint: "herman_miller" | "steelcase" | null;
+  label_text: string | null;
+  notes: string | null;
+  inspected_on: string | null;
+  answers: Record<string, ItemInspectionAnswer>;
+}
+export interface SaveItemInspectionRequest extends ItemInspectionFacts {
+  request_id: string;
+  expected_previous_id: string | null;
+}
+export interface ItemInspectionResponse {
+  id: string;
+  root_item_id: number;
+  previous_id: string | null;
+  revision_number: number;
+  schema_version: 1;
+  source: "user_reported";
+  created_at: string;
+  inputs: ItemInspectionFacts;
+}

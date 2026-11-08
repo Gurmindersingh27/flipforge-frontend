@@ -23,11 +23,14 @@ import type {
   SaveItemOutcomeRequest,
   ItemProjectListResponse,
   ItemProjectResponse,
+  ItemInspectionResponse,
+  SaveItemInspectionRequest,
 } from "./types";
 import { isItemPreferences } from "./itemPreferences";
 import { ITEM_LABELS } from "./itemAnalysis";
 import { isItemOutcome } from "./itemOutcomes";
 import { isItemProject, isItemProjectList } from "./itemProjects";
+import { isItemInspection, sameInspection } from "./savedItemInspection";
 
 import { ITEM_SIGN_IN_MESSAGE } from "./itemSession";
 
@@ -122,6 +125,36 @@ export async function saveItemOutcome(rootId: number, payload: SaveItemOutcomeRe
       return saved;
     }, "Tracking confirmation took too long.", signal);
   } catch { throw rejection ?? new UnconfirmedOutcomeSaveError(); }
+}
+
+export async function getItemInspection(rootId: number, token: string, signal?: AbortSignal): Promise<ItemInspectionResponse | null> {
+  const value = await readItem<unknown>(`/api/items/${rootId}/inspections`, token, signal);
+  if (value === null || isItemInspection(value, rootId)) return value;
+  throw new Error("The saved inspection could not be confirmed. Reload before saving.");
+}
+export class UnconfirmedInspectionSaveError extends Error {
+  constructor() { super("The inspection may already be saved. Retry the same save to confirm it."); }
+}
+export async function saveItemInspection(rootId: number, payload: SaveItemInspectionRequest, token: string, signal?: AbortSignal): Promise<ItemInspectionResponse> {
+  let rejection: ItemApiError | null = null;
+  try {
+    return await withItemDeadline(async signal => {
+      const response = await fetch(`${API_BASE_URL}/api/items/${rootId}/inspections`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload), signal,
+      });
+      if (!response.ok) {
+        if (response.status >= 400 && response.status < 500) rejection = new ItemApiError(response.status, `Inspection save rejected (HTTP ${response.status}).`);
+        const error = await itemRejection(response);
+        if (rejection) rejection = error;
+        throw error;
+      }
+      const saved: unknown = await response.json();
+      if (!isItemInspection(saved, rootId) || saved.id !== payload.request_id || saved.previous_id !== payload.expected_previous_id
+        || !sameInspection(saved.inputs, payload)) throw new UnconfirmedInspectionSaveError();
+      return saved;
+    }, "Inspection confirmation took too long.", signal);
+  } catch { throw rejection ?? new UnconfirmedInspectionSaveError(); }
 }
 
 export class ItemAssessmentError extends Error {

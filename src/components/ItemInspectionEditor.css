@@ -1,0 +1,18 @@
+.inspection-editor { overflow-wrap: anywhere; }
+.inspection-editor fieldset { min-width: 0; padding: 0; margin: 0 0 20px; border: 0; }
+.inspection-legend { font-size: 15px; font-weight: 700; margin: 12px 0; }
+.inspection-field { min-width: 0; margin: 16px 0; }
+.inspection-field label { display: block; font-size: 14px; font-weight: 650; margin-bottom: 8px; }
+.inspection-field :is(input,select,textarea) { display: block; width: 100%; min-height: 44px; box-sizing: border-box; padding: 12px; border: 1px solid #8b9084; border-radius: 8px; background: #fff; color: var(--flips-ink); font: inherit; font-size: 16px; }
+.inspection-field textarea { resize: vertical; }
+.inspection-field :is(input,select,textarea):focus-visible { outline: 3px solid var(--flips-green); outline-offset: 3px; }
+.inspection-editor fieldset:disabled :is(input,select,textarea) { color: #444b40; background: #f1f2eb; opacity: 1; }
+.inspection-field p { margin: 8px 0; }
+.inspection-checks { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 28px; }
+.inspection-error { color: #9f2020; font-size: 14px; }
+.inspection-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.inspection-actions button { max-width: 100%; white-space: normal; }
+.inspection-conflict { border-left: 3px solid #a65d18; padding-left: 16px; margin: 20px 0; }
+.inspection-snapshot { font-size: 14px; }
+.inspection-snapshot span { white-space: pre-wrap; }
+@media (max-width: 760px) { .inspection-checks { grid-template-columns: minmax(0,1fr); } }
