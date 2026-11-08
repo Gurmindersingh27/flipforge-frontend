@@ -20,6 +20,7 @@ import { applyItemPreferences } from "../lib/itemPreferences";
 import ItemsPage from "./ItemsPage";
 import ItemSavePanel from "./ItemSavePanel";
 import ItemInspectionPanel from "./ItemInspectionPanel";
+import ItemFieldGuide from "./ItemFieldGuide";
 import ItemPriceEvidence from "./ItemPriceEvidence";
 import ItemBuyingDecision from "./ItemBuyingDecision";
 import ItemDecisionCard, { type RepairChoice } from "./ItemDecisionCard";
@@ -444,7 +445,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
         {!snapshot && !evidence && showPhotoForm && <section className="quick-card" aria-label="Photo estimate">
           <fieldset disabled={blocked || pendingId !== null}>
             <div className="quick-section-title"><span className="quick-step">01</span><h2>What did you find?</h2><span className="quick-muted">Up to 3 photos</span></div>
-            <p className="quick-small quick-photo-guide">Start with the whole piece, then visible damage and a maker’s mark if present. Use clear, well-lit photos.</p>
+            <p className="quick-small quick-photo-guide">Start with the whole piece, then a label or maker’s mark and the worst wear. Use clear, well-lit photos.</p>
             <p className="quick-visually-hidden" aria-live="polite">{photoAnnouncement}</p>
             <div className="quick-photos">
               {photos.map(({ id, photo }, index) => <div className="quick-photo" key={id} role="group" tabIndex={-1}
@@ -473,6 +474,7 @@ function QuickEditor({ findId }: { findId: string | null }) {
             {preferenceLoadStatus === "failed" && <button type="button" className="quick-text-button" onClick={() => focusPreferenceRetry.current?.()}>Fix preferences</button>}
           </div>}
           <p className="quick-small">Photos go to Anthropic for one paid estimate with a search for similar listings. FlipForge doesn't save the photos. It may take a minute or longer; if it hangs, check the same estimate’s status below.</p>
+          <ItemFieldGuide description={description} onDescription={setDescription} disabled={Boolean(blocked || pendingId !== null)} />
         </section>}
         {pendingId && <div className="quick-notice" role="status"><strong>Your photo estimate hasn't finished.</strong><p>Check the same estimate without paying for another. You can enter your own numbers below while you wait.</p><button className="quick-secondary" disabled={blocked} onClick={() => void estimate(true)}>Check estimate status</button></div>}
         {busy === "recover" && <p role="status">Recovering your previous estimate…</p>}

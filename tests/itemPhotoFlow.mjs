@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { runDecisionChecks } from "./itemDecisionFlow.mjs";
 import { runSessionChecks } from "./itemSessionFlow.mjs";
 import { runNationalPriceChecks } from "./itemNationalPriceFlow.mjs";
+import { runFieldGuideChecks } from "./itemFieldGuideFlow.mjs";
 
 const fallbackLabels = [
   'Legacy plain title', 'Title (nested (scope))', 'Title (scope) trailing',
@@ -186,6 +187,7 @@ async function checkPhotoEntry(measure, expectedNote = null) {
 }
 
 export async function runPhotoItemChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api }) {
+  await runFieldGuideChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks });
   const input = id => `document.getElementById(${JSON.stringify(id)})`;
   const mode = async value => (await fetch(`http://127.0.0.1:8000/browser-fixture/ai/${value}`, { method: 'POST' })).json();
   const calls = async () => (await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json()).calls;

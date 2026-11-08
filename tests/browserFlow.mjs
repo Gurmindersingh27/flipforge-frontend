@@ -13,6 +13,7 @@ import { photoBackendFixture, runPhotoItemChecks } from "./itemPhotoFlow.mjs";
 import { sessionClerkFixture, runSessionChecks } from "./itemSessionFlow.mjs";
 import { runProjectChecks } from "./itemProjectFlow.mjs";
 import { runNationalPriceChecks } from "./itemNationalPriceFlow.mjs";
+import { runFieldGuideChecks } from "./itemFieldGuideFlow.mjs";
 
 const root = process.cwd();
 const backend = resolve(process.env.BACKEND_DIR ?? "../flipforge-backend");
@@ -251,7 +252,12 @@ try {
   ({ sessionId } = await cdp("Target.attachToTarget", { targetId, flatten: true }, false));
   await cdp("Page.enable"); await cdp("Runtime.enable"); await cdp("Network.enable");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
-  if (process.env.ITEM_NATIONAL_ONLY === "1") {
+  if (process.env.ITEM_FIELD_GUIDE_ONLY === "1") {
+    await runFieldGuideChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks });
+    assert.deepEqual(errors, []);
+    writeFileSync(join(artifacts, "field-guide-results.json"), JSON.stringify({checks, errors}, null, 2));
+    console.log(JSON.stringify({result:"PASS", scope:"field-guide-only", checks}));
+  } else if (process.env.ITEM_NATIONAL_ONLY === "1") {
     await cdp("Page.navigate", {url:"http://127.0.0.1:5173/items?fixtureSignedOut=1"});
     await until(`Boolean(document.querySelector('.items-quick'))`);
     await runNationalPriceChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks });

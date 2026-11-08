@@ -1,0 +1,26 @@
+.item-field-guide { border-top: 1px solid var(--line); margin-top: 16px; color: var(--ink); }
+.item-field-guide > summary { min-height: 48px; padding: 14px 0; color: var(--green); font-size: 14px; font-weight: 700; cursor: pointer; }
+.item-field-guide > summary > span { display: block; margin: 3px 0 0 18px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.field-guide-body { padding: 0 0 8px; font-size: 14px; }
+.field-guide-body h3 { margin: 22px 0 10px; font-size: 16px; }
+.field-guide-intro, .field-guide-help { color: var(--muted); font-size: 13px; }
+.field-guide-photos { list-style: decimal; padding-left: 24px; margin: 18px 0; }
+.field-guide-photos li { padding: 5px 0 9px 3px; }
+.field-guide-photos strong, .field-guide-photos span { display: block; }
+.field-guide-photos span { color: var(--muted); margin-top: 3px; }
+.field-guide-form select { display: block; width: 100%; min-height: 48px; margin-top: 8px; padding: 10px; border: 1px solid #b0bcb0; border-radius: 9px; color: var(--ink); background: #fff; font-size: 16px; }
+.field-guide-form select:focus-visible { outline: 3px solid var(--green); outline-offset: 4px; }
+.field-guide-label { padding: 2px 14px 16px; margin-top: 18px; border-radius: 12px; background: #edf1e8; }
+.field-guide-label a { text-decoration: underline; text-underline-offset: 3px; color: var(--green); }
+.field-guide-progress { padding: 10px 12px; background: #f7efdf; border-radius: 8px; font-size: 13px; }
+.field-guide-checks { display: grid; gap: 16px; margin: 20px 0; }
+.field-guide-form .field-guide-check { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 12px; }
+.field-guide-check legend { padding: 0 5px; font-weight: 700; font-size: 14px; }
+.field-guide-check p { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.field-guide-answers { display: flex; flex-wrap: wrap; gap: 6px; }
+.field-guide-answers label { display: flex; align-items: center; gap: 5px; min-height: 44px; padding: 6px 8px; border: 1px solid #b0bcb0; border-radius: 8px; font-size: 12px; cursor: pointer; }
+.field-guide-answers label:has(input:checked) { background: #e3ecdf; border-color: var(--green); }
+.field-guide-answers label:has(input[value=issue]:checked) { background: #f8e5d9; border-color: #94391f; }
+.field-guide-answers input { accent-color: var(--green); margin: 0; width: 16px; height: 16px; }
+.field-guide-preview { border-left: 3px solid var(--green); padding-left: 12px; }
+.field-guide-preview p { white-space: pre-wrap; font-size: 13px; }
