@@ -59,10 +59,12 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
         if(variant){row.inputs={...row.inputs,...variant.inputs};row.analysis_result=variant.analysis;row.assessment.confirmation.resale_source='user_estimate';evidence.resale=null;}
         return Response.json(row);
       }
-      if(path==='/api/items'&&response.ok){
-        const page=await response.json();
-        page.items=page.items.map(row=>({...row,notes:'PRIVATE_NEGOTIATION_987',listing_url:'https://private.example/secret-source',inputs:{...row.inputs,item_name:'UNCONFIRMED_ANTIQUE_TEAK_987'}}));
-        return Response.json(page);
+      if(path==='/api/items/${photo.root_item_id}/project'&&response.ok){
+        const project=await response.json();
+        const privateVersion=row=>({...row,notes:'PRIVATE_NEGOTIATION_987',listing_url:'https://private.example/secret-source',inputs:{...row.inputs,item_name:'UNCONFIRMED_ANTIQUE_TEAK_987'}});
+        project.summary.latest_version=privateVersion(project.summary.latest_version);
+        project.versions=project.versions.map(privateVersion);
+        return Response.json(project);
       }
       return response;
     };` });
@@ -225,6 +227,7 @@ export async function runDecisionChecks({ cdp, evaluate, until, fill, click, mea
     await cdp('Page.navigate', { url: `http://127.0.0.1:5173/my-flips/${photo.root_item_id}` });
     await until(`Boolean(document.querySelector('[data-saved-item="${photo.id}"]')) && !document.body.textContent.includes('Loading your project…')`);
     const listRequests = await requests();
+    assert.ok(await evaluate(`document.body.textContent.includes('PRIVATE_NEGOTIATION_987') && document.body.textContent.includes('UNCONFIRMED_ANTIQUE_TEAK_987')`),'The project must actually contain private source text before testing that drafts exclude it');
     await openDraft(photo.id); await until(`Boolean(document.querySelector('[data-listing-text]'))`);
     assert.equal(await evaluate(`document.querySelector('[data-listing-text]').value`), '');
     assert.ok(await evaluate(`Array.from(document.querySelectorAll('.item-listing-draft input,.item-listing-draft textarea')).every(e=>e.value==='')`));
