@@ -3,12 +3,48 @@
 
 ---
 
-## Last Updated
-2026-10-02
+## Current checkpoint — November 8, 2026
 
-Latest status: frontend main is `51748bda48bef0cb04e3543abf76f9040f76139a` (#77), merged after Claude approved `019ddd4eba96d10ed9a6d7333c8195272ef78998` and exact-head CI `37048318364` passed (74 unit tests, 34 browser checks, build). Merge parents are `e37655a3b249a096748fe404f23a4a8459d3dd53` and the approved head; both trees are `1cea54b4515461f5cdfbd3e71e39e4947e3ccaea`. Codex production verification passed 15/15 from the merge, started 2026-10-02 18:56:23 UTC, including byte-identical JS/CSS. Backend remains `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. Detail draft guard PR #78 is on `codex/detail-draft-guard`, unmerged. Its new purchase_price:null click test exposed an existing analyzer crash; the approved four-file amendment normalizes null/undefined data points in fixDp. Code head `44b7cc05aca321362c76a49483c252c3a69b396b` passed CI `37058907425`: 74 unit tests, 34 browser checks and build. Renders inspected at 390/1440; minimal drafts now analyze with blank rent. Final documentation-inclusive head and CI are tracked on PR #78. Final exact-head review is required before merge. Owner spending controls, signed-in phone QA and Vargas invitation remain unconfirmed.
+**Active: Items. Houses is parked. Readiness remains 80%.** This section supersedes the historical status below. Current master: `FlipForge_Master_Handoff_2026-11-08_R2.md`, approved by Claude; Part I is current and Part II is history.
 
----
+Verified release anchors before implementation:
+- Frontend main `a00050f652729910f22c2bf1c4c291b82bac8b41` (#115), tree `3a23e95c03c9f01fa796c06ebf426f12cc51e402`.
+- Backend main `0469e96fc40f67071d143695f5d767622ca3bb80` (#48), tree `36b70a343bd39906ec0208e63bed9a51cdc8c173`.
+- Both are already deployed per the approved handoff; no repeat deployment performed in this session.
+
+### Inspection editor — PR #116, awaiting exact-head review
+
+[Frontend PR #116](https://github.com/Gurmindersingh27/flipforge-frontend/pull/116), branch `codex/project-inspection-editor`. Built against released `ITEM_INSPECTION_API.md`; CI backend pin updated to the full #48 merge SHA. The PR's current head/CI are the exact review target; no code approval is recorded yet. [CI #138](https://github.com/Gurmindersingh27/flipforge-frontend/actions/runs/42524411796) passed 201 full browser checks plus 11 inspection, 13 session and 13 national checks. A subsequent guard-lifetime fix adds a regression for a cancelled Back restoration overlapping a completed save and a new draft. The final PR head needs its own green CI; the prior result is not final-head evidence.
+
+- Project inspection loads without writing; empty checks remain unchecked. No facts inferred from old descriptions, labels or photos.
+- Explicit complete-snapshot saves only. Detached, frozen request ID/payload retained on uncertain errors; fields stay frozen until exact retry confirms the save. 401 refresh also reuses the same request.
+- Successful writes/replays reconcile with a fresh GET. Newer revisions open a comparison with the submitted draft kept intact. Failed reconciliation retains the draft and retries GET only.
+- 409 preserves observations and loads the server snapshot for comparison. Choosing the server version requires discard confirmation; choosing the draft requires a separate explicit save against the loaded predecessor. No silent overwrite/merge.
+- Owner/session/root remounts clear draft and pending request; stale reads/writes cannot update a new identity. Navigation, reload and same-document Back/Forward guard unsaved project work.
+- Label text (500) and notes (5,000) remain independent of the paid description limit; exact text is rendered plainly. Inspection date is user-entered, never save time.
+- No paid-assessment autosave, pricing/comparable changes, stage/outcome updates, new dependencies or backend edits.
+
+Validation: Codex ran **202 unit tests**, the production build, changed-file lint and the released backend’s **15 inspection contract tests** successfully. The focused inspection suite covers 390/1440 layout assertions, failure/session/navigation cases, and pending Back-restoration races; current counts/results are in the PR’s exact-head CI. Full regression results are tracked on the PR; required checks must be green on the review head. Local Chromium is blocked by a workspace process-socket restriction, so browser evidence comes from GitHub CI with the real released backend and a disposable database. CI captures phone/desktop/conflict screenshots in `browser-flow-evidence`; those image files have not been manually inspected in this environment because artifact download requires a browser sign-in. Synthetic fixtures and automated layout checks are not signed-in production, physical-iPhone or independent Claude evidence.
+
+### Open gates and owner actions
+
+| Item | Status |
+| --- | --- |
+| Editor exact-head Claude review | Pending; a changed head needs review |
+| Editor required CI | See current PR checks; must be green on the reviewed head before merge |
+| Owner free signed-in iPhone baseline | OPEN, required before merge (R2 Section 7) |
+| Native iPhone Copy price evidence / fallback | OPEN, separate from Add notes to description |
+| Anthropic key | Recorded expiry November 13, 2026; renewal unconfirmed. Owner renews directly in dedicated workspace/Render; never paste secrets |
+| Paid chair run | Not authorized; requires “Approve one run: Herman Miller chair” |
+| Chair label and accepted pickup area | OPEN |
+| Readiness | 80%; no new real graded buying decision |
+| Houses / backend #19 | Parked |
+
+Owner baseline: save a clearly named synthetic **free manual** estimate on the actual signed-in iPhone; reopen its project; track Bought then Sold with explicit costs and linked estimate; refresh/reopen to verify saved figures; exercise the free guide's **Add notes to description**; check **Copy price evidence** separately if an appropriate result exists. Record failures and device/browser. These owner writes are not delegated to an agent.
+
+## Historical project status (October 2 and earlier)
+
+The sections below retain older Houses-era history. Their goals, release anchors and pending states do not override the current checkpoint above.
 
 ## 1. Current Phase & Progress
 

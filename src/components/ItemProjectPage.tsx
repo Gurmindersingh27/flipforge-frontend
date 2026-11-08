@@ -10,12 +10,27 @@ import { OUTCOME_DATES, OUTCOME_LABELS, OUTCOME_NUMBERS } from "../lib/itemOutco
 import { safeItemLink } from "../lib/savedItems";
 import type { ItemOutcomeResponse, ItemProjectResponse } from "../lib/types";
 import ItemOutcomePanel from "./ItemOutcomePanel";
+import ItemInspectionEditor from "./ItemInspectionEditor";
 import type { OutcomeGuard } from "./ItemOutcomePanel";
 import ItemListingDraft from "./ItemListingDraft";
 import ItemVersionComparison from "./ItemVersionComparison";
 import ItemOutcomeComparison, { ActualFigures } from "./ItemOutcomeComparison";
 import "./MyFlipsPage.css";
 import "./ItemProjectPage.css";
+
+// Register before BrowserRouter installs its history listener. Window-targeted
+// popstate listeners can otherwise notify the router before a mounted guard.
+// Only the mounted project supplies a handler; cleanup removes its closure.
+let projectPopGuard: ((event: PopStateEvent) => void) | null = null;
+let projectPopRestoreIndex: number | null = null;
+if (typeof window !== "undefined") window.addEventListener("popstate", event => {
+  // Restoration outlives guard changes (for example a save finishing). Do not
+  // let that synthetic return navigation remount a newly edited draft.
+  if (projectPopRestoreIndex !== null && event.state?.idx === projectPopRestoreIndex) {
+    projectPopRestoreIndex = null; event.stopImmediatePropagation(); return;
+  }
+  projectPopGuard?.(event);
+}, true);
 
 function Project({ rootId }: { rootId: number }) {
   const withSession = useItemSession();
@@ -27,6 +42,7 @@ function Project({ rootId }: { rootId: number }) {
   const refreshingOutcome = useRef<string | null | undefined>(undefined);
   const [tracking, setTracking] = useState<{ itemId: number | null; preserveBasis: boolean } | null>(null);
   const [guard, setGuard] = useState<OutcomeGuard>(null);
+  const [inspectionGuard, setInspectionGuard] = useState<OutcomeGuard>(null);
   const [listingItem, setListingItem] = useState<number | null>(null);
   const [listingDirty, setListingDirty] = useState(false);
   const [comparisons, setComparisons] = useState<number[]>([]);
@@ -54,20 +70,35 @@ function Project({ rootId }: { rootId: number }) {
     // A new owner, session or root gets a fresh component and request generation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const navigationGuard = guard === "busy" || inspectionGuard === "busy" ? "busy" : guard || inspectionGuard;
   useEffect(() => {
-    if (!guard) return;
+    if (!navigationGuard) return;
     const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    const allowLeaving = () => {
+      if (navigationGuard === "busy") { setNotice("Finish checking the save before leaving this project."); return false; }
+      return window.confirm("Leave this project and discard unsaved observations or tracking? A save already sent may still have succeeded.");
+    };
     const leaving = (event: MouseEvent) => {
       const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null;
       if (!(anchor instanceof HTMLAnchorElement) || anchor.target === "_blank" || anchor.hasAttribute("download") || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-      if (guard === "busy" || !window.confirm("Leave this project and discard unsaved tracking? A save already sent may still have succeeded.")) {
+      if (!allowLeaving()) {
         event.preventDefault(); event.stopPropagation();
-        if (guard === "busy") setNotice("Finish checking the tracking save before leaving this project.");
       }
     };
+    // Restore cancelled Back/Forward before BrowserRouter unmounts this draft.
+    const index = window.history.state?.idx;
+    const backOrForward = (event: PopStateEvent) => {
+      const target = event.state?.idx;
+      if (typeof index !== "number" || typeof target !== "number" || target === index || allowLeaving()) return;
+      event.stopImmediatePropagation(); projectPopRestoreIndex = index; window.history.go(index - target);
+    };
     window.addEventListener("beforeunload", beforeUnload); document.addEventListener("click", leaving, true);
-    return () => { window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leaving, true); };
-  }, [guard]);
+    projectPopGuard = backOrForward;
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload); document.removeEventListener("click", leaving, true);
+      if (projectPopGuard === backOrForward) projectPopGuard = null;
+    };
+  }, [navigationGuard]);
   function track(itemId: number | null, toggle = true, preserveBasis = true) {
     // Reopening the same editor is navigation, not a discard/remount.
     if (!toggle && tracking?.itemId === itemId && tracking.preserveBasis === preserveBasis) {
@@ -126,6 +157,7 @@ function Project({ rootId }: { rootId: number }) {
         <button className="flips-link" disabled={guard === "busy"} aria-expanded={tracking !== null} aria-controls="project-tracking-editor" onClick={() => tracking ? track(tracking.itemId) : track(basis)}>{tracking ? "Close tracking" : "Track this find"}</button>
         <div id="project-tracking-editor">{tracking && <ItemOutcomePanel key={`${tracking.itemId ?? "unlinked"}:${tracking.preserveBasis}`} preserveBasis={tracking.preserveBasis} rootId={rootId} itemId={tracking.itemId} onGuard={setGuard} onOutcomeChange={outcomeChanged} />}</div>
       </section>
+      <ItemInspectionEditor rootId={rootId} onGuard={setInspectionGuard} />
       <section id="project-listing" className="project-workspace" aria-label="Project sale listing"><h2>Selling</h2>
         <button className="flips-link" aria-expanded={listingItem !== null} aria-controls={`listing-${project.summary.latest_version.id}`} onClick={() => draft(listingItem ?? project.summary.latest_version.id)}>{listingItem === null ? "Prepare sale listing" : "Close listing draft"}</button>
         <div id={`listing-${project.summary.latest_version.id}`}>{listingItem !== null && <ItemListingDraft key={listingItem} onDirtyChange={setListingDirty} />}</div>

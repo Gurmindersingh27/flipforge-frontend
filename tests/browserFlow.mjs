@@ -11,6 +11,7 @@ import { formatItemMoney, ITEM_STATUS_TEXT } from "../src/lib/itemAnalysis.ts";
 import { roundTripCases } from "./savedItems.test.ts";
 import { photoBackendFixture, runPhotoItemChecks } from "./itemPhotoFlow.mjs";
 import { sessionClerkFixture, runSessionChecks } from "./itemSessionFlow.mjs";
+import { runInspectionChecks } from "./itemInspectionFlow.mjs";
 import { runProjectChecks } from "./itemProjectFlow.mjs";
 import { runNationalPriceChecks } from "./itemNationalPriceFlow.mjs";
 import { runFieldGuideChecks } from "./itemFieldGuideFlow.mjs";
@@ -252,7 +253,12 @@ try {
   ({ sessionId } = await cdp("Target.attachToTarget", { targetId, flatten: true }, false));
   await cdp("Page.enable"); await cdp("Runtime.enable"); await cdp("Network.enable");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
-  if (process.env.ITEM_FIELD_GUIDE_ONLY === "1") {
+  if (process.env.ITEM_INSPECTION_ONLY === "1") {
+    await runInspectionChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks, api, pause });
+    assert.deepEqual(errors, []);
+    writeFileSync(join(artifacts, "inspection-results.json"), JSON.stringify({checks, errors}, null, 2));
+    console.log(JSON.stringify({result:"PASS", scope:"inspection-only", checks}));
+  } else if (process.env.ITEM_FIELD_GUIDE_ONLY === "1") {
     await runFieldGuideChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks });
     assert.deepEqual(errors, []);
     writeFileSync(join(artifacts, "field-guide-results.json"), JSON.stringify({checks, errors}, null, 2));
@@ -2107,7 +2113,10 @@ try {
     assert.equal(await evaluate(`Boolean(document.querySelector('${comparisonPanel}'))`),false);
     await evaluate(`window.savedItemMode='pass'`); await click('button','Retry project');
     await until(`Boolean(${comparisonButton})`);
-    assert.equal(await evaluate('window.savedItemRequests.length'),2);
+    assert.equal(await evaluate("window.savedItemRequests.filter(r=>r.path.endsWith('/project')).length"),2);
+    await until("window.savedItemRequests.some(r=>r.path.endsWith('/inspections'))");
+    assert.equal(await evaluate("window.savedItemRequests.filter(r=>r.path.endsWith('/inspections')).length"),1);
+    assert.equal(await evaluate('window.savedItemRequests.length'),3);
     assert.ok(await evaluate('window.savedItemRequests.every(r=>r.method==="GET")'));
   }
   checks.push('Project 404 and timeout show no comparison and recover only on explicit retry');
@@ -2126,6 +2135,7 @@ try {
   checks.push('Account switch and sign-out clear comparison state and suppress a held old-account parent response; snapshots remain unchanged');
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:savedItemsFixture});
   await runProjectChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks, api });
+  await runInspectionChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks, api, pause });
   await runPhotoItemChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
   const photoFind = (await itemApi('/api/items')).items.find(item=>item.assessment && item.parent_item_id!==null);
   assert.ok(photoFind);
