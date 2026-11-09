@@ -3,7 +3,25 @@
 
 ---
 
-## Last Updated
+## Current checkpoint — November 8, 2026
+
+**Items only. Improve the existing workflow before adding more features. Houses stays parked; readiness remains 80%.** Current master is `FlipForge_Master_Handoff_2026-11-08_R2.md`; its Part I supersedes the historical notes below.
+
+Verified release anchors before this refinement: frontend main `a00050f652729910f22c2bf1c4c291b82bac8b41`; backend main `0469e96fc40f67071d143695f5d767622ca3bb80`. Both were already deployed; this work does not redeploy them.
+
+- Inspection editor [PR #116](https://github.com/Gurmindersingh27/flipforge-frontend/pull/116) remains unchanged at `ccab621be6310b4647c9b30bbb6d060c1daf4f5b`. Claude's exact-head code approval was supplied by the owner; Codex independently confirmed [CI #141](https://github.com/Gurmindersingh27/flipforge-frontend/actions/runs/42525945025) green. It is not merged. The owner's signed-in physical-iPhone baseline remains open.
+- Owner screenshots show a saved synthetic manual estimate, one My Flips test card and tracking comparison on **Windows desktop**. They do not establish iPhone completion, refresh persistence, guide append or native clipboard success. The last screenshot has blank actual expenses/time and correctly withholds profit. No app failure or completed baseline is inferred.
+- Active branch: `codex/tracking-completion`, independently based on released main. Scope: make incomplete-profit recovery obvious, show missing amounts before saving, open/focus missing or invalid hidden fields, and explicitly confirm only blank expenses as $0. Existing amounts, unknown time/dates, saved estimates, calculators and exact-retry behavior remain intact. Nothing is automatically saved.
+- Validation: 197 local unit tests, production build and changed-file lint passed. Focused browser cases cover the owner's missing-cost case, explicit zero confirmation, validation focus, exact retry after lost confirmation, reload persistence, optional dates, phone/desktop layout and zero assessment/provider calls. Final browser evidence and exact review head belong to this branch's PR/CI; no browser pass is claimed here before it runs. Local Chromium is blocked by the workspace socket restriction noted in #116.
+- The existing free-guide test's new-document wait is carried unchanged from approved #116 to avoid inspecting the old DOM during reload; application behavior and its assertions are unchanged. Browser CI pins the released backend `0469e96`.
+- Keep #116's three minor inspection follow-ups separate: blank-text display, leave-warning wording after a confirmed save with failed reload, and an untouched first inspection save. They are not included in this tracking refinement.
+- Merge still requires the applicable exact-head Claude review, green required CI and owner baseline. Do not claim the user waived the phone gate by asking to keep building. Key expiry is Friday, November 13, 2026; renewal is unconfirmed. No paid chair run without “Approve one run: Herman Miller chair”; comparable eligibility is unchanged.
+
+## Historical status — October 2 and earlier
+
+These older goals and release references do not override the current checkpoint above.
+
+### Last Updated
 2026-10-02
 
 Latest status: frontend main is `51748bda48bef0cb04e3543abf76f9040f76139a` (#77), merged after Claude approved `019ddd4eba96d10ed9a6d7333c8195272ef78998` and exact-head CI `37048318364` passed (74 unit tests, 34 browser checks, build). Merge parents are `e37655a3b249a096748fe404f23a4a8459d3dd53` and the approved head; both trees are `1cea54b4515461f5cdfbd3e71e39e4947e3ccaea`. Codex production verification passed 15/15 from the merge, started 2026-10-02 18:56:23 UTC, including byte-identical JS/CSS. Backend remains `e4a4b2016f6187af6ffc8c3f363bf4a4dc429462`. Detail draft guard PR #78 is on `codex/detail-draft-guard`, unmerged. Its new purchase_price:null click test exposed an existing analyzer crash; the approved four-file amendment normalizes null/undefined data points in fixDp. Code head `44b7cc05aca321362c76a49483c252c3a69b396b` passed CI `37058907425`: 74 unit tests, 34 browser checks and build. Renders inspected at 390/1440; minimal drafts now analyze with blank rent. Final documentation-inclusive head and CI are tracked on PR #78. Final exact-head review is required before merge. Owner spending controls, signed-in phone QA and Vargas invitation remain unconfirmed.

@@ -8,8 +8,9 @@ export async function runFieldGuideChecks({ cdp, evaluate, until, fill, click, m
   const before = await (await fetch('http://127.0.0.1:8000/browser-fixture/ai')).json();
   for (const width of [390,1440]) {
     await cdp('Emulation.setDeviceMetricsOverride', {width,height:width===390?844:1000,deviceScaleFactor:1,mobile:width===390});
+    await evaluate('window.fieldGuideLeaving=true');
     await cdp('Page.navigate', {url:'http://127.0.0.1:5173/items?fixtureSignedOut=1'});
-    await until(`Boolean(document.querySelector('[data-field-guide]'))`);
+    await until(`!window.fieldGuideLeaving && Boolean(document.querySelector('[data-field-guide]'))`);
     assert.equal(await evaluate(`document.querySelector('[data-field-guide]').open`), false);
     assert.equal(await evaluate(`document.querySelector('.field-guide-form button').disabled`), true);
     await evaluate(`window.guideRequests=[];const original=window.fetch;window.fetch=(...args)=>{window.guideRequests.push(String(args[0]));return original(...args);};document.querySelector('[data-field-guide]>summary').click()`);
@@ -54,7 +55,10 @@ export async function runFieldGuideChecks({ cdp, evaluate, until, fill, click, m
     assert.equal(await evaluate(`document.querySelector('.field-guide-preview img')`),null);
     assert.ok(await evaluate(`document.querySelector('.field-guide-preview').textContent.includes('<img src=x')`));
     assert.deepEqual(await evaluate('window.guideRequests'),[]);
-    await cdp('Page.reload'); await until(`Boolean(document.querySelector('[data-field-guide]'))`);
+    // The old page also contains this guide. Wait for a new document, not a
+    // stale element that disappears between the readiness poll and assertion.
+    await evaluate('window.fieldGuideLeaving=true');
+    await cdp('Page.reload'); await until(`!window.fieldGuideLeaving && Boolean(document.querySelector('[data-field-guide]'))`);
     assert.equal(await evaluate(input('field-guide-label-text')+'.value'),'');
     assert.equal(await evaluate(input('field-guide-notes')+'.value'),'');
     assert.equal(await evaluate(input('quick-description')+'.value'),'');
@@ -63,8 +67,9 @@ export async function runFieldGuideChecks({ cdp, evaluate, until, fill, click, m
   checks.push('Partial labels remain unverified; chair answers retain untested checks and append without changing the asking price');
   checks.push('Description overflow and conflicting repeat additions are blocked without replacing text; label text cannot inject HTML');
   checks.push('Checklist changes do not reuse other-category answers; page-local inspection drafts clear on reload');
+  await evaluate('window.fieldGuideLeaving=true');
   await cdp('Page.navigate',{url:'http://127.0.0.1:5173/items'});
-  await until(`Boolean(document.querySelector('[data-field-guide]'))`);
+  await until(`!window.fieldGuideLeaving && Boolean(document.querySelector('[data-field-guide]'))`);
   await evaluate(`document.querySelector('[data-field-guide]>summary').click()`);
   await fill(input('field-guide-notes'),'Private observation from first account');
   await evaluate(`window.switchFixtureUser('other-user')`);

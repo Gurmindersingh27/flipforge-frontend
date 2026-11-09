@@ -5,7 +5,7 @@ import { useAuth } from "@clerk/clerk-react";
 import { getItemOutcome, ItemApiError, saveItemOutcome, UnconfirmedOutcomeSaveError } from "../lib/api";
 import { formatItemMoney } from "../lib/itemAnalysis";
 import { buildOutcomeFacts, OUTCOME_CHANNELS, OUTCOME_DATES, OUTCOME_EXPENSES, OUTCOME_FIGURES, OUTCOME_LABELS,
-  OUTCOME_STATUSES, outcomeFieldsToClear, outcomeForm, outcomeIsUncertain } from "../lib/itemOutcomes";
+  OUTCOME_STATUSES, confirmNoUnrecordedExpenses, outcomeCompletion, outcomeFieldsToClear, outcomeForm, outcomeIsUncertain } from "../lib/itemOutcomes";
 import type { OutcomeForm } from "../lib/itemOutcomes";
 import type { ItemOutcomeDate, ItemOutcomeFigure, ItemOutcomeNumber, ItemOutcomeResponse, ItemOutcomeStatus, ItemSaleChannel, SaveItemOutcomeRequest } from "../lib/types";
 import "./ItemOutcomePanel.css";
@@ -34,6 +34,7 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeCha
   const sequence = useRef(0);
   const locked = useRef(false);
   const pending = useRef<Attempt | null>(null);
+  const formElement = useRef<HTMLFormElement>(null);
   // The parent keys the list by account and this panel by the viewed estimate.
   useEffect(() => {
     let active = true;
@@ -79,7 +80,7 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeCha
   async function save() {
     if (locked.current || !userId || !["editing", "conflict"].includes(phase)) return;
     const built = buildOutcomeFacts(form);
-    if (!built.ok) { setErrors(built.errors); return; }
+    if (!built.ok) { setErrors(built.errors); revealField(Object.keys(built.errors)[0]); return; }
     try {
       const attempt: Attempt = { owner: userId, payload: { ...built.facts, based_on_item_id: saveBasis,
         expected_previous_id: latest?.id ?? null, request_id: crypto.randomUUID() } };
@@ -118,6 +119,17 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeCha
   function edit<K extends keyof OutcomeForm>(key: K, value: OutcomeForm[K]) {
     setForm(old => ({ ...old, [key]: value })); setDirty(true); setErrors({}); setMessage("");
   }
+  function revealField(key: string) {
+    const input = formElement.current?.querySelector<HTMLInputElement | HTMLSelectElement>(`#outcome-${key}`);
+    const section = input?.closest("details");
+    if (section) section.open = true;
+    input?.focus();
+  }
+  function confirmZeroExpenses() {
+    if (locked.current || phase !== "editing") return;
+    setForm(confirmNoUnrecordedExpenses); setDirty(true); setErrors({});
+    setMessage("Unrecorded expenses are now $0 in your draft. Review them, then save tracking.");
+  }
   function statusChange(status: ItemOutcomeStatus) {
     const clear = outcomeFieldsToClear(form, status);
     if (clear.length && !window.confirm(`Changing to ${status} clears: ${clear.map(key => OUTCOME_LABELS[key]).join(", ")}. Continue?`)) return;
@@ -127,6 +139,9 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeCha
   const frozen = phase !== "editing";
   const draftBasis = dirty || latest === null;
   const basis = draftBasis ? saveBasis : latest.based_on_item_id;
+  const completion = outcomeCompletion(form);
+  const firstMissing = completion.cash[0] ?? completion.time[0];
+  const validDraft = buildOutcomeFacts(form).ok;
   const field = (key: ItemOutcomeNumber | ItemOutcomeDate) => <div className="outcome-field" key={key}>
     <label htmlFor={`outcome-${key}`}>{OUTCOME_LABELS[key]}</label>
     <input id={`outcome-${key}`} type={OUTCOME_DATES.includes(key as ItemOutcomeDate) ? "date" : "text"}
@@ -141,7 +156,7 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeCha
     {latest?.based_on_item_id !== saveBasis && latest !== null && <p className="outcome-help">{saveBasis === null ? "Your next save will have no estimate linked." : `Your next save will be based on estimate #${saveBasis}, the version you opened.`}</p>}
     <p className="outcome-help">Actual amounts in USD. Leave blanks for unknowns; enter 0 when there was no cost.</p>
     {phase === "loading" && <p role="status">Loading latest tracking…</p>}
-    <form onSubmit={event => { event.preventDefault(); void save(); }}>
+    <form ref={formElement} onSubmit={event => { event.preventDefault(); void save(); }}>
       <fieldset disabled={frozen}>
         <legend className="outcome-sr-only">Actual outcome</legend>
         <div className="outcome-statuses" role="group" aria-label="Find status">
@@ -156,11 +171,26 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeCha
             </select>
           </div>
         </div>}
-        <details><summary>Expenses</summary><div className="outcome-fields">{OUTCOME_EXPENSES.map(field)}</div></details>
-        <details><summary>Your time</summary><div className="outcome-fields">{field("hours")}{field("hourly_value")}</div></details>
-        <details><summary>Dates</summary><div className="outcome-fields">{field("purchased_on")}{form.status !== "bought" && field("listed_on")}{form.status === "sold" && field("sold_on")}</div></details>
+        <div className="outcome-completion" aria-label="Tracking completeness">
+          <p><strong>{form.status === "sold" ? "Finish your profit figures" : "Record your actual costs"}</strong></p>
+          <p>{completion.cash.length
+            ? `${form.status === "sold" ? "Cash profit" : "Cash invested"} needs ${completion.cash.length} more ${completion.cash.length === 1 ? "amount" : "amounts"}: ${completion.cash.map(key => OUTCOME_LABELS[key]).join(", ")}.`
+            : validDraft ? `Cash amounts entered${dirty || !latest ? " — save tracking to update your results" : ""}.` : "Check the amounts before saving."}</p>
+          {completion.time.length > 0 && <p className="outcome-help">{completion.time.map(key => OUTCOME_LABELS[key]).join(" and ")} {completion.time.length === 1 ? "is" : "are"} also needed for profit after your time. This does not block cash profit.</p>}
+          {firstMissing && <button type="button" className="flips-link" onClick={() => revealField(firstMissing)}>Go to first missing amount</button>}
+          <p className="outcome-help">You can save incomplete tracking. Blank means unknown; $0 means no cost. Dates are optional and only affect day counts.</p>
+        </div>
+        <details><summary>Expenses <span className="outcome-count">{completion.expenses.length ? `${completion.expenses.length} not recorded` : "All entered"}</span></summary>
+          {completion.expenses.length > 0 && <div className="outcome-zero-confirm">
+            <p className="outcome-help">Only if these had no cost: {completion.expenses.map(key => OUTCOME_LABELS[key]).join(", ")}. Amounts already entered stay unchanged.</p>
+            <button type="button" className="flips-link" onClick={confirmZeroExpenses}>Set unrecorded expenses to $0</button>
+          </div>}
+          <div className="outcome-fields">{OUTCOME_EXPENSES.map(field)}</div>
+        </details>
+        <details><summary>Your time <span className="outcome-count">{completion.time.length ? `${completion.time.length} not recorded` : "All entered"}</span></summary><div className="outcome-fields">{field("hours")}{field("hourly_value")}</div></details>
+        <details><summary>Dates</summary><p className="outcome-help">Optional. Add dates to calculate days held and days to sell; they do not affect profit.</p><div className="outcome-fields">{field("purchased_on")}{form.status !== "bought" && field("listed_on")}{form.status === "sold" && field("sold_on")}</div></details>
       </fieldset>
-      {Object.keys(errors).length > 0 && <p className="outcome-error" role="alert">Check these fields: {Object.keys(errors).map(key => OUTCOME_LABELS[key as keyof typeof OUTCOME_LABELS] ?? key).join(", ")}. Expand the relevant section to edit.</p>}
+      {Object.keys(errors).length > 0 && <p className="outcome-error" role="alert">Check these fields: {Object.keys(errors).map(key => OUTCOME_LABELS[key as keyof typeof OUTCOME_LABELS] ?? key).join(", ")}. The first field is open for you to edit.</p>}
       {phase === "editing" && <button className="flips-primary" type="submit" disabled={latest !== null && !dirty}>Save tracking</button>}
       {phase === "saving" && <p role="status">Saving tracking…</p>}
     </form>

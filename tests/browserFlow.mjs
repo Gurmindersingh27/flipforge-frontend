@@ -12,6 +12,7 @@ import { roundTripCases } from "./savedItems.test.ts";
 import { photoBackendFixture, runPhotoItemChecks } from "./itemPhotoFlow.mjs";
 import { sessionClerkFixture, runSessionChecks } from "./itemSessionFlow.mjs";
 import { runProjectChecks } from "./itemProjectFlow.mjs";
+import { runTrackingCompletionChecks } from "./itemTrackingCompletionFlow.mjs";
 import { runNationalPriceChecks } from "./itemNationalPriceFlow.mjs";
 import { runFieldGuideChecks } from "./itemFieldGuideFlow.mjs";
 
@@ -252,7 +253,12 @@ try {
   ({ sessionId } = await cdp("Target.attachToTarget", { targetId, flatten: true }, false));
   await cdp("Page.enable"); await cdp("Runtime.enable"); await cdp("Network.enable");
   await cdp("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
-  if (process.env.ITEM_FIELD_GUIDE_ONLY === "1") {
+  if (process.env.ITEM_TRACKING_COMPLETION_ONLY === "1") {
+    await runTrackingCompletionChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks, api });
+    assert.deepEqual(errors, []);
+    writeFileSync(join(artifacts, "tracking-completion-results.json"), JSON.stringify({checks, errors}, null, 2));
+    console.log(JSON.stringify({result:"PASS", scope:"tracking-completion-only", checks}));
+  } else if (process.env.ITEM_FIELD_GUIDE_ONLY === "1") {
     await runFieldGuideChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks });
     assert.deepEqual(errors, []);
     writeFileSync(join(artifacts, "field-guide-results.json"), JSON.stringify({checks, errors}, null, 2));
@@ -2126,6 +2132,7 @@ try {
   checks.push('Account switch and sign-out clear comparison state and suppress a held old-account parent response; snapshots remain unchanged');
   await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:savedItemsFixture});
   await runProjectChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks, api });
+  await runTrackingCompletionChecks({ cdp, evaluate, until, fill, click, measure, screenshot, checks, api });
   await runPhotoItemChecks({ cdp, evaluate, until, fill, click, measure, screenshot, pause, checks, api });
   const photoFind = (await itemApi('/api/items')).items.find(item=>item.assessment && item.parent_item_id!==null);
   assert.ok(photoFind);
