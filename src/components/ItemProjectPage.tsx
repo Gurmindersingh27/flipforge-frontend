@@ -110,6 +110,7 @@ function Project({ rootId }: { rootId: number }) {
             })}</dl>
             {project.comparison?.cash_explanation && projectHeadline(project.comparison.cash_explanation) && <p className="project-help"><strong>Cash:</strong> {projectHeadline(project.comparison.cash_explanation)}</p>}
             {project.comparison?.after_time_explanation && projectHeadline(project.comparison.after_time_explanation) && <p className="project-help"><strong>After time:</strong> {projectHeadline(project.comparison.after_time_explanation)}</p>}
+            {(project.latest_outcome.calculated.cash_profit === null || project.latest_outcome.calculated.profit_after_time === null) && <button className="flips-primary" disabled={guard === "busy"} onClick={() => track(basis, false)}>Complete your profit figures</button>}
           </>}
           {stage !== "sold" && <button className="flips-primary" disabled={guard === "busy"} onClick={() => track(basis, false)}>{stage === "considering" ? "Bought it? Record what you paid" : stage === "bought" ? "Track costs as you go" : "Sold it? Record the sale"}</button>}
           {stage === "bought" && <p>Ready to list? <button className="flips-link" onClick={() => draft(project.summary.latest_version.id)}>Prepare listing text</button></p>}

@@ -1,10 +1,27 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildOutcomeFacts, isItemOutcome, OUTCOME_CHANNELS, OUTCOME_DATES, OUTCOME_EXPENSES,
-  OUTCOME_FIGURES, OUTCOME_NUMBERS, outcomeFieldsToClear, outcomeForm, outcomeIsUncertain, validOutcomeDate } from '../src/lib/itemOutcomes.ts';
+  OUTCOME_FIGURES, OUTCOME_NUMBERS, confirmNoUnrecordedExpenses, outcomeCompletion, outcomeFieldsToClear, outcomeForm, outcomeIsUncertain, validOutcomeDate } from '../src/lib/itemOutcomes.ts';
 import type { ItemOutcomeFacts, ItemOutcomeResponse } from '../src/lib/types.ts';
 
 const id = '11111111-1111-4111-8111-111111111111';
+test('expense confirmation preserves known amounts and invalid entries; never infers sale, time or dates', () => {
+  const draft = { ...outcomeForm(), materials: '25.50', pickup: 'bad', storage: '0', delivery: '  ' };
+  const before = structuredClone(draft);
+  const confirmed = confirmNoUnrecordedExpenses(draft);
+  assert.deepEqual(draft, before);
+  assert.equal(confirmed.materials, '25.50'); assert.equal(confirmed.pickup, 'bad'); assert.equal(confirmed.storage, '0');
+  for (const key of ['hired_labor', 'delivery', 'selling_fees', 'other_expenses'] as const) assert.equal(confirmed[key], '0');
+  for (const key of ['purchase_price', 'sale_price', 'hours', 'hourly_value', ...OUTCOME_DATES] as const) assert.equal(confirmed[key], '');
+  assert.equal(buildOutcomeFacts(confirmed).ok, false, 'Confirmation cannot hide invalid recorded expenses');
+});
+test('completion guidance separates cash, time and optional dates without turning blank costs into zero', () => {
+  const form = { ...confirmNoUnrecordedExpenses(outcomeForm()), purchase_price: '20', status: 'sold' as const, sale_price: '100' };
+  assert.deepEqual(outcomeCompletion(form), { expenses: [], cash: [], time: ['hours', 'hourly_value'] });
+  assert.deepEqual(outcomeCompletion({ ...form, pickup: '  ' }).cash, ['pickup']);
+  assert.deepEqual(outcomeCompletion({ ...form, status: 'bought', sale_price: '' }).cash, []);
+  const built = buildOutcomeFacts({ ...form, pickup: '' }); assert.ok(built.ok); assert.equal(built.facts.pickup, null);
+});
 function facts(): ItemOutcomeFacts {
   const built = buildOutcomeFacts(outcomeForm());
   assert.ok(built.ok);

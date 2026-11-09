@@ -4,6 +4,12 @@
 .item-outcome h3 { font-size: 21px; }
 .outcome-shared { font-weight: 600; }
 .outcome-help { color: var(--flips-muted); font-size: 12px; }
+.outcome-completion { border: 1px solid var(--flips-line); border-radius: 10px; background: #f0f4eb; padding: 14px; overflow-wrap: anywhere; }
+.outcome-completion p { margin: 0 0 8px; }
+.outcome-completion p:last-child { margin-bottom: 0; }
+.outcome-completion button, .outcome-zero-confirm button { min-height: 44px; text-align: left; }
+.outcome-count { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 400; color: var(--flips-muted); }
+.outcome-zero-confirm { padding: 8px 0; }
 .item-outcome fieldset { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; display: grid; gap: 16px; }
 .outcome-statuses { display: flex; gap: 8px; }
 .outcome-statuses button { min-height: 44px; padding: 10px 16px; border: 1px solid var(--flips-line); border-radius: 8px; }

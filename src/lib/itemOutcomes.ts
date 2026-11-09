@@ -28,6 +28,22 @@ export function outcomeForm(facts?: ItemOutcomeFacts): OutcomeForm {
     status: facts?.status ?? "bought", sale_channel: facts?.sale_channel ?? "",
   } as OutcomeForm;
 }
+// Guidance for the draft only; saved figures still come from the server.
+export function outcomeCompletion(form: OutcomeForm) {
+  const expenses = OUTCOME_EXPENSES.filter(key => !form[key].trim());
+  const cashFields: ItemOutcomeNumber[] = ["purchase_price", ...OUTCOME_EXPENSES,
+    ...(form.status === "sold" ? ["sale_price" as const] : [])];
+  return {
+    expenses,
+    cash: cashFields.filter(key => !form[key].trim()),
+    time: (["hours", "hourly_value"] as const).filter(key => !form[key].trim()),
+  };
+}
+export function confirmNoUnrecordedExpenses(form: OutcomeForm): OutcomeForm {
+  const next = { ...form };
+  for (const key of outcomeCompletion(form).expenses) next[key] = "0";
+  return next;
+}
 export function validOutcomeDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith("0000")) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
