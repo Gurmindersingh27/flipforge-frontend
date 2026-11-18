@@ -17,7 +17,7 @@ export function ActualFigures({ outcome }: { outcome: ItemOutcomeResponse }) {
       const labels = { cash_invested: "Cash invested", cash_profit: "Cash profit", profit_after_time: "Profit after your time", days_held: "Days held", days_to_sell: "Days to sell" };
       const value = outcome.calculated[key];
       return <div key={key}><dt>{labels[key]}</dt><dd data-project-actual={key}>{value === null ? "Not complete" : key.startsWith("days_") ? `${value} days` : formatItemMoney(value)}</dd>
-        {value === null && <dd className="project-help">{projectMissing(outcome.calculated.missing_fields[key])}.</dd>}</div>;
+        {value === null && <dd className="project-help"><details><summary>What’s missing?</summary><p>{projectMissing(outcome.calculated.missing_fields[key])}.</p></details></dd>}</div>;
     })}
   </dl>;
 }
@@ -57,7 +57,7 @@ export default function ItemOutcomeComparison({ comparison, outcome }: { compari
       <dd><span>Actual</span>{line.actual === null ? "Not recorded" : formatItemMoney(line.actual)}{line.missing_fields.length > 0 && <small>{line.missing_fields.map(key => OUTCOME_LABELS[key]).join(", ")} not recorded.</small>}</dd>
       {line.difference_low !== null && line.difference_high !== null && <dd className="project-line-change"><span>Change to profit versus the low / high estimate</span>{line.difference_low === line.difference_high ? formatItemMoney(line.difference_low) : `Low: ${formatItemMoney(line.difference_low)} · High: ${formatItemMoney(line.difference_high)}`}</dd>}
     </div>)}</dl></details>
-    {comparison.cash_explanation ? <Explanation value={comparison.cash_explanation} title="Cash profit difference" /> : <p className="project-help" data-project-incomplete>Cash profit is not complete: {projectMissing(comparison.actual.missing_fields.cash_profit)}. The recorded line differences do not establish a total.</p>}
-    {comparison.after_time_explanation ? <Explanation value={comparison.after_time_explanation} title="Difference after your time" /> : <p className="project-help">Profit after your time is not complete: {projectMissing(comparison.actual.missing_fields.profit_after_time)}.</p>}
+    {comparison.cash_explanation ? <Explanation value={comparison.cash_explanation} title="Cash profit difference" /> : <p className="project-help" data-project-incomplete>Cash profit is not complete. Complete the missing amounts in tracking to compare totals. The recorded line differences do not establish a total.</p>}
+    {comparison.after_time_explanation ? <Explanation value={comparison.after_time_explanation} title="Difference after your time" /> : <p className="project-help">Profit after your time is not complete. Complete the missing amounts in tracking to compare totals.</p>}
   </section>;
 }

@@ -5,7 +5,7 @@ import { getItemProject } from "../lib/api";
 import { formatItemMoney, ITEM_STATUS_TEXT } from "../lib/itemAnalysis";
 import { ItemSessionChangedError } from "../lib/itemSession";
 import { useItemSession } from "../lib/useItemSession";
-import { PROJECT_STAGES, PROJECT_STAGE_LABELS, projectHeadline, projectMissing } from "../lib/itemProjects";
+import { PROJECT_STAGES, PROJECT_STAGE_LABELS, projectHeadline } from "../lib/itemProjects";
 import { OUTCOME_DATES, OUTCOME_LABELS, OUTCOME_NUMBERS } from "../lib/itemOutcomes";
 import { safeItemLink } from "../lib/savedItems";
 import type { ItemOutcomeResponse, ItemProjectResponse } from "../lib/types";
@@ -106,7 +106,7 @@ function Project({ rootId }: { rootId: number }) {
           {stage === "sold" && project.latest_outcome && <>
             <dl className="project-result-preview">{(["cash_profit", "profit_after_time"] as const).map(key => {
               const figures = project.latest_outcome!.calculated;
-              return <div key={key}><dt>{key === "cash_profit" ? "Cash profit" : "Profit after your time"}</dt><dd data-project-result={key}>{figures[key] === null ? "Not complete" : formatItemMoney(figures[key])}</dd>{figures[key] === null && <dd className="project-help">{projectMissing(figures.missing_fields[key])}.</dd>}</div>;
+              return <div key={key}><dt>{key === "cash_profit" ? "Cash profit" : "Profit after your time"}</dt><dd data-project-result={key}>{figures[key] === null ? "Not complete" : formatItemMoney(figures[key])}</dd></div>;
             })}</dl>
             {project.comparison?.cash_explanation && projectHeadline(project.comparison.cash_explanation) && <p className="project-help"><strong>Cash:</strong> {projectHeadline(project.comparison.cash_explanation)}</p>}
             {project.comparison?.after_time_explanation && projectHeadline(project.comparison.after_time_explanation) && <p className="project-help"><strong>After time:</strong> {projectHeadline(project.comparison.after_time_explanation)}</p>}

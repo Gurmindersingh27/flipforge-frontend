@@ -3,7 +3,14 @@
 
 ---
 
-## Current checkpoint — November 8, 2026
+## Refinement checkpoint — November 18, 2026
+
+- Follow-up branch `codex/profit-status-clarity` stacks on approved #117 at `51c3f34`; neither #117 nor #116 is merged. Their approved heads are unchanged.
+- Reduce repeated missing-field lists: headline results stay brief; per-figure reasons remain available under “What’s missing?”; tracking keeps the actionable missing-amount list. Use “Not complete” consistently for unavailable calculated figures. No arithmetic, saved data or request behavior changes.
+- Owner direction remains refinement of existing flows. No merge-condition waiver or paid-run authorization inferred. Exact-head review and CI required before release; #116 still requires the physical-iPhone baseline. Key renewal unconfirmed; readiness 80%; Houses parked.
+- Validation and final exact head are recorded in the follow-up PR.
+
+## Previous checkpoint — November 8, 2026
 
 **Items only. Improve the existing workflow before adding more features. Houses stays parked; readiness remains 80%.** Current master is `FlipForge_Master_Handoff_2026-11-08_R2.md`; its Part I supersedes the historical notes below.
 

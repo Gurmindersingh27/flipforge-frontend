@@ -1255,7 +1255,7 @@ async function runOutcomeChecks({ cdp, evaluate, until, fill, click, measure, sc
     let outcome = await api(`/api/items/${root.id}/outcomes`);
     assert.equal(outcome.inputs.purchase_price, 25); assert.equal(outcome.inputs.materials, null);
     assert.equal(outcome.based_on_item_id, item.id); assert.equal(outcome.calculated.cash_profit, null);
-    assert.equal(await evaluate(figure('cash_profit')), 'Not calculated');
+    assert.equal(await evaluate(figure('cash_profit')), 'Not complete');
     assert.equal(await evaluate('window.outcomePosts[0].path'), `/api/items/${root.id}/outcomes`);
     assert.equal(await evaluate('window.outcomePosts[0].body.expected_previous_id'), null);
     assert.equal(await evaluate('window.outcomeReads.length'), 2);
