@@ -209,8 +209,8 @@ export default function ItemOutcomePanel({ rootId, itemId, onGuard, onOutcomeCha
       <h4>Last saved · {latest.inputs.status} · revision {latest.revision_number}</h4>
       <p className="outcome-help">{latest.based_on_item_id === null ? "No estimate linked" : `Based on estimate #${latest.based_on_item_id}`}. Figures reflect saved actuals{dirty ? ", not your unsaved entries" : ""}.</p>
       <dl>{(Object.keys(OUTCOME_FIGURES) as ItemOutcomeFigure[]).map(key => <div key={key}>
-        <dt>{OUTCOME_FIGURES[key]}</dt><dd data-outcome-figure={key}>{latest.calculated[key] === null ? "Not calculated" : key.startsWith("days_") ? `${latest.calculated[key]} days` : formatItemMoney(latest.calculated[key])}</dd>
-        {latest.calculated[key] === null && <dd className="outcome-help">Needed: {latest.calculated.missing_fields[key].map(field => OUTCOME_LABELS[field]).join(", ")}.</dd>}
+        <dt>{OUTCOME_FIGURES[key]}</dt><dd data-outcome-figure={key}>{latest.calculated[key] === null ? "Not complete" : key.startsWith("days_") ? `${latest.calculated[key]} days` : formatItemMoney(latest.calculated[key])}</dd>
+        {latest.calculated[key] === null && <dd className="outcome-help"><details><summary>What’s missing?</summary><p>Needed: {latest.calculated.missing_fields[key].map(field => OUTCOME_LABELS[field]).join(", ")}.</p></details></dd>}
       </div>)}</dl>
     </div>}
   </section>;
